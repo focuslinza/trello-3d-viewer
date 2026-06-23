@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>3D Model Viewer - Section</title>
+  <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css" />
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    #list {
+      padding: 6px 4px;
+    }
+    .model-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 5px 4px;
+    }
+    .model-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      color: #172b4d;
+    }
+    .model-ext {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #5e6c84;
+      background: #f4f5f7;
+      border-radius: 3px;
+      padding: 1px 5px;
+      margin-right: 6px;
+      text-transform: uppercase;
+    }
+    .view-btn {
+      flex: 0 0 auto;
+      background: #0c66e4;
+      color: #ffffff;
+      border: none;
+      border-radius: 3px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .view-btn:hover {
+      background: #0055cc;
+    }
+    .empty {
+      padding: 8px 4px;
+      font-size: 12px;
+      color: #5e6c84;
+    }
+  </style>
+</head>
+<body>
+  <div id="list"><div class="empty">Loading…</div></div>
+
+  <script src="./config.js"></script>
+  <script>
+    var SUPPORTED_EXTENSIONS = ['.stl', '.step', '.stp', '.gcode', '.gco', '.nc', '.tap', '.cnc', '.ngc', '.g'];
+
+    function getExtension(name) {
+      var match = /\.[^.]+$/.exec((name || '').toLowerCase());
+      return match ? match[0] : '';
+    }
+
+    function is3DModelAttachment(attachment) {
+      var name = attachment.fileName || attachment.name || attachment.url || '';
+      return SUPPORTED_EXTENSIONS.indexOf(getExtension(name)) !== -1;
+    }
+
+    var t = window.TrelloPowerUp.iframe();
+
+    function openViewer(t, attachment, cardId) {
+      var fileName = attachment.fileName || attachment.name;
+      // Trello passes these to the modal iframe and signs the URL for us.
+      // They are read inside viewer.html with t.arg('cardId') etc.
+      return t.modal({
+        title: attachment.name || fileName,
+        url: './viewer.html',
+        args: {
+          cardId: cardId,
+          attachmentId: attachment.id,
+          fileName: fileName,
+          isUpload: attachment.isUpload ? '1' : '0'
+        },
+        accentColor: '#172b4d',
+        fullscreen: true
+      });
+    }
+
+    t.render(function () {
+      return t
+        .card('id', 'attachments')
+        .then(function (card) {
+          var cardId = card.id;
+          var attachments = card.attachments || [];
+          var models = attachments.filter(is3DModelAttachment);
+          var listEl = document.getElementById('list');
+          listEl.innerHTML = '';
+
+          if (models.length === 0) {
+            listEl.innerHTML = '<div class="empty">No supported 3D files found.</div>';
+            return t.sizeTo('#list');
+          }
+
+          models.forEach(function (attachment) {
+            var fileName = attachment.fileName || attachment.name || '';
+            var ext = getExtension(fileName).replace('.', '');
+
+            var row = document.createElement('div');
+            row.className = 'model-row';
+
+            var nameWrap = document.createElement('span');
+            nameWrap.className = 'model-name';
+
+            var badge = document.createElement('span');
+            badge.className = 'model-ext';
+            badge.textContent = ext;
+
+            var nameText = document.createElement('span');
+            nameText.textContent = attachment.name || fileName;
+
+            nameWrap.appendChild(badge);
+            nameWrap.appendChild(nameText);
+
+            var btn = document.createElement('button');
+            btn.className = 'view-btn';
+            btn.type = 'button';
+            btn.textContent = 'View in 3D';
+            btn.addEventListener('click', function () {
+              openViewer(t, attachment, cardId);
+            });
+
+            row.appendChild(nameWrap);
+            row.appendChild(btn);
+            listEl.appendChild(row);
+          });
+
+          return t.sizeTo('#list');
+        })
+        .catch(function (err) {
+          document.getElementById('list').innerHTML =
+            '<div class="empty">Could not load attachments: ' + (err && err.message ? t.safe(err.message) : 'unknown error') + '</div>';
+          return t.sizeTo('#list');
+        });
+    });
+  </script>
+</body>
+</html>
