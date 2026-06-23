@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>3D Model Viewer</title>
+  <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css" />
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+
+  <!-- occt-import-js: parses STEP/IGES/BREP files into mesh data, in the browser (WebAssembly) -->
+  <script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/occt-import-js.js"></script>
+
+  <!-- Tell the browser where to find "three" and its addons (STLLoader, OrbitControls) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1b1f27;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    #viewer-root { position: fixed; inset: 0; }
+    #canvas-holder { position: absolute; inset: 0; }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    #toolbar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      display: flex;
+      gap: 6px;
+      z-index: 5;
+      flex-wrap: wrap;
+    }
+    .tb-btn {
+      background: rgba(23, 43, 77, 0.85);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tb-btn.active { background: #0c66e4; border-color: #0c66e4; }
+    .tb-btn:hover { filter: brightness(1.15); }
+    .tb-btn[hidden] { display: none; }
+
+    #legend {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 5;
+      background: rgba(23,43,77,0.8);
+      border-radius: 4px;
+      padding: 6px 9px;
+      font-size: 11px;
+      color: #fff;
+      display: none;
+    }
+    #legend .row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+    #legend .swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+
+    #info {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      color: rgba(255,255,255,0.6);
+      font-size: 11px;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 10px;
+      color: #fff;
+      text-align: center;
+      padding: 24px;
+      box-sizing: border-box;
+      z-index: 10;
+    }
+    #overlay.hidden { display: none; }
+    .spinner {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.25);
+      border-top-color: #0c66e4;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #overlay-text { font-size: 13px; color: rgba(255,255,255,0.85); max-width: 480px; }
+    #overlay-title { font-size: 15px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="viewer-root">
+    <div id="canvas-holder"></div>
+
+    <div id="toolbar" style="display:none;">
+      <button class="tb-btn" id="btn-reset">Reset view</button>
+      <button class="tb-btn" id="btn-wireframe">Wireframe</button>
+      <button class="tb-btn active" id="btn-travel" hidden>Travel moves</button>
+      <button class="tb-btn active" id="btn-grid">Grid</button>
+    </div>
+
+    <div id="legend">
+      <div class="row"><span class="swatch" style="background:#ffae42;"></span>Cutting / feed moves</div>
+      <div class="row"><span class="swatch" style="background:#5a7a9a;"></span>Rapid / travel moves</div>
+    </div>
+
+    <div id="info"></div>
+
+    <div id="overlay">
+      <div class="spinner" id="spinner"></div>
+      <div id="overlay-title">Loading model…</div>
+      <div id="overlay-text"></div>
+    </div>
+  </div>
+
+  <script src="./config.js"></script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    var t = window.TrelloPowerUp.iframe();
+
+    var overlayEl = document.getElementById('overlay');
+    var overlayTitleEl = document.getElementById('overlay-title');
+    var overlayTextEl = document.getElementById('overlay-text');
+    var spinnerEl = document.getElementById('spinner');
+    var toolbarEl = document.getElementById('toolbar');
+    var infoEl = document.getElementById('info');
+    var legendEl = document.getElementById('legend');
+    var canvasHolder = document.getElementById('canvas-holder');
+
+    function showError(title, detail) {
+      spinnerEl.style.display = 'none';
+      overlayEl.classList.remove('hidden');
+      overlayTitleEl.textContent = title;
+      overlayTextEl.textContent = detail || '';
+    }
+    function showLoading(text) {
+      spinnerEl.style.display = 'block';
+      overlayEl.classList.remove('hidden');
+      overlayTitleEl.textContent = text || 'Loading model…';
+      overlayTextEl.textContent = '';
+    }
+    function hideOverlay() { overlayEl.classList.add('hidden'); }
+
+    function getExtension(name) {
+      var match = /\.[^.]+$/.exec((name || '').toLowerCase());
+      return match ? match[0] : '';
+    }
+
+    var MESH_EXTENSIONS = ['.stl', '.step', '.stp'];
+    var GCODE_EXTENSIONS = ['.gcode', '.gco', '.nc', '.tap', '.cnc', '.ngc', '.g'];
+
+    // ---- Read arguments passed in from section.html ----
+    var cardId = t.arg('cardId');
+    var attachmentId = t.arg('attachmentId');
+    var fileName = t.arg('fileName');
+    var ext = getExtension(fileName);
+
+    if (!window.WORKER_URL || window.WORKER_URL.indexOf('REPLACE-WITH-YOUR-WORKER-URL') !== -1) {
+      showError(
+        'Setup needed',
+        'config.js still has the placeholder Worker URL. Open config.js in your hosted files and paste in your real Cloudflare Worker URL.'
+      );
+      throw new Error('WORKER_URL not configured');
+    }
+    if (!cardId || !attachmentId || !fileName) {
+      showError('Missing information', 'This viewer was not given a card, attachment, or file name to load.');
+      throw new Error('Missing required arguments');
+    }
+
+    // ---- Three.js scene setup ----
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1b1f27);
+    var camera = new THREE.PerspectiveCamera(45, 1, 0.01, 10000);
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    canvasHolder.appendChild(renderer.domElement);
+
+    var controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3f4a, 0.6));
+    var keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    keyLight.position.set(1, 1.6, 1);
+    scene.add(keyLight);
+    var fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    fillLight.position.set(-1, -0.5, -1);
+    scene.add(fillLight);
+
+    var gridHelper = null;
+    var modelGroup = new THREE.Group();
+    scene.add(modelGroup);
+    var travelLines = null; // reference for the travel-moves toggle
+
+    function resize() {
+      var w = canvasHolder.clientWidth || window.innerWidth;
+      var h = canvasHolder.clientHeight || window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    function fitCameraToObject(object, offset) {
+      offset = offset || 1.6;
+      var box = new THREE.Box3().setFromObject(object);
+      if (box.isEmpty()) return;
+      var size = box.getSize(new THREE.Vector3());
+      var center = box.getCenter(new THREE.Vector3());
+      var maxDim = Math.max(size.x, size.y, size.z) || 1;
+      var fov = camera.fov * (Math.PI / 180);
+      var dist = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * offset;
+
+      camera.near = Math.max(maxDim / 1000, 0.001);
+      camera.far = maxDim * 1000;
+      camera.position.set(center.x + dist * 0.55, center.y + dist * 0.45, center.z + dist * 0.7);
+      camera.updateProjectionMatrix();
+      controls.target.copy(center);
+      controls.update();
+
+      if (gridHelper) scene.remove(gridHelper);
+      var gridSize = maxDim * 2.5;
+      gridHelper = new THREE.GridHelper(gridSize, 20, 0x39455c, 0x2a3344);
+      gridHelper.position.y = box.min.y;
+      scene.add(gridHelper);
+
+      window.__lastFit = { object: object, offset: offset };
+    }
+
+    // ---- Toolbar wiring ----
+    document.getElementById('btn-reset').addEventListener('click', function () {
+      if (window.__lastFit) fitCameraToObject(window.__lastFit.object, window.__lastFit.offset);
+    });
+    var wireframeOn = false;
+    document.getElementById('btn-wireframe').addEventListener('click', function (e) {
+      wireframeOn = !wireframeOn;
+      e.target.classList.toggle('active', wireframeOn);
+      modelGroup.traverse(function (child) {
+        if (child.isMesh && child.material) child.material.wireframe = wireframeOn;
+      });
+    });
+    document.getElementById('btn-travel').addEventListener('click', function (e) {
+      if (!travelLines) return;
+      travelLines.visible = !travelLines.visible;
+      e.target.classList.toggle('active', travelLines.visible);
+    });
+    document.getElementById('btn-grid').addEventListener('click', function (e) {
+      if (!gridHelper) return;
+      gridHelper.visible = !gridHelper.visible;
+      e.target.classList.toggle('active', gridHelper.visible);
+    });
+
+    // ---- Download through the proxy worker ----
+    function downloadUrl() {
+      var params = new URLSearchParams({ cardId: cardId, attachmentId: attachmentId, fileName: fileName });
+      return window.WORKER_URL.replace(/\/$/, '') + '/download?' + params.toString();
+    }
+
+    function buildMeshMaterial(colorArray) {
+      var color = 0x9aa7b4;
+      if (colorArray && colorArray.length === 3) {
+        color = new THREE.Color(colorArray[0], colorArray[1], colorArray[2]);
+      }
+      return new THREE.MeshStandardMaterial({ color: color, metalness: 0.25, roughness: 0.6, side: THREE.DoubleSide });
+    }
+
+    function loadStl(arrayBuffer) {
+      var loader = new STLLoader();
+      var geometry = loader.parse(arrayBuffer);
+      geometry.computeVertexNormals();
+      modelGroup.add(new THREE.Mesh(geometry, buildMeshMaterial()));
+    }
+
+    function loadStep(arrayBuffer) {
+      return window
+        .occtimportjs({
+          locateFile: function (path) {
+            return 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/' + path;
+          }
+        })
+        .then(function (occt) {
+          var result = occt.ReadStepFile(new Uint8Array(arrayBuffer), null);
+          if (!result || !result.success || !result.meshes || result.meshes.length === 0) {
+            throw new Error('The STEP file could not be converted into a viewable shape.');
+          }
+          result.meshes.forEach(function (meshData) {
+            var geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.attributes.position.array, 3));
+            if (meshData.attributes.normal) {
+              geometry.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.attributes.normal.array, 3));
+            }
+            geometry.setIndex(meshData.index.array);
+            if (!meshData.attributes.normal) geometry.computeVertexNormals();
+            modelGroup.add(new THREE.Mesh(geometry, buildMeshMaterial(meshData.color)));
+          });
+        });
+    }
+
+    // ============================================================
+    //  G-code parser (CNC / laser dialect) -> line segments
+    // ============================================================
+    function parseGcode(text, options) {
+      options = options || {};
+      var arcSegLen = options.arcSegmentLength || 0.2;
+      var maxSegments = options.maxSegments || 2000000;
+
+      var motion = 0, absolute = true, plane = 17, inches = false;
+      var pos = { x: 0, y: 0, z: 0 };
+      var travel = [], cut = [];
+      var min = { x: Infinity, y: Infinity, z: Infinity };
+      var max = { x: -Infinity, y: -Infinity, z: -Infinity };
+      var segCount = 0, moveCount = 0;
+
+      function track(p) {
+        if (p.x < min.x) min.x = p.x; if (p.x > max.x) max.x = p.x;
+        if (p.y < min.y) min.y = p.y; if (p.y > max.y) max.y = p.y;
+        if (p.z < min.z) min.z = p.z; if (p.z > max.z) max.z = p.z;
+      }
+      function pushSeg(arr, a, b) {
+        if (segCount >= maxSegments) return;
+        if (a.x === b.x && a.y === b.y && a.z === b.z) return;
+        arr.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        track(a); track(b);
+        segCount++;
+      }
+      function stripComments(line) {
+        var out = '', inParen = false;
+        for (var i = 0; i < line.length; i++) {
+          var c = line[i];
+          if (c === '(') { inParen = true; continue; }
+          if (c === ')') { inParen = false; continue; }
+          if (c === ';') break;
+          if (!inParen) out += c;
+        }
+        return out;
+      }
+
+      var wordRe = /([A-Za-z])\s*([+-]?[0-9]*\.?[0-9]+)/g;
+      var lines = text.split(/\r?\n/);
+
+      for (var li = 0; li < lines.length; li++) {
+        var clean = stripComments(lines[li]);
+        if (!clean.trim()) continue;
+        var words = {}, gCodes = [], m;
+        wordRe.lastIndex = 0;
+        while ((m = wordRe.exec(clean)) !== null) {
+          var letter = m[1].toUpperCase();
+          var value = parseFloat(m[2]);
+          if (letter === 'G') gCodes.push(value);
+          else words[letter] = value;
+        }
+        for (var gi = 0; gi < gCodes.length; gi++) {
+          var g = gCodes[gi];
+          if (g === 90) absolute = true;
+          else if (g === 91) absolute = false;
+          else if (g === 20) inches = true;
+          else if (g === 21) inches = false;
+          else if (g === 17) plane = 17;
+          else if (g === 18) plane = 18;
+          else if (g === 19) plane = 19;
+          else if (g === 0 || g === 1 || g === 2 || g === 3) motion = g;
+        }
+        var hasAxis = ('X' in words) || ('Y' in words) || ('Z' in words);
+        var hasArc = ('I' in words) || ('J' in words) || ('K' in words) || ('R' in words);
+        if (!hasAxis && !hasArc) continue;
+
+        var target = { x: pos.x, y: pos.y, z: pos.z };
+        if ('X' in words) target.x = absolute ? words.X : pos.x + words.X;
+        if ('Y' in words) target.y = absolute ? words.Y : pos.y + words.Y;
+        if ('Z' in words) target.z = absolute ? words.Z : pos.z + words.Z;
+
+        if (motion === 0 || motion === 1) {
+          pushSeg(motion === 0 ? travel : cut, pos, target);
+          moveCount++; pos = target;
+        } else if (motion === 2 || motion === 3) {
+          tessellateArc(pos, target, words, motion === 2, plane, arcSegLen, function (a, b) { pushSeg(cut, a, b); });
+          moveCount++; pos = target;
+        }
+      }
+
+      var empty = !isFinite(min.x);
+      return {
+        travel: new Float32Array(travel),
+        cut: new Float32Array(cut),
+        bounds: empty ? null : { min: min, max: max },
+        units: inches ? 'inch' : 'mm',
+        stats: { moves: moveCount, segments: segCount }
+      };
+    }
+
+    function tessellateArc(start, end, words, clockwise, plane, segLen, emit) {
+      var aKey, bKey, cKey, iKey, jKey;
+      if (plane === 17) { aKey='x'; bKey='y'; cKey='z'; iKey='I'; jKey='J'; }
+      else if (plane === 18) { aKey='x'; bKey='z'; cKey='y'; iKey='I'; jKey='K'; }
+      else { aKey='y'; bKey='z'; cKey='x'; iKey='J'; jKey='K'; }
+
+      var sa = start[aKey], sb = start[bKey];
+      var ea = end[aKey], eb = end[bKey];
+      var ca, cb;
+
+      if ('R' in words) {
+        var r = words.R;
+        var mxa = (sa + ea) / 2, mxb = (sb + eb) / 2;
+        var da = ea - sa, db = eb - sb;
+        var chord = Math.hypot(da, db);
+        if (chord === 0) return;
+        var hsq = r * r - (chord / 2) * (chord / 2);
+        if (hsq < 0) hsq = 0;
+        var h = Math.sqrt(hsq);
+        var pa = -db / chord, pb = da / chord;
+        var sign;
+        if (clockwise) sign = (r > 0) ? -1 : 1;
+        else sign = (r > 0) ? 1 : -1;
+        ca = mxa + sign * h * pa;
+        cb = mxb + sign * h * pb;
+      } else {
+        var i = (iKey in words) ? words[iKey] : 0;
+        var j = (jKey in words) ? words[jKey] : 0;
+        ca = sa + i; cb = sb + j;
+      }
+
+      var radius = Math.hypot(sa - ca, sb - cb);
+      if (radius === 0) return;
+
+      var a0 = Math.atan2(sb - cb, sa - ca);
+      var a1 = Math.atan2(eb - cb, ea - ca);
+      var TAU = Math.PI * 2;
+      if (clockwise) {
+        while (a1 >= a0) a1 -= TAU;
+        if (Math.abs(a1 - a0) < 1e-9) a1 = a0 - TAU;
+      } else {
+        while (a1 <= a0) a1 += TAU;
+        if (Math.abs(a1 - a0) < 1e-9) a1 = a0 + TAU;
+      }
+
+      var sweep = a1 - a0;
+      var arcLen = Math.abs(sweep) * radius;
+      var nSeg = Math.max(2, Math.ceil(arcLen / segLen));
+      if (nSeg > 4000) nSeg = 4000;
+
+      var sc = start[cKey], ec = end[cKey];
+      var prev = { x: start.x, y: start.y, z: start.z };
+      for (var s = 1; s <= nSeg; s++) {
+        var tt = s / nSeg;
+        var ang = a0 + sweep * tt;
+        var pa2 = ca + radius * Math.cos(ang);
+        var pb2 = cb + radius * Math.sin(ang);
+        var pc2 = sc + (ec - sc) * tt;
+        var pt = { x: 0, y: 0, z: 0 };
+        pt[aKey] = pa2; pt[bKey] = pb2; pt[cKey] = pc2;
+        emit(prev, pt);
+        prev = pt;
+      }
+    }
+
+    function loadGcode(arrayBuffer) {
+      var text = new TextDecoder('utf-8').decode(new Uint8Array(arrayBuffer));
+      // pick an arc resolution proportional to the part size so small and
+      // large parts both look smooth without exploding the segment count.
+      var quickBounds = parseGcode(text, { arcSegmentLength: 1, maxSegments: 50000 }).bounds;
+      var span = 100;
+      if (quickBounds) {
+        span = Math.max(
+          quickBounds.max.x - quickBounds.min.x,
+          quickBounds.max.y - quickBounds.min.y,
+          quickBounds.max.z - quickBounds.min.z
+        ) || 100;
+      }
+      var result = parseGcode(text, { arcSegmentLength: Math.max(span / 800, 0.05) });
+
+      if (result.cut.length === 0 && result.travel.length === 0) {
+        throw new Error('No tool movements (G0/G1/G2/G3) were found in this G-code file.');
+      }
+
+      if (result.cut.length > 0) {
+        var cutGeom = new THREE.BufferGeometry();
+        cutGeom.setAttribute('position', new THREE.BufferAttribute(result.cut, 3));
+        var cutLines = new THREE.LineSegments(cutGeom, new THREE.LineBasicMaterial({ color: 0xffae42 }));
+        modelGroup.add(cutLines);
+      }
+      if (result.travel.length > 0) {
+        var travelGeom = new THREE.BufferGeometry();
+        travelGeom.setAttribute('position', new THREE.BufferAttribute(result.travel, 3));
+        travelLines = new THREE.LineSegments(
+          travelGeom,
+          new THREE.LineBasicMaterial({ color: 0x5a7a9a, transparent: true, opacity: 0.55 })
+        );
+        modelGroup.add(travelLines);
+      }
+
+      window.__gcodeInfo = result.stats.moves + ' moves · ' + result.units;
+    }
+
+    // ============================================================
+    //  Kick off the load
+    // ============================================================
+    var isGcode = GCODE_EXTENSIONS.indexOf(ext) !== -1;
+    var isMesh = MESH_EXTENSIONS.indexOf(ext) !== -1;
+
+    showLoading('Downloading file from Trello…');
+
+    fetch(downloadUrl())
+      .then(function (response) {
+        if (!response.ok) {
+          return response.text().then(function (text) {
+            throw new Error('Could not download the file (' + response.status + '). ' + text);
+          });
+        }
+        showLoading(isGcode ? 'Reading toolpath…' : 'Parsing 3D geometry…');
+        return response.arrayBuffer();
+      })
+      .then(function (arrayBuffer) {
+        if (ext === '.stl') { loadStl(arrayBuffer); return null; }
+        if (ext === '.step' || ext === '.stp') { return loadStep(arrayBuffer); }
+        if (isGcode) { loadGcode(arrayBuffer); return null; }
+        throw new Error('Unsupported file type: ' + ext);
+      })
+      .then(function () {
+        if (modelGroup.children.length === 0) {
+          throw new Error('No visible geometry was found in this file.');
+        }
+        fitCameraToObject(modelGroup);
+        hideOverlay();
+        toolbarEl.style.display = 'flex';
+
+        // Show the controls relevant to this file type.
+        document.getElementById('btn-wireframe').hidden = !isMesh;
+        document.getElementById('btn-travel').hidden = !(isGcode && travelLines);
+        if (isGcode) {
+          legendEl.style.display = 'block';
+          infoEl.textContent = fileName + (window.__gcodeInfo ? '  —  ' + window.__gcodeInfo : '');
+        } else {
+          infoEl.textContent = fileName;
+        }
+      })
+      .catch(function (err) {
+        console.error(err);
+        showError('Could not display this model', (err && err.message) || String(err));
+      });
+  </script>
+</body>
+</html>
