@@ -65,7 +65,7 @@
       if (contact.phone) html += '<div class="num">' + CRM.esc(contact.phone) + '</div>';
       html += '</div><div class="actions">';
       if (wa) html += '<a class="wa" href="' + wa + '" target="_blank" rel="noopener">WhatsApp</a>';
-      if (tel) html += '<a class="call" href="' + tel + '">Звонок</a>';
+      if (tel) html += '<a class="call" href="' + tel + '" target="_blank" rel="noopener">Звонок</a>';
       html += '</div></div>';
       return html;
     }
