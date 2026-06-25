@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <title>3D Model Viewer</title>
-  <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css" />
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/occt-import-js.js"></script>
   <script type="importmap">
@@ -29,12 +28,14 @@
       position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 5; flex-wrap: wrap;
     }
     .tb-btn {
-      background: rgba(23,43,77,0.85); color: #fff; border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(23,43,77,0.92); color: #fff; border: 1px solid rgba(255,255,255,0.18);
       border-radius: 5px; padding: 7px 11px; font-size: 12px; cursor: pointer; user-select: none;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.18); -webkit-appearance: none; appearance: none;
     }
-    .tb-btn.active { background: #0c66e4; border-color: #0c66e4; }
-    .tb-btn:hover { filter: brightness(1.12); }
+    .tb-btn:hover, .tb-btn:focus { background: #1f3a63; color: #fff; outline: none; }
+    .tb-btn:active { background: #0a4fb0; color: #fff; }
+    .tb-btn.active { background: #0c66e4; border-color: #0c66e4; color: #fff; }
+    .tb-btn.active:hover, .tb-btn.active:focus { background: #1d74f0; color: #fff; }
     .tb-btn[hidden] { display: none; }
 
     #legend {
