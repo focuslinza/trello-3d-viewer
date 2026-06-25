@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Справочник компаний</title>
+  <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css" />
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #172b4d; background: #fff; }
+    #app { padding: 14px 16px 20px; }
+    h2 { font-size: 16px; margin: 0 0 10px; }
+    h3 { font-size: 14px; margin: 14px 0 6px; }
+    .muted { color: #5e6c84; font-size: 13px; }
+    .row { margin-bottom: 10px; }
+    label.fld { display: block; font-size: 12px; font-weight: 600; color: #5e6c84; margin-bottom: 3px; }
+    input[type=text], input[type=tel] {
+      width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 14px;
+      border: 1px solid #dfe1e6; border-radius: 5px; background: #fafbfc;
+    }
+    input[type=text]:focus, input[type=tel]:focus { background: #fff; border-color: #4c9aff; outline: none; }
+    .check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .btn { background: #0c66e4; color: #fff; border: none; border-radius: 5px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn.secondary { background: #f4f5f7; color: #172b4d; border: 1px solid #dfe1e6; }
+    .btn.danger { background: #fbe9e7; color: #c9372c; border: 1px solid #f5c2bd; }
+    .btn.small { padding: 5px 9px; font-size: 12px; }
+    .btn:hover { filter: brightness(1.04); }
+    .btnbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .search { width: 100%; box-sizing: border-box; padding: 9px 12px; font-size: 14px; border: 1px solid #dfe1e6; border-radius: 6px; margin-bottom: 8px; }
+    .list-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 9px 11px; border: 1px solid #dfe1e6; border-radius: 6px; margin-bottom: 6px; cursor: pointer;
+    }
+    .list-item:hover { background: #f4f5f7; }
+    .list-item .ttl { font-size: 14px; font-weight: 600; }
+    .list-item .sub { font-size: 12px; color: #5e6c84; }
+    .company-head { background: #f4f5f7; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+    .company-head .nm { font-size: 16px; font-weight: 700; }
+    .req-grid { font-size: 12px; color: #42526e; margin-top: 4px; line-height: 1.5; }
+    .contact-card { border: 1px solid #dfe1e6; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+    .contact-card .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .contact-card .nm { font-size: 14px; font-weight: 600; }
+    .contact-card .role { font-size: 12px; color: #5e6c84; }
+    .contact-card .num { font-size: 12px; color: #42526e; margin-top: 2px; }
+    .contact-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    a.wa { background: #25d366; color: #fff; text-decoration: none; font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: 4px; }
+    a.call { background: #f4f5f7; color: #172b4d; text-decoration: none; font-size: 12px; padding: 6px 10px; border-radius: 4px; border: 1px solid #dfe1e6; }
+    .enq { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 13px; color: #172b4d; }
+    .warn { background: #fffae6; border: 1px solid #ffe380; color: #7a5d00; font-size: 12px; padding: 8px 10px; border-radius: 6px; margin-bottom: 10px; }
+    .hidden { display: none; }
+    .req-note { font-size: 11px; color: #97a0af; }
+  </style>
+</head>
+<body>
+  <div id="app"><div class="muted">Загрузка…</div></div>
+
+  <script src="./crm-common.js"></script>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var app = document.getElementById('app');
+
+    var state = {
+      directory: [],
+      cardCompanyId: null,
+      cardContacts: [],
+      nearFull: false
+    };
+
+    function loadAll() {
+      return Promise.all([
+        CRM.getDirectory(t),
+        CRM.getCardCompanyId(t),
+        CRM.getCardContacts(t)
+      ]).then(function (res) {
+        state.directory = res[0] || [];
+        state.cardCompanyId = res[1] || null;
+        state.cardContacts = res[2] || [];
+        renderHome();
+      });
+    }
+
+    function currentCompany() {
+      if (!state.cardCompanyId) return null;
+      for (var i = 0; i < state.directory.length; i++) {
+        if (state.directory[i].id === state.cardCompanyId) return state.directory[i];
+      }
+      return null;
+    }
+
+    // ---------- HOME ----------
+    function renderHome() {
+      var company = currentCompany();
+      if (company) { renderLinkedCompany(company); }
+      else { renderPicker(); }
+    }
+
+    function renderPicker(filter) {
+      filter = (filter || '').toLowerCase();
+      var matches = state.directory.filter(function (c) {
+        var hay = (c.name + ' ' + (c.bin || '') + ' ' + (c.phone || '')).toLowerCase();
+        return hay.indexOf(filter) !== -1;
+      });
+
+      var html = '<h2>Выбрать компанию для этой заявки</h2>';
+      html += '<input class="search" id="search" type="text" placeholder="Поиск по названию, БИН или телефону…" value="' + CRM.esc(filter ? filter : '') + '" />';
+      if (state.directory.length === 0) {
+        html += '<div class="muted" style="margin:8px 0 12px;">Справочник пуст. Добавьте первую компанию.</div>';
+      } else if (matches.length === 0) {
+        html += '<div class="muted" style="margin:8px 0 12px;">Ничего не найдено. Можно добавить новую компанию.</div>';
+      } else {
+        matches.forEach(function (c) {
+          html += '<div class="list-item" data-id="' + c.id + '">' +
+            '<div><div class="ttl">' + CRM.esc(c.name) + '</div>' +
+            '<div class="sub">' + (c.bin ? 'БИН ' + CRM.esc(c.bin) : '') +
+            (c.phone ? '  ·  ' + CRM.esc(c.phone) : '') + '</div></div>' +
+            '<span class="btn small">Выбрать</span></div>';
+        });
+      }
+      html += '<div class="btnbar">' +
+        '<button class="btn" id="addNew">+ Новая компания</button>' +
+        '<button class="btn secondary" id="close">Закрыть</button>' +
+        '</div>';
+
+      app.innerHTML = html;
+
+      var search = document.getElementById('search');
+      search.addEventListener('input', function () { renderPicker(search.value); });
+      // keep focus + cursor at end after re-render
+      search.focus();
+      search.setSelectionRange(search.value.length, search.value.length);
+
+      Array.prototype.forEach.call(document.querySelectorAll('.list-item'), function (el) {
+        el.addEventListener('click', function () { assignCompany(el.getAttribute('data-id')); });
+      });
+      document.getElementById('addNew').addEventListener('click', function () { renderCompanyForm(null); });
+      document.getElementById('close').addEventListener('click', function () { t.closeModal(); });
+    }
+
+    function renderLinkedCompany(company) {
+      var html = '';
+      if (state.nearFull) {
+        html += '<div class="warn">Справочник почти заполнен (лимит хранилища Trello). Скоро стоит перенести его в Cloudflare — скажите разработчику.</div>';
+      }
+      html += '<div class="company-head"><div class="nm">' + CRM.esc(company.name) + '</div><div class="req-grid">';
+      if (company.bin) html += 'БИН/ИИН: ' + CRM.esc(company.bin) + '<br>';
+      if (company.addr) html += 'Адрес: ' + CRM.esc(company.addr) + '<br>';
+      if (company.phone) html += 'Телефон: ' + CRM.esc(company.phone) + '<br>';
+      if (company.iban) html += 'Счёт: ' + CRM.esc(company.iban) + '<br>';
+      if (company.bank) html += 'Банк: ' + CRM.esc(company.bank) + (company.bik ? ' (БИК ' + CRM.esc(company.bik) + ')' : '') + '<br>';
+      html += 'НДС: ' + (company.nds ? 'да' : 'нет');
+      html += '</div></div>';
+
+      html += '<div class="btnbar">' +
+        '<button class="btn secondary small" id="editCompany">Редактировать реквизиты</button>' +
+        '<button class="btn secondary small" id="changeCompany">Сменить компанию</button>' +
+        '</div>';
+
+      html += '<h3>Контакты компании</h3>';
+      var contacts = company.contacts || [];
+      if (contacts.length === 0) {
+        html += '<div class="muted">Пока нет контактов. Добавьте человека, который оставил заявку.</div>';
+      } else {
+        contacts.forEach(function (c) {
+          var wa = CRM.waLink(c.phone), tel = CRM.telLink(c.phone);
+          var checked = state.cardContacts.indexOf(c.id) !== -1 ? 'checked' : '';
+          html += '<div class="contact-card">';
+          html += '<div class="top"><div>' +
+            '<div class="nm">' + CRM.esc(c.name || 'Без имени') + '</div>' +
+            (c.role ? '<div class="role">' + CRM.esc(c.role) + '</div>' : '') +
+            (c.phone ? '<div class="num">' + CRM.esc(c.phone) + '</div>' : '') +
+            '</div></div>';
+          html += '<div class="contact-actions">';
+          if (wa) html += '<a class="wa" href="' + wa + '" target="_blank" rel="noopener">WhatsApp</a>';
+          if (tel) html += '<a class="call" href="' + tel + '">Звонок</a>';
+          html += '<button class="btn secondary small" data-edit="' + c.id + '">Изменить</button>';
+          html += '<button class="btn danger small" data-del="' + c.id + '">Удалить</button>';
+          html += '</div>';
+          html += '<label class="enq"><input type="checkbox" data-enq="' + c.id + '" ' + checked + '/> Обращался по этой заявке</label>';
+          html += '</div>';
+        });
+      }
+
+      html += '<div class="btnbar">' +
+        '<button class="btn" id="addContact">+ Добавить контакт</button>' +
+        '<button class="btn secondary" id="done">Готово</button>' +
+        '</div>';
+
+      app.innerHTML = html;
+
+      document.getElementById('editCompany').addEventListener('click', function () { renderCompanyForm(company); });
+      document.getElementById('changeCompany').addEventListener('click', function () {
+        CRM.setCardCompanyId(t, null).then(function () { state.cardCompanyId = null; renderPicker(); });
+      });
+      document.getElementById('addContact').addEventListener('click', function () { renderContactForm(null, company.id); });
+      document.getElementById('done').addEventListener('click', function () { t.closeModal(); });
+
+      Array.prototype.forEach.call(document.querySelectorAll('[data-edit]'), function (el) {
+        el.addEventListener('click', function () {
+          var cid = el.getAttribute('data-edit');
+          var contact = (company.contacts || []).filter(function (x) { return x.id === cid; })[0];
+          renderContactForm(contact, company.id);
+        });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-del]'), function (el) {
+        el.addEventListener('click', function () {
+          var cid = el.getAttribute('data-del');
+          deleteContact(company.id, cid);
+        });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-enq]'), function (el) {
+        el.addEventListener('change', function () {
+          toggleEnquiry(el.getAttribute('data-enq'), el.checked);
+        });
+      });
+    }
+
+    // ---------- COMPANY FORM ----------
+    function renderCompanyForm(company) {
+      var isNew = !company;
+      company = company || {};
+      var html = '<h2>' + (isNew ? 'Новая компания' : 'Реквизиты компании') + '</h2>';
+      CRM.COMPANY_FIELDS.forEach(function (f) {
+        if (f.type === 'checkbox') {
+          html += '<div class="row"><label class="check"><input type="checkbox" id="f_' + f.key + '" ' +
+            (company[f.key] ? 'checked' : '') + '/> ' + f.label + '</label></div>';
+        } else {
+          html += '<div class="row"><label class="fld" for="f_' + f.key + '">' + f.label +
+            (f.required ? ' *' : '') + '</label>' +
+            '<input type="text" id="f_' + f.key + '" value="' + CRM.esc(company[f.key] || '') + '" placeholder="' + CRM.esc(f.placeholder || '') + '" /></div>';
+        }
+      });
+      html += '<div class="req-note">Эти данные потом подставятся в счёт на оплату автоматически.</div>';
+      html += '<div class="btnbar">' +
+        '<button class="btn" id="saveCompany">Сохранить</button>' +
+        '<button class="btn secondary" id="cancel">Отмена</button>';
+      if (!isNew) html += '<button class="btn danger" id="delCompany">Удалить компанию</button>';
+      html += '</div>';
+      app.innerHTML = html;
+
+      document.getElementById('saveCompany').addEventListener('click', function () { saveCompany(company); });
+      document.getElementById('cancel').addEventListener('click', function () { renderHome(); });
+      if (!isNew) {
+        document.getElementById('delCompany').addEventListener('click', function () { deleteCompanyConfirm(company.id); });
+      }
+    }
+
+    function saveCompany(existing) {
+      var company = { id: existing.id || CRM.newId(), contacts: existing.contacts || [] };
+      CRM.COMPANY_FIELDS.forEach(function (f) {
+        var el = document.getElementById('f_' + f.key);
+        if (f.type === 'checkbox') company[f.key] = !!el.checked;
+        else company[f.key] = (el.value || '').trim();
+      });
+      if (!company.name) { alert('Укажите название компании.'); return; }
+
+      CRM.upsertCompany(t, company).then(function (r) {
+        state.nearFull = r.info && r.info.nearFull;
+        // link to the card if this card has no company yet
+        if (!state.cardCompanyId) {
+          return CRM.setCardCompanyId(t, company.id).then(function () {
+            state.cardCompanyId = company.id;
+          });
+        }
+      }).then(loadAll).catch(function (e) { alert(e.message || 'Не удалось сохранить.'); });
+    }
+
+    function deleteCompanyConfirm(id) {
+      if (!confirm('Удалить компанию из справочника? Это уберёт её со всех карточек.')) return;
+      CRM.deleteCompany(t, id).then(function () {
+        if (state.cardCompanyId === id) return CRM.setCardCompanyId(t, null);
+      }).then(loadAll).catch(function (e) { alert(e.message || 'Ошибка.'); });
+    }
+
+    // ---------- CONTACT FORM ----------
+    function renderContactForm(contact, companyId) {
+      var isNew = !contact;
+      contact = contact || {};
+      var html = '<h2>' + (isNew ? 'Новый контакт' : 'Контакт') + '</h2>';
+      html += '<div class="row"><label class="fld" for="c_name">Имя *</label>' +
+        '<input type="text" id="c_name" value="' + CRM.esc(contact.name || '') + '" placeholder="Иван Иванов" /></div>';
+      html += '<div class="row"><label class="fld" for="c_role">Должность / роль</label>' +
+        '<input type="text" id="c_role" value="' + CRM.esc(contact.role || '') + '" placeholder="Снабжение" /></div>';
+      html += '<div class="row"><label class="fld" for="c_phone">Телефон (WhatsApp)</label>' +
+        '<input type="tel" id="c_phone" value="' + CRM.esc(contact.phone || '') + '" placeholder="+7 701 123 45 67" /></div>';
+      html += '<div class="req-note">По номеру можно будет написать в WhatsApp одним кликом.</div>';
+      html += '<div class="btnbar">' +
+        '<button class="btn" id="saveContact">Сохранить</button>' +
+        '<button class="btn secondary" id="cancelContact">Отмена</button>' +
+        '</div>';
+      app.innerHTML = html;
+
+      document.getElementById('saveContact').addEventListener('click', function () {
+        saveContact(contact, companyId);
+      });
+      document.getElementById('cancelContact').addEventListener('click', function () { renderHome(); });
+    }
+
+    function saveContact(existing, companyId) {
+      var name = (document.getElementById('c_name').value || '').trim();
+      if (!name) { alert('Укажите имя контакта.'); return; }
+      var contact = {
+        id: existing.id || CRM.newId(),
+        name: name,
+        role: (document.getElementById('c_role').value || '').trim(),
+        phone: (document.getElementById('c_phone').value || '').trim()
+      };
+      CRM.getCompanyById(t, companyId).then(function (company) {
+        if (!company) throw new Error('Компания не найдена.');
+        company.contacts = company.contacts || [];
+        var found = false;
+        for (var i = 0; i < company.contacts.length; i++) {
+          if (company.contacts[i].id === contact.id) { company.contacts[i] = contact; found = true; break; }
+        }
+        if (!found) company.contacts.push(contact);
+        return CRM.upsertCompany(t, company);
+      }).then(function (r) {
+        state.nearFull = r.info && r.info.nearFull;
+      }).then(loadAll).catch(function (e) { alert(e.message || 'Не удалось сохранить контакт.'); });
+    }
+
+    function deleteContact(companyId, contactId) {
+      if (!confirm('Удалить этот контакт?')) return;
+      CRM.getCompanyById(t, companyId).then(function (company) {
+        company.contacts = (company.contacts || []).filter(function (c) { return c.id !== contactId; });
+        return CRM.upsertCompany(t, company);
+      }).then(function () {
+        // also remove from this card's enquiry list
+        var next = state.cardContacts.filter(function (id) { return id !== contactId; });
+        return CRM.setCardContacts(t, next);
+      }).then(loadAll).catch(function (e) { alert(e.message || 'Ошибка.'); });
+    }
+
+    function toggleEnquiry(contactId, checked) {
+      var set = state.cardContacts.slice();
+      var idx = set.indexOf(contactId);
+      if (checked && idx === -1) set.push(contactId);
+      if (!checked && idx !== -1) set.splice(idx, 1);
+      state.cardContacts = set;
+      CRM.setCardContacts(t, set);
+    }
+
+    loadAll().catch(function (err) {
+      app.innerHTML = '<div class="muted">Ошибка загрузки: ' + CRM.esc(err && err.message ? err.message : 'неизвестно') + '</div>';
+    });
+  </script>
+</body>
+</html>

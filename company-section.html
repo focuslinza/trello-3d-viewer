@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Компания и контакты</title>
+  <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css" />
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #172b4d; }
+    #root { padding: 4px 2px 8px; }
+    .muted { color: #5e6c84; font-size: 13px; }
+    .company-name { font-size: 15px; font-weight: 700; margin: 0 0 2px; }
+    .req { font-size: 12px; color: #5e6c84; margin: 1px 0; }
+    .contacts { margin-top: 8px; }
+    .contact {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; padding: 6px 8px; border: 1px solid #dfe1e6; border-radius: 6px; margin-bottom: 6px;
+    }
+    .contact .who { overflow: hidden; }
+    .contact .nm { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .contact .role { font-size: 11px; color: #5e6c84; }
+    .contact .num { font-size: 12px; color: #42526e; }
+    .actions { display: flex; gap: 6px; flex: 0 0 auto; }
+    a.wa {
+      background: #25d366; color: #fff; text-decoration: none; font-size: 12px; font-weight: 600;
+      padding: 5px 10px; border-radius: 4px; white-space: nowrap;
+    }
+    a.call {
+      background: #f4f5f7; color: #172b4d; text-decoration: none; font-size: 12px;
+      padding: 5px 9px; border-radius: 4px; border: 1px solid #dfe1e6; white-space: nowrap;
+    }
+    .toolbar { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+    button.btn {
+      background: #0c66e4; color: #fff; border: none; border-radius: 4px;
+      padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    button.btn.secondary { background: #f4f5f7; color: #172b4d; border: 1px solid #dfe1e6; }
+    button.btn:hover { filter: brightness(1.05); }
+    .empty-box { padding: 6px 2px; }
+  </style>
+</head>
+<body>
+  <div id="root"><div class="muted">Загрузка…</div></div>
+
+  <script src="./crm-common.js"></script>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+
+    function openManager() {
+      return t.modal({
+        title: 'Компания и контакты',
+        url: './company-modal.html',
+        height: 600,
+        fullscreen: false
+      });
+    }
+
+    function renderContactRow(contact) {
+      var wa = CRM.waLink(contact.phone);
+      var tel = CRM.telLink(contact.phone);
+      var html = '<div class="contact">';
+      html += '<div class="who">';
+      html += '<div class="nm">' + CRM.esc(contact.name || 'Без имени') + '</div>';
+      if (contact.role) html += '<div class="role">' + CRM.esc(contact.role) + '</div>';
+      if (contact.phone) html += '<div class="num">' + CRM.esc(contact.phone) + '</div>';
+      html += '</div><div class="actions">';
+      if (wa) html += '<a class="wa" href="' + wa + '" target="_blank" rel="noopener">WhatsApp</a>';
+      if (tel) html += '<a class="call" href="' + tel + '">Звонок</a>';
+      html += '</div></div>';
+      return html;
+    }
+
+    t.render(function () {
+      var root = document.getElementById('root');
+
+      return CRM.getCardCompanyId(t).then(function (companyId) {
+        if (!companyId) {
+          root.innerHTML =
+            '<div class="empty-box"><div class="muted">Компания для этой карточки ещё не выбрана.</div>' +
+            '<div class="toolbar"><button class="btn" id="choose">Выбрать компанию</button></div></div>';
+          document.getElementById('choose').addEventListener('click', openManager);
+          return t.sizeTo('#root');
+        }
+
+        return Promise.all([
+          CRM.getCompanyById(t, companyId),
+          CRM.getCardContacts(t)
+        ]).then(function (res) {
+          var company = res[0];
+          var cardContactIds = res[1] || [];
+
+          if (!company) {
+            root.innerHTML =
+              '<div class="empty-box"><div class="muted">Связанная компания не найдена (возможно, удалена).</div>' +
+              '<div class="toolbar"><button class="btn" id="choose">Выбрать компанию</button></div></div>';
+            document.getElementById('choose').addEventListener('click', openManager);
+            return t.sizeTo('#root');
+          }
+
+          var contacts = company.contacts || [];
+          var selected = contacts.filter(function (c) { return cardContactIds.indexOf(c.id) !== -1; });
+          var toShow = selected.length ? selected : contacts; // if none flagged, show all
+
+          var html = '';
+          html += '<div class="company-name">' + CRM.esc(company.name) + '</div>';
+          if (company.bin) html += '<div class="req">БИН/ИИН: ' + CRM.esc(company.bin) + '</div>';
+          if (company.phone) html += '<div class="req">Тел: ' + CRM.esc(company.phone) + '</div>';
+
+          if (toShow.length) {
+            html += '<div class="contacts">';
+            if (selected.length) {
+              html += '<div class="req" style="margin-bottom:4px;">Контакты по этой заявке:</div>';
+            } else {
+              html += '<div class="req" style="margin-bottom:4px;">Контакты компании:</div>';
+            }
+            toShow.forEach(function (c) { html += renderContactRow(c); });
+            html += '</div>';
+          } else {
+            html += '<div class="req" style="margin-top:6px;">Контакты ещё не добавлены.</div>';
+          }
+
+          html += '<div class="toolbar">' +
+            '<button class="btn" id="manage">Управление</button>' +
+            '</div>';
+
+          root.innerHTML = html;
+          document.getElementById('manage').addEventListener('click', openManager);
+          return t.sizeTo('#root');
+        });
+      }).catch(function (err) {
+        root.innerHTML = '<div class="muted">Ошибка: ' + CRM.esc(err && err.message ? err.message : 'неизвестно') + '</div>';
+        return t.sizeTo('#root');
+      });
+    });
+  </script>
+</body>
+</html>
