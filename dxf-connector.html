@@ -7,34 +7,20 @@
 </head>
 <body>
   <script>
-    var SUPPORTED_EXTENSIONS = ['.dxf'];
-
-    function getExtension(name) {
-      var match = /\.[^.]+$/.exec((name || '').toLowerCase());
-      return match ? match[0] : '';
-    }
-    function isDxfAttachment(attachment) {
-      var name = attachment.fileName || attachment.name || attachment.url || '';
-      return SUPPORTED_EXTENSIONS.indexOf(getExtension(name)) !== -1;
-    }
-
+    // Shows a section on the card listing the card's .dxf files with a
+    // "Расчёт" button. This does NOT claim the files, so they stay as normal
+    // Trello attachments with their usual download / edit / delete menu.
     window.TrelloPowerUp.initialize({
-      'attachment-sections': function (t, options) {
-        var claimed = (options.entries || []).filter(isDxfAttachment);
-        if (claimed.length === 0) return [];
-        return [
-          {
-            id: 'dxf-raskroy-section',
-            claimed: claimed,
-            icon: t.signUrl('./dxf-icon.svg'),
-            title: 'DXF / Раскрой',
-            content: {
-              type: 'iframe',
-              url: t.signUrl('./dxf-section.html'),
-              height: Math.min(40 + claimed.length * 34, 300)
-            }
+      'card-back-section': function (t, options) {
+        return {
+          title: 'DXF / Раскрой',
+          icon: t.signUrl('./dxf-icon.svg'),
+          content: {
+            type: 'iframe',
+            url: t.signUrl('./dxf-section.html'),
+            height: 120
           }
-        ];
+        };
       }
     });
   </script>
