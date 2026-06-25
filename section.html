@@ -6,6 +6,11 @@
   <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css" />
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <style>
+    /* Colours that follow Trello's light/dark theme automatically */
+    html[data-color-mode="light"] { --txt: #172b4d; --muted: #5e6c84; --chip-bg: #f4f5f7; }
+    html[data-color-mode="dark"]  { --txt: #c7d1db; --muted: #9fadbc; --chip-bg: #2c333a; }
+    html { --txt: #172b4d; --muted: #5e6c84; --chip-bg: #f4f5f7; } /* fallback */
+
     html, body {
       margin: 0;
       padding: 0;
@@ -26,15 +31,15 @@
       text-overflow: ellipsis;
       white-space: nowrap;
       font-size: 13px;
-      color: #172b4d;
+      color: var(--txt);
     }
     .model-ext {
       display: inline-block;
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.04em;
-      color: #5e6c84;
-      background: #f4f5f7;
+      color: var(--muted);
+      background: var(--chip-bg);
       border-radius: 3px;
       padding: 1px 5px;
       margin-right: 6px;
@@ -57,7 +62,7 @@
     .empty {
       padding: 8px 4px;
       font-size: 12px;
-      color: #5e6c84;
+      color: var(--muted);
     }
   </style>
 </head>

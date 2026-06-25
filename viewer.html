@@ -5,11 +5,7 @@
   <title>3D Model Viewer</title>
   <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css" />
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-
-  <!-- occt-import-js: parses STEP/IGES/BREP files into mesh data, in the browser (WebAssembly) -->
   <script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/occt-import-js.js"></script>
-
-  <!-- Tell the browser where to find "three" and its addons (STLLoader, OrbitControls) -->
   <script type="importmap">
   {
     "imports": {
@@ -18,94 +14,61 @@
     }
   }
   </script>
-
   <style>
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #1b1f27;
+      margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      /* light studio gradient */
+      background: linear-gradient(180deg, #f6f9fc 0%, #dde5ee 60%, #cdd6e1 100%);
     }
     #viewer-root { position: fixed; inset: 0; }
     #canvas-holder { position: absolute; inset: 0; }
     canvas { display: block; width: 100%; height: 100%; }
 
     #toolbar {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      display: flex;
-      gap: 6px;
-      z-index: 5;
-      flex-wrap: wrap;
+      position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 5; flex-wrap: wrap;
     }
     .tb-btn {
-      background: rgba(23, 43, 77, 0.85);
-      color: #fff;
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 4px;
-      padding: 6px 10px;
-      font-size: 12px;
-      cursor: pointer;
-      user-select: none;
+      background: rgba(23,43,77,0.85); color: #fff; border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 5px; padding: 7px 11px; font-size: 12px; cursor: pointer; user-select: none;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.18);
     }
     .tb-btn.active { background: #0c66e4; border-color: #0c66e4; }
-    .tb-btn:hover { filter: brightness(1.15); }
+    .tb-btn:hover { filter: brightness(1.12); }
     .tb-btn[hidden] { display: none; }
 
     #legend {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 5;
-      background: rgba(23,43,77,0.8);
-      border-radius: 4px;
-      padding: 6px 9px;
-      font-size: 11px;
-      color: #fff;
-      display: none;
+      position: absolute; top: 10px; right: 10px; z-index: 5;
+      background: rgba(255,255,255,0.92); border: 1px solid #d4dce6; border-radius: 6px;
+      padding: 6px 9px; font-size: 11px; color: #243b53; display: none; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
     }
     #legend .row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
     #legend .swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
 
+    #measure-readout {
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 6;
+      background: rgba(23,43,77,0.92); color: #fff; border-radius: 8px; padding: 8px 14px;
+      font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); display: none; text-align: center;
+    }
+    #measure-readout .big { font-size: 17px; font-weight: 700; }
+    #measure-readout .hint { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+
     #info {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      color: rgba(255,255,255,0.6);
-      font-size: 11px;
-      z-index: 5;
-      pointer-events: none;
+      position: absolute; bottom: 10px; left: 10px; color: #5b6b7f; font-size: 11px; z-index: 5; pointer-events: none;
     }
 
     #overlay {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      gap: 10px;
-      color: #fff;
-      text-align: center;
-      padding: 24px;
-      box-sizing: border-box;
-      z-index: 10;
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 10px; color: #243b53; text-align: center; padding: 24px;
+      box-sizing: border-box; z-index: 10; background: rgba(246,249,252,0.82);
     }
     #overlay.hidden { display: none; }
     .spinner {
-      width: 34px;
-      height: 34px;
-      border-radius: 50%;
-      border: 3px solid rgba(255,255,255,0.25);
-      border-top-color: #0c66e4;
-      animation: spin 0.8s linear infinite;
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 3px solid rgba(12,102,228,0.25); border-top-color: #0c66e4; animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    #overlay-text { font-size: 13px; color: rgba(255,255,255,0.85); max-width: 480px; }
+    #overlay-text { font-size: 13px; color: #46586e; max-width: 480px; }
     #overlay-title { font-size: 15px; font-weight: 600; }
   </style>
 </head>
@@ -114,22 +77,24 @@
     <div id="canvas-holder"></div>
 
     <div id="toolbar" style="display:none;">
-      <button class="tb-btn" id="btn-reset">Reset view</button>
-      <button class="tb-btn" id="btn-wireframe">Wireframe</button>
-      <button class="tb-btn active" id="btn-travel" hidden>Travel moves</button>
-      <button class="tb-btn active" id="btn-grid">Grid</button>
+      <button class="tb-btn" id="btn-reset">Сбросить вид</button>
+      <button class="tb-btn" id="btn-measure">Измерить</button>
+      <button class="tb-btn" id="btn-wireframe">Каркас</button>
+      <button class="tb-btn active" id="btn-grid">Сетка</button>
+      <button class="tb-btn active" id="btn-travel" hidden>Холостые ходы</button>
     </div>
 
     <div id="legend">
-      <div class="row"><span class="swatch" style="background:#ffae42;"></span>Cutting / feed moves</div>
-      <div class="row"><span class="swatch" style="background:#5a7a9a;"></span>Rapid / travel moves</div>
+      <div class="row"><span class="swatch" style="background:#d2691e;"></span>Рез / рабочий ход</div>
+      <div class="row"><span class="swatch" style="background:#3b5bdb;"></span>Холостой ход</div>
     </div>
 
+    <div id="measure-readout"></div>
     <div id="info"></div>
 
     <div id="overlay">
       <div class="spinner" id="spinner"></div>
-      <div id="overlay-title">Loading model…</div>
+      <div id="overlay-title">Загрузка модели…</div>
       <div id="overlay-text"></div>
     </div>
   </div>
@@ -150,6 +115,7 @@
     var infoEl = document.getElementById('info');
     var legendEl = document.getElementById('legend');
     var canvasHolder = document.getElementById('canvas-holder');
+    var readoutEl = document.getElementById('measure-readout');
 
     function showError(title, detail) {
       spinnerEl.style.display = 'none';
@@ -160,62 +126,66 @@
     function showLoading(text) {
       spinnerEl.style.display = 'block';
       overlayEl.classList.remove('hidden');
-      overlayTitleEl.textContent = text || 'Loading model…';
+      overlayTitleEl.textContent = text || 'Загрузка модели…';
       overlayTextEl.textContent = '';
     }
     function hideOverlay() { overlayEl.classList.add('hidden'); }
 
     function getExtension(name) {
-      var match = /\.[^.]+$/.exec((name || '').toLowerCase());
-      return match ? match[0] : '';
+      var m = /\.[^.]+$/.exec((name || '').toLowerCase());
+      return m ? m[0] : '';
     }
 
     var MESH_EXTENSIONS = ['.stl', '.step', '.stp'];
     var GCODE_EXTENSIONS = ['.gcode', '.gco', '.nc', '.tap', '.cnc', '.ngc', '.g'];
 
-    // ---- Read arguments passed in from section.html ----
     var cardId = t.arg('cardId');
     var attachmentId = t.arg('attachmentId');
     var fileName = t.arg('fileName');
     var ext = getExtension(fileName);
 
     if (!window.WORKER_URL || window.WORKER_URL.indexOf('REPLACE-WITH-YOUR-WORKER-URL') !== -1) {
-      showError(
-        'Setup needed',
-        'config.js still has the placeholder Worker URL. Open config.js in your hosted files and paste in your real Cloudflare Worker URL.'
-      );
+      showError('Нужна настройка', 'В config.js всё ещё заглушка вместо адреса Cloudflare Worker.');
       throw new Error('WORKER_URL not configured');
     }
     if (!cardId || !attachmentId || !fileName) {
-      showError('Missing information', 'This viewer was not given a card, attachment, or file name to load.');
+      showError('Недостаточно данных', 'Просмотрщику не передали карточку, вложение или имя файла.');
       throw new Error('Missing required arguments');
     }
 
-    // ---- Three.js scene setup ----
+    // ---- Scene ----
     var scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1b1f27);
-    var camera = new THREE.PerspectiveCamera(45, 1, 0.01, 10000);
-    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    var camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100000);
+
+    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setClearColor(0x000000, 0); // transparent -> CSS gradient shows through
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     canvasHolder.appendChild(renderer.domElement);
 
     var controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
 
+    // Lighting tuned for a bright studio look
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3f4a, 0.6));
-    var keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    keyLight.position.set(1, 1.6, 1);
+    var hemi = new THREE.HemisphereLight(0xffffff, 0xb9c4d0, 0.7);
+    scene.add(hemi);
+    var keyLight = new THREE.DirectionalLight(0xffffff, 1.15);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.bias = -0.0004;
     scene.add(keyLight);
-    var fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
-    fillLight.position.set(-1, -0.5, -1);
+    var fillLight = new THREE.DirectionalLight(0xffffff, 0.45);
+    fillLight.position.set(-1, 0.4, -1);
     scene.add(fillLight);
 
     var gridHelper = null;
+    var groundPlane = null;
     var modelGroup = new THREE.Group();
     scene.add(modelGroup);
-    var travelLines = null; // reference for the travel-moves toggle
+    var travelLines = null;
 
     function resize() {
       var w = canvasHolder.clientWidth || window.innerWidth;
@@ -234,6 +204,8 @@
     }
     animate();
 
+    var modelMaxDim = 1;
+
     function fitCameraToObject(object, offset) {
       offset = offset || 1.6;
       var box = new THREE.Box3().setFromObject(object);
@@ -241,26 +213,46 @@
       var size = box.getSize(new THREE.Vector3());
       var center = box.getCenter(new THREE.Vector3());
       var maxDim = Math.max(size.x, size.y, size.z) || 1;
+      modelMaxDim = maxDim;
+
       var fov = camera.fov * (Math.PI / 180);
       var dist = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * offset;
-
       camera.near = Math.max(maxDim / 1000, 0.001);
       camera.far = maxDim * 1000;
-      camera.position.set(center.x + dist * 0.55, center.y + dist * 0.45, center.z + dist * 0.7);
+      camera.position.set(center.x + dist * 0.55, center.y + dist * 0.5, center.z + dist * 0.75);
       camera.updateProjectionMatrix();
       controls.target.copy(center);
       controls.update();
 
+      // key light + shadow camera sized to the model
+      keyLight.position.set(center.x + maxDim, center.y + maxDim * 1.6, center.z + maxDim);
+      keyLight.target.position.copy(center);
+      scene.add(keyLight.target);
+      var s = maxDim * 1.4;
+      keyLight.shadow.camera.left = -s; keyLight.shadow.camera.right = s;
+      keyLight.shadow.camera.top = s; keyLight.shadow.camera.bottom = -s;
+      keyLight.shadow.camera.near = 0.01; keyLight.shadow.camera.far = maxDim * 8;
+      keyLight.shadow.camera.updateProjectionMatrix();
+      fillLight.position.set(center.x - maxDim, center.y + maxDim * 0.5, center.z - maxDim);
+
+      // grid + soft shadow ground at the model's base
       if (gridHelper) scene.remove(gridHelper);
-      var gridSize = maxDim * 2.5;
-      gridHelper = new THREE.GridHelper(gridSize, 20, 0x39455c, 0x2a3344);
-      gridHelper.position.y = box.min.y;
+      gridHelper = new THREE.GridHelper(maxDim * 2.5, 20, 0xb6c2d1, 0xd2dae4);
+      gridHelper.position.set(center.x, box.min.y, center.z);
       scene.add(gridHelper);
+
+      if (groundPlane) scene.remove(groundPlane);
+      var gmat = new THREE.ShadowMaterial({ opacity: 0.22 });
+      groundPlane = new THREE.Mesh(new THREE.PlaneGeometry(maxDim * 6, maxDim * 6), gmat);
+      groundPlane.rotation.x = -Math.PI / 2;
+      groundPlane.position.set(center.x, box.min.y, center.z);
+      groundPlane.receiveShadow = true;
+      scene.add(groundPlane);
 
       window.__lastFit = { object: object, offset: offset };
     }
 
-    // ---- Toolbar wiring ----
+    // ---- Toolbar ----
     document.getElementById('btn-reset').addEventListener('click', function () {
       if (window.__lastFit) fitCameraToObject(window.__lastFit.object, window.__lastFit.offset);
     });
@@ -268,296 +260,279 @@
     document.getElementById('btn-wireframe').addEventListener('click', function (e) {
       wireframeOn = !wireframeOn;
       e.target.classList.toggle('active', wireframeOn);
-      modelGroup.traverse(function (child) {
-        if (child.isMesh && child.material) child.material.wireframe = wireframeOn;
-      });
-    });
-    document.getElementById('btn-travel').addEventListener('click', function (e) {
-      if (!travelLines) return;
-      travelLines.visible = !travelLines.visible;
-      e.target.classList.toggle('active', travelLines.visible);
+      modelGroup.traverse(function (c) { if (c.isMesh && c.material) c.material.wireframe = wireframeOn; });
     });
     document.getElementById('btn-grid').addEventListener('click', function (e) {
       if (!gridHelper) return;
       gridHelper.visible = !gridHelper.visible;
       e.target.classList.toggle('active', gridHelper.visible);
     });
+    document.getElementById('btn-travel').addEventListener('click', function (e) {
+      if (!travelLines) return;
+      travelLines.visible = !travelLines.visible;
+      e.target.classList.toggle('active', travelLines.visible);
+    });
 
-    // ---- Download through the proxy worker ----
+    // ---- Measurement ----
+    var measureMode = false;
+    var measurePoints = [];
+    var measureGroup = new THREE.Group();
+    scene.add(measureGroup);
+    var raycaster = new THREE.Raycaster();
+
+    function clearMeasure() {
+      while (measureGroup.children.length) {
+        var ch = measureGroup.children.pop();
+        if (ch.geometry) ch.geometry.dispose();
+        if (ch.material) ch.material.dispose();
+      }
+      measurePoints = [];
+    }
+
+    function setMeasureReadout(html, show) {
+      readoutEl.innerHTML = html;
+      readoutEl.style.display = show ? 'block' : 'none';
+    }
+
+    document.getElementById('btn-measure').addEventListener('click', function (e) {
+      measureMode = !measureMode;
+      e.target.classList.toggle('active', measureMode);
+      if (measureMode) {
+        clearMeasure();
+        setMeasureReadout('<div class="hint">Кликните две точки на модели, чтобы измерить расстояние (мм)</div>', true);
+      } else {
+        clearMeasure();
+        setMeasureReadout('', false);
+      }
+    });
+
+    function addMarker(point) {
+      var r = Math.max(modelMaxDim * 0.012, 0.0001);
+      var m = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0xe8590c })
+      );
+      m.position.copy(point);
+      measureGroup.add(m);
+    }
+
+    function addLine(a, b) {
+      var geom = new THREE.BufferGeometry().setFromPoints([a, b]);
+      var line = new THREE.Line(geom, new THREE.LineBasicMaterial({ color: 0xe8590c }));
+      measureGroup.add(line);
+    }
+
+    function formatMm(v) {
+      // model units are assumed to be millimetres (typical for STL/STEP from CAD)
+      if (v >= 1000) return (v / 1000).toFixed(2) + ' м  (' + v.toFixed(1) + ' мм)';
+      return v.toFixed(2) + ' мм';
+    }
+
+    function handleMeasureClick(clientX, clientY) {
+      var rect = renderer.domElement.getBoundingClientRect();
+      var ndc = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1
+      );
+      raycaster.setFromCamera(ndc, camera);
+      raycaster.params.Line.threshold = modelMaxDim * 0.01;
+      var hits = raycaster.intersectObjects(modelGroup.children, true);
+      if (!hits.length) {
+        setMeasureReadout('<div class="hint">Точка мимо модели — наведитесь прямо на деталь и кликните</div>', true);
+        return;
+      }
+      var p = hits[0].point.clone();
+
+      if (measurePoints.length >= 2) clearMeasure(); // start a new measurement
+
+      measurePoints.push(p);
+      addMarker(p);
+
+      if (measurePoints.length === 1) {
+        setMeasureReadout('<div class="hint">Первая точка поставлена. Кликните вторую точку.</div>', true);
+      } else if (measurePoints.length === 2) {
+        addLine(measurePoints[0], measurePoints[1]);
+        var d = measurePoints[0].distanceTo(measurePoints[1]);
+        setMeasureReadout(
+          '<div class="big">' + formatMm(d) + '</div>' +
+          '<div class="hint">Кликните ещё раз, чтобы начать новое измерение</div>', true
+        );
+      }
+    }
+
+    // distinguish a click (place point) from a drag (rotate)
+    var downPos = null;
+    renderer.domElement.addEventListener('pointerdown', function (e) {
+      downPos = { x: e.clientX, y: e.clientY, time: Date.now() };
+    });
+    renderer.domElement.addEventListener('pointerup', function (e) {
+      if (!measureMode || !downPos) { downPos = null; return; }
+      var moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+      var dt = Date.now() - downPos.time;
+      downPos = null;
+      if (moved < 6 && dt < 400) handleMeasureClick(e.clientX, e.clientY);
+    });
+
+    // ---- Download via worker ----
     function downloadUrl() {
       var params = new URLSearchParams({ cardId: cardId, attachmentId: attachmentId, fileName: fileName });
       return window.WORKER_URL.replace(/\/$/, '') + '/download?' + params.toString();
     }
 
     function buildMeshMaterial(colorArray) {
-      var color = 0x9aa7b4;
-      if (colorArray && colorArray.length === 3) {
-        color = new THREE.Color(colorArray[0], colorArray[1], colorArray[2]);
-      }
-      return new THREE.MeshStandardMaterial({ color: color, metalness: 0.25, roughness: 0.6, side: THREE.DoubleSide });
+      var color = 0x5b86c5; // pleasant, clearly visible blue for files without their own colour
+      if (colorArray && colorArray.length === 3) color = new THREE.Color(colorArray[0], colorArray[1], colorArray[2]);
+      return new THREE.MeshStandardMaterial({ color: color, metalness: 0.18, roughness: 0.55, side: THREE.DoubleSide });
+    }
+
+    function addMesh(mesh) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      modelGroup.add(mesh);
     }
 
     function loadStl(arrayBuffer) {
-      var loader = new STLLoader();
-      var geometry = loader.parse(arrayBuffer);
+      var geometry = new STLLoader().parse(arrayBuffer);
       geometry.computeVertexNormals();
-      modelGroup.add(new THREE.Mesh(geometry, buildMeshMaterial()));
+      addMesh(new THREE.Mesh(geometry, buildMeshMaterial()));
     }
 
     function loadStep(arrayBuffer) {
-      return window
-        .occtimportjs({
-          locateFile: function (path) {
-            return 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/' + path;
-          }
-        })
-        .then(function (occt) {
-          var result = occt.ReadStepFile(new Uint8Array(arrayBuffer), null);
-          if (!result || !result.success || !result.meshes || result.meshes.length === 0) {
-            throw new Error('The STEP file could not be converted into a viewable shape.');
-          }
-          result.meshes.forEach(function (meshData) {
-            var geometry = new THREE.BufferGeometry();
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.attributes.position.array, 3));
-            if (meshData.attributes.normal) {
-              geometry.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.attributes.normal.array, 3));
-            }
-            geometry.setIndex(meshData.index.array);
-            if (!meshData.attributes.normal) geometry.computeVertexNormals();
-            modelGroup.add(new THREE.Mesh(geometry, buildMeshMaterial(meshData.color)));
-          });
+      return window.occtimportjs({
+        locateFile: function (path) { return 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/' + path; }
+      }).then(function (occt) {
+        var result = occt.ReadStepFile(new Uint8Array(arrayBuffer), null);
+        if (!result || !result.success || !result.meshes || !result.meshes.length) {
+          throw new Error('Не удалось преобразовать STEP-файл в видимую форму.');
+        }
+        result.meshes.forEach(function (meshData) {
+          var geometry = new THREE.BufferGeometry();
+          geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.attributes.position.array, 3));
+          if (meshData.attributes.normal) geometry.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.attributes.normal.array, 3));
+          geometry.setIndex(meshData.index.array);
+          if (!meshData.attributes.normal) geometry.computeVertexNormals();
+          addMesh(new THREE.Mesh(geometry, buildMeshMaterial(meshData.color)));
         });
+      });
     }
 
-    // ============================================================
-    //  G-code parser (CNC / laser dialect) -> line segments
-    // ============================================================
+    // ---- G-code (parser unchanged in behaviour) ----
     function parseGcode(text, options) {
       options = options || {};
       var arcSegLen = options.arcSegmentLength || 0.2;
       var maxSegments = options.maxSegments || 2000000;
-
       var motion = 0, absolute = true, plane = 17, inches = false;
       var pos = { x: 0, y: 0, z: 0 };
       var travel = [], cut = [];
       var min = { x: Infinity, y: Infinity, z: Infinity };
       var max = { x: -Infinity, y: -Infinity, z: -Infinity };
       var segCount = 0, moveCount = 0;
-
-      function track(p) {
-        if (p.x < min.x) min.x = p.x; if (p.x > max.x) max.x = p.x;
-        if (p.y < min.y) min.y = p.y; if (p.y > max.y) max.y = p.y;
-        if (p.z < min.z) min.z = p.z; if (p.z > max.z) max.z = p.z;
-      }
-      function pushSeg(arr, a, b) {
-        if (segCount >= maxSegments) return;
-        if (a.x === b.x && a.y === b.y && a.z === b.z) return;
-        arr.push(a.x, a.y, a.z, b.x, b.y, b.z);
-        track(a); track(b);
-        segCount++;
-      }
-      function stripComments(line) {
-        var out = '', inParen = false;
-        for (var i = 0; i < line.length; i++) {
-          var c = line[i];
-          if (c === '(') { inParen = true; continue; }
-          if (c === ')') { inParen = false; continue; }
-          if (c === ';') break;
-          if (!inParen) out += c;
-        }
-        return out;
-      }
-
+      function track(p){ if(p.x<min.x)min.x=p.x; if(p.x>max.x)max.x=p.x; if(p.y<min.y)min.y=p.y; if(p.y>max.y)max.y=p.y; if(p.z<min.z)min.z=p.z; if(p.z>max.z)max.z=p.z; }
+      function pushSeg(arr,a,b){ if(segCount>=maxSegments)return; if(a.x===b.x&&a.y===b.y&&a.z===b.z)return; arr.push(a.x,a.y,a.z,b.x,b.y,b.z); track(a); track(b); segCount++; }
+      function stripComments(line){ var out='',inParen=false; for(var i=0;i<line.length;i++){var c=line[i]; if(c==='('){inParen=true;continue;} if(c===')'){inParen=false;continue;} if(c===';')break; if(!inParen)out+=c;} return out; }
       var wordRe = /([A-Za-z])\s*([+-]?[0-9]*\.?[0-9]+)/g;
       var lines = text.split(/\r?\n/);
-
-      for (var li = 0; li < lines.length; li++) {
+      for (var li=0; li<lines.length; li++) {
         var clean = stripComments(lines[li]);
         if (!clean.trim()) continue;
-        var words = {}, gCodes = [], m;
+        var words={}, gCodes=[], m;
         wordRe.lastIndex = 0;
         while ((m = wordRe.exec(clean)) !== null) {
-          var letter = m[1].toUpperCase();
-          var value = parseFloat(m[2]);
-          if (letter === 'G') gCodes.push(value);
-          else words[letter] = value;
+          var letter=m[1].toUpperCase(), value=parseFloat(m[2]);
+          if (letter==='G') gCodes.push(value); else words[letter]=value;
         }
-        for (var gi = 0; gi < gCodes.length; gi++) {
-          var g = gCodes[gi];
-          if (g === 90) absolute = true;
-          else if (g === 91) absolute = false;
-          else if (g === 20) inches = true;
-          else if (g === 21) inches = false;
-          else if (g === 17) plane = 17;
-          else if (g === 18) plane = 18;
-          else if (g === 19) plane = 19;
-          else if (g === 0 || g === 1 || g === 2 || g === 3) motion = g;
+        for (var gi=0; gi<gCodes.length; gi++) {
+          var g=gCodes[gi];
+          if(g===90)absolute=true; else if(g===91)absolute=false;
+          else if(g===20)inches=true; else if(g===21)inches=false;
+          else if(g===17)plane=17; else if(g===18)plane=18; else if(g===19)plane=19;
+          else if(g===0||g===1||g===2||g===3)motion=g;
         }
-        var hasAxis = ('X' in words) || ('Y' in words) || ('Z' in words);
-        var hasArc = ('I' in words) || ('J' in words) || ('K' in words) || ('R' in words);
-        if (!hasAxis && !hasArc) continue;
-
-        var target = { x: pos.x, y: pos.y, z: pos.z };
-        if ('X' in words) target.x = absolute ? words.X : pos.x + words.X;
-        if ('Y' in words) target.y = absolute ? words.Y : pos.y + words.Y;
-        if ('Z' in words) target.z = absolute ? words.Z : pos.z + words.Z;
-
-        if (motion === 0 || motion === 1) {
-          pushSeg(motion === 0 ? travel : cut, pos, target);
-          moveCount++; pos = target;
-        } else if (motion === 2 || motion === 3) {
-          tessellateArc(pos, target, words, motion === 2, plane, arcSegLen, function (a, b) { pushSeg(cut, a, b); });
-          moveCount++; pos = target;
-        }
+        var hasAxis=('X' in words)||('Y' in words)||('Z' in words);
+        var hasArc=('I' in words)||('J' in words)||('K' in words)||('R' in words);
+        if(!hasAxis&&!hasArc)continue;
+        var target={x:pos.x,y:pos.y,z:pos.z};
+        if('X' in words)target.x=absolute?words.X:pos.x+words.X;
+        if('Y' in words)target.y=absolute?words.Y:pos.y+words.Y;
+        if('Z' in words)target.z=absolute?words.Z:pos.z+words.Z;
+        if(motion===0||motion===1){ pushSeg(motion===0?travel:cut,pos,target); moveCount++; pos=target; }
+        else if(motion===2||motion===3){ tessellateArc(pos,target,words,motion===2,plane,arcSegLen,function(a,b){pushSeg(cut,a,b);}); moveCount++; pos=target; }
       }
-
       var empty = !isFinite(min.x);
-      return {
-        travel: new Float32Array(travel),
-        cut: new Float32Array(cut),
-        bounds: empty ? null : { min: min, max: max },
-        units: inches ? 'inch' : 'mm',
-        stats: { moves: moveCount, segments: segCount }
-      };
+      return { travel:new Float32Array(travel), cut:new Float32Array(cut), bounds: empty?null:{min:min,max:max}, units: inches?'inch':'mm', stats:{moves:moveCount,segments:segCount} };
     }
-
-    function tessellateArc(start, end, words, clockwise, plane, segLen, emit) {
-      var aKey, bKey, cKey, iKey, jKey;
-      if (plane === 17) { aKey='x'; bKey='y'; cKey='z'; iKey='I'; jKey='J'; }
-      else if (plane === 18) { aKey='x'; bKey='z'; cKey='y'; iKey='I'; jKey='K'; }
-      else { aKey='y'; bKey='z'; cKey='x'; iKey='J'; jKey='K'; }
-
-      var sa = start[aKey], sb = start[bKey];
-      var ea = end[aKey], eb = end[bKey];
-      var ca, cb;
-
-      if ('R' in words) {
-        var r = words.R;
-        var mxa = (sa + ea) / 2, mxb = (sb + eb) / 2;
-        var da = ea - sa, db = eb - sb;
-        var chord = Math.hypot(da, db);
-        if (chord === 0) return;
-        var hsq = r * r - (chord / 2) * (chord / 2);
-        if (hsq < 0) hsq = 0;
-        var h = Math.sqrt(hsq);
-        var pa = -db / chord, pb = da / chord;
-        var sign;
-        if (clockwise) sign = (r > 0) ? -1 : 1;
-        else sign = (r > 0) ? 1 : -1;
-        ca = mxa + sign * h * pa;
-        cb = mxb + sign * h * pb;
-      } else {
-        var i = (iKey in words) ? words[iKey] : 0;
-        var j = (jKey in words) ? words[jKey] : 0;
-        ca = sa + i; cb = sb + j;
-      }
-
-      var radius = Math.hypot(sa - ca, sb - cb);
-      if (radius === 0) return;
-
-      var a0 = Math.atan2(sb - cb, sa - ca);
-      var a1 = Math.atan2(eb - cb, ea - ca);
-      var TAU = Math.PI * 2;
-      if (clockwise) {
-        while (a1 >= a0) a1 -= TAU;
-        if (Math.abs(a1 - a0) < 1e-9) a1 = a0 - TAU;
-      } else {
-        while (a1 <= a0) a1 += TAU;
-        if (Math.abs(a1 - a0) < 1e-9) a1 = a0 + TAU;
-      }
-
-      var sweep = a1 - a0;
-      var arcLen = Math.abs(sweep) * radius;
-      var nSeg = Math.max(2, Math.ceil(arcLen / segLen));
-      if (nSeg > 4000) nSeg = 4000;
-
-      var sc = start[cKey], ec = end[cKey];
-      var prev = { x: start.x, y: start.y, z: start.z };
-      for (var s = 1; s <= nSeg; s++) {
-        var tt = s / nSeg;
-        var ang = a0 + sweep * tt;
-        var pa2 = ca + radius * Math.cos(ang);
-        var pb2 = cb + radius * Math.sin(ang);
-        var pc2 = sc + (ec - sc) * tt;
-        var pt = { x: 0, y: 0, z: 0 };
-        pt[aKey] = pa2; pt[bKey] = pb2; pt[cKey] = pc2;
-        emit(prev, pt);
-        prev = pt;
+    function tessellateArc(start,end,words,clockwise,plane,segLen,emit){
+      var aKey,bKey,cKey,iKey,jKey;
+      if(plane===17){aKey='x';bKey='y';cKey='z';iKey='I';jKey='J';}
+      else if(plane===18){aKey='x';bKey='z';cKey='y';iKey='I';jKey='K';}
+      else {aKey='y';bKey='z';cKey='x';iKey='J';jKey='K';}
+      var sa=start[aKey],sb=start[bKey],ea=end[aKey],eb=end[bKey],ca,cb;
+      if('R' in words){
+        var r=words.R, mxa=(sa+ea)/2, mxb=(sb+eb)/2, da=ea-sa, db=eb-sb, chord=Math.hypot(da,db);
+        if(chord===0)return; var hsq=r*r-(chord/2)*(chord/2); if(hsq<0)hsq=0; var h=Math.sqrt(hsq);
+        var pa=-db/chord, pb=da/chord, sign;
+        if(clockwise)sign=(r>0)?-1:1; else sign=(r>0)?1:-1;
+        ca=mxa+sign*h*pa; cb=mxb+sign*h*pb;
+      } else { var i=(iKey in words)?words[iKey]:0, j=(jKey in words)?words[jKey]:0; ca=sa+i; cb=sb+j; }
+      var radius=Math.hypot(sa-ca,sb-cb); if(radius===0)return;
+      var a0=Math.atan2(sb-cb,sa-ca), a1=Math.atan2(eb-cb,ea-ca), TAU=Math.PI*2;
+      if(clockwise){ while(a1>=a0)a1-=TAU; if(Math.abs(a1-a0)<1e-9)a1=a0-TAU; }
+      else { while(a1<=a0)a1+=TAU; if(Math.abs(a1-a0)<1e-9)a1=a0+TAU; }
+      var sweep=a1-a0, arcLen=Math.abs(sweep)*radius, nSeg=Math.max(2,Math.ceil(arcLen/segLen));
+      if(nSeg>4000)nSeg=4000;
+      var sc=start[cKey], ec=end[cKey], prev={x:start.x,y:start.y,z:start.z};
+      for(var s=1;s<=nSeg;s++){
+        var tt=s/nSeg, ang=a0+sweep*tt;
+        var pa2=ca+radius*Math.cos(ang), pb2=cb+radius*Math.sin(ang), pc2=sc+(ec-sc)*tt;
+        var pt={x:0,y:0,z:0}; pt[aKey]=pa2; pt[bKey]=pb2; pt[cKey]=pc2; emit(prev,pt); prev=pt;
       }
     }
 
     function loadGcode(arrayBuffer) {
       var text = new TextDecoder('utf-8').decode(new Uint8Array(arrayBuffer));
-      // pick an arc resolution proportional to the part size so small and
-      // large parts both look smooth without exploding the segment count.
-      var quickBounds = parseGcode(text, { arcSegmentLength: 1, maxSegments: 50000 }).bounds;
+      var quick = parseGcode(text, { arcSegmentLength: 1, maxSegments: 50000 }).bounds;
       var span = 100;
-      if (quickBounds) {
-        span = Math.max(
-          quickBounds.max.x - quickBounds.min.x,
-          quickBounds.max.y - quickBounds.min.y,
-          quickBounds.max.z - quickBounds.min.z
-        ) || 100;
+      if (quick) span = Math.max(quick.max.x-quick.min.x, quick.max.y-quick.min.y, quick.max.z-quick.min.z) || 100;
+      var result = parseGcode(text, { arcSegmentLength: Math.max(span/800, 0.05) });
+      if (result.cut.length===0 && result.travel.length===0) throw new Error('В G-коде не найдено перемещений (G0/G1/G2/G3).');
+      if (result.cut.length>0) {
+        var cg = new THREE.BufferGeometry();
+        cg.setAttribute('position', new THREE.BufferAttribute(result.cut, 3));
+        modelGroup.add(new THREE.LineSegments(cg, new THREE.LineBasicMaterial({ color: 0xd2691e })));
       }
-      var result = parseGcode(text, { arcSegmentLength: Math.max(span / 800, 0.05) });
-
-      if (result.cut.length === 0 && result.travel.length === 0) {
-        throw new Error('No tool movements (G0/G1/G2/G3) were found in this G-code file.');
-      }
-
-      if (result.cut.length > 0) {
-        var cutGeom = new THREE.BufferGeometry();
-        cutGeom.setAttribute('position', new THREE.BufferAttribute(result.cut, 3));
-        var cutLines = new THREE.LineSegments(cutGeom, new THREE.LineBasicMaterial({ color: 0xffae42 }));
-        modelGroup.add(cutLines);
-      }
-      if (result.travel.length > 0) {
-        var travelGeom = new THREE.BufferGeometry();
-        travelGeom.setAttribute('position', new THREE.BufferAttribute(result.travel, 3));
-        travelLines = new THREE.LineSegments(
-          travelGeom,
-          new THREE.LineBasicMaterial({ color: 0x5a7a9a, transparent: true, opacity: 0.55 })
-        );
+      if (result.travel.length>0) {
+        var tg = new THREE.BufferGeometry();
+        tg.setAttribute('position', new THREE.BufferAttribute(result.travel, 3));
+        travelLines = new THREE.LineSegments(tg, new THREE.LineBasicMaterial({ color: 0x3b5bdb, transparent: true, opacity: 0.6 }));
         modelGroup.add(travelLines);
       }
-
-      window.__gcodeInfo = result.stats.moves + ' moves · ' + result.units;
+      window.__gcodeInfo = result.stats.moves + ' перемещений · ' + result.units;
     }
 
-    // ============================================================
-    //  Kick off the load
-    // ============================================================
+    // ---- Kick off ----
     var isGcode = GCODE_EXTENSIONS.indexOf(ext) !== -1;
     var isMesh = MESH_EXTENSIONS.indexOf(ext) !== -1;
 
-    showLoading('Downloading file from Trello…');
-
+    showLoading('Скачивание файла из Trello…');
     fetch(downloadUrl())
       .then(function (response) {
-        if (!response.ok) {
-          return response.text().then(function (text) {
-            throw new Error('Could not download the file (' + response.status + '). ' + text);
-          });
-        }
-        showLoading(isGcode ? 'Reading toolpath…' : 'Parsing 3D geometry…');
+        if (!response.ok) return response.text().then(function (txt) { throw new Error('Не удалось скачать файл (' + response.status + '). ' + txt); });
+        showLoading(isGcode ? 'Чтение траектории…' : 'Разбор геометрии…');
         return response.arrayBuffer();
       })
       .then(function (arrayBuffer) {
         if (ext === '.stl') { loadStl(arrayBuffer); return null; }
         if (ext === '.step' || ext === '.stp') { return loadStep(arrayBuffer); }
         if (isGcode) { loadGcode(arrayBuffer); return null; }
-        throw new Error('Unsupported file type: ' + ext);
+        throw new Error('Неподдерживаемый тип файла: ' + ext);
       })
       .then(function () {
-        if (modelGroup.children.length === 0) {
-          throw new Error('No visible geometry was found in this file.');
-        }
+        if (modelGroup.children.length === 0) throw new Error('В файле не найдено видимой геометрии.');
         fitCameraToObject(modelGroup);
         hideOverlay();
         toolbarEl.style.display = 'flex';
-
-        // Show the controls relevant to this file type.
         document.getElementById('btn-wireframe').hidden = !isMesh;
+        document.getElementById('btn-measure').hidden = false;
         document.getElementById('btn-travel').hidden = !(isGcode && travelLines);
         if (isGcode) {
           legendEl.style.display = 'block';
@@ -568,7 +543,7 @@
       })
       .catch(function (err) {
         console.error(err);
-        showError('Could not display this model', (err && err.message) || String(err));
+        showError('Не удалось показать модель', (err && err.message) || String(err));
       });
   </script>
 </body>
