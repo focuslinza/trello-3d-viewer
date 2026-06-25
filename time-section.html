@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Время в колонках</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    /* follow Trello light/dark theme */
+    html[data-color-mode="light"] { --txt:#172b4d; --muted:#5e6c84; --track:#e4e7ec; --bar:#4c9aff; --bar-cur:#0c66e4; --line:#dfe1e6; }
+    html[data-color-mode="dark"]  { --txt:#c7d1db; --muted:#9fadbc; --track:#2c333a; --bar:#4c9aff; --bar-cur:#579dff; --line:#3c4757; }
+    html { --txt:#172b4d; --muted:#5e6c84; --track:#e4e7ec; --bar:#4c9aff; --bar-cur:#0c66e4; --line:#dfe1e6; }
+
+    html, body { margin:0; padding:0; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:var(--txt); }
+    #root { padding:4px 2px 8px; }
+    .muted { color:var(--muted); font-size:13px; }
+    .row { display:grid; grid-template-columns: 40% 60%; align-items:center; gap:8px; padding:5px 2px; }
+    .lname { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--txt); }
+    .lname .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--bar-cur); margin-right:6px; }
+    .right { display:flex; align-items:center; gap:8px; }
+    .time { font-size:12px; color:var(--muted); min-width:78px; white-space:nowrap; }
+    .track { flex:1; height:8px; background:var(--track); border-radius:5px; overflow:hidden; }
+    .fill { height:100%; background:var(--bar); border-radius:5px; }
+    .fill.cur { background:var(--bar-cur); }
+    .total { margin-top:8px; padding-top:6px; border-top:1px solid var(--line); font-size:12px; color:var(--muted); }
+    .err { font-size:12px; color:var(--muted); padding:6px 2px; }
+  </style>
+</head>
+<body>
+  <div id="root"><div class="muted">Подсчёт времени…</div></div>
+
+  <script src="./config.js"></script>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var root = document.getElementById('root');
+
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function fmt(ms){
+      var s=Math.floor(ms/1000), m=Math.floor(s/60), h=Math.floor(m/60), d=Math.floor(h/24), months=Math.floor(d/30);
+      if (m<1) return '<1 мин';
+      if (h<1) return m+' мин';
+      if (d<1){ var rm=m-h*60; return h+' ч'+(rm?' '+rm+' мин':''); }
+      if (d<60){ var rh=h-d*24; return d+' дн'+(rh?' '+rh+' ч':''); }
+      var rd=d-months*30; return months+' мес'+(rd?' '+rd+' дн':'');
+    }
+
+    function cardCreatedMs(cardId){
+      try { return parseInt(cardId.substring(0,8),16)*1000; } catch(e){ return Date.now(); }
+    }
+
+    function computeDurations(actions, createdMs, nowMs){
+      var sorted = actions.slice().sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
+      var creationSegs=[], moveSegs=[], earliestBefore=null;
+      sorted.forEach(function(a){
+        var d=new Date(a.date).getTime();
+        if (a.type==='updateCard' && a.data && a.data.listAfter){
+          moveSegs.push({listId:a.data.listAfter.id, name:a.data.listAfter.name, start:d});
+          if (!earliestBefore && a.data.listBefore) earliestBefore={listId:a.data.listBefore.id, name:a.data.listBefore.name, start:createdMs};
+        } else if ((a.type==='createCard'||a.type==='copyCard'||a.type==='moveCardToBoard'||a.type==='convertToCardFromCheckItem') && a.data && a.data.list){
+          creationSegs.push({listId:a.data.list.id, name:a.data.list.name, start:d});
+        }
+      });
+      var segs=creationSegs.concat(moveSegs);
+      if (creationSegs.length===0 && earliestBefore) segs.push(earliestBefore);
+      segs.sort(function(a,b){ return a.start-b.start; });
+      var byList={};
+      for (var i=0;i<segs.length;i++){
+        var start=segs[i].start, end=(i<segs.length-1)?segs[i+1].start:nowMs, dur=Math.max(0,end-start);
+        if (!byList[segs[i].listId]) byList[segs[i].listId]={name:segs[i].name, ms:0};
+        byList[segs[i].listId].ms+=dur; byList[segs[i].listId].name=segs[i].name;
+      }
+      return { byList:byList, currentListId: segs.length?segs[segs.length-1].listId:null };
+    }
+
+    function actionsUrl(cardId){
+      return window.WORKER_URL.replace(/\/$/,'') + '/card-actions?cardId=' + encodeURIComponent(cardId);
+    }
+
+    t.render(function(){
+      if (!window.WORKER_URL || window.WORKER_URL.indexOf('REPLACE-WITH-YOUR-WORKER-URL')!==-1){
+        root.innerHTML='<div class="err">Не настроен адрес Worker в config.js.</div>';
+        return t.sizeTo('#root');
+      }
+
+      return Promise.all([ t.card('id','idList'), t.lists('id','name') ]).then(function(res){
+        var card=res[0], lists=res[1]||[];
+        var cardId=card.id;
+
+        return fetch(actionsUrl(cardId)).then(function(r){
+          if (!r.ok) return r.text().then(function(txt){ throw new Error('('+r.status+') '+txt); });
+          return r.json();
+        }).then(function(actions){
+          var now=Date.now();
+          var result=computeDurations(actions||[], cardCreatedMs(cardId), now);
+
+          // if computed current list is missing, trust Trello's idList
+          var currentListId = result.currentListId || card.idList;
+
+          // order by board list order; include only lists the card has visited (ms>0) OR the current list
+          var rows=[];
+          var maxMs=1, totalMs=0;
+          lists.forEach(function(l){
+            var e=result.byList[l.id];
+            var ms=e?e.ms:0;
+            var visited = !!e || l.id===currentListId;
+            if (!visited) return;
+            if (ms>maxMs) maxMs=ms;
+            totalMs+=ms;
+            rows.push({ id:l.id, name:l.name, ms:ms, current:l.id===currentListId });
+          });
+
+          // lists no longer on the board (renamed/deleted) but visited
+          Object.keys(result.byList).forEach(function(id){
+            if (!lists.some(function(l){return l.id===id;})){
+              var e=result.byList[id]; if (e.ms>maxMs) maxMs=e.ms; totalMs+=e.ms;
+              rows.push({ id:id, name:e.name+' (архив)', ms:e.ms, current:false });
+            }
+          });
+
+          if (rows.length===0){ root.innerHTML='<div class="muted">Нет данных о перемещениях.</div>'; return t.sizeTo('#root'); }
+
+          var html='';
+          rows.forEach(function(r){
+            var pct=Math.max(2, Math.round(r.ms/maxMs*100));
+            html+='<div class="row">'+
+              '<div class="lname">'+(r.current?'<span class="dot"></span>':'')+esc(r.name)+'</div>'+
+              '<div class="right"><span class="time">'+fmt(r.ms)+'</span>'+
+              '<span class="track"><span class="fill'+(r.current?' cur':'')+'" style="width:'+pct+'%"></span></span>'+
+              '</div></div>';
+          });
+          html+='<div class="total">Всего на карточке: '+fmt(totalMs)+'  ·  точка = текущая колонка</div>';
+          root.innerHTML=html;
+          return t.sizeTo('#root');
+        });
+      }).catch(function(err){
+        root.innerHTML='<div class="err">Не удалось посчитать время: '+esc(err&&err.message?err.message:'неизвестно')+'</div>';
+        return t.sizeTo('#root');
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Время в колонках - Connector</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+  <script>
+    // Separate Power-Up: shows how long the card has spent in each list.
+    window.TrelloPowerUp.initialize({
+      'card-back-section': function (t, options) {
+        return {
+          title: 'Время в колонках',
+          icon: t.signUrl('./time-icon.svg'),
+          content: {
+            type: 'iframe',
+            url: t.signUrl('./time-section.html'),
+            height: 200
+          }
+        };
+      }
+    });
+  </script>
+</body>
+</html>
