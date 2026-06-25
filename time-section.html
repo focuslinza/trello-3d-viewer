@@ -121,7 +121,7 @@
 
           var html='';
           rows.forEach(function(r){
-            var pct=Math.max(2, Math.round(r.ms/maxMs*100));
+            var pct = totalMs>0 ? Math.max(2, Math.round(r.ms/totalMs*100)) : 0;
             html+='<div class="row">'+
               '<div class="lname">'+(r.current?'<span class="dot"></span>':'')+esc(r.name)+'</div>'+
               '<div class="right"><span class="time">'+fmt(r.ms)+'</span>'+
