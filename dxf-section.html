@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>DXF / Раскрой</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    html[data-color-mode="light"] { --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; }
+    html[data-color-mode="dark"]  { --txt:#c7d1db; --muted:#9fadbc; --chip:#2c333a; }
+    html { --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; }
+    html, body { margin:0; padding:0; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    #list { padding:6px 4px; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 4px; }
+    .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; color:var(--txt); }
+    .ext { display:inline-block; font-size:10px; font-weight:700; color:var(--muted); background:var(--chip); border-radius:3px; padding:1px 5px; margin-right:6px; }
+    .btn { flex:0 0 auto; background:#0c66e4; color:#fff; border:none; border-radius:3px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; }
+    .btn:hover { background:#0055cc; }
+    .empty { padding:8px 4px; font-size:12px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="list"><div class="empty">Загрузка…</div></div>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    function getExt(n){ var m=/\.[^.]+$/.exec((n||'').toLowerCase()); return m?m[0]:''; }
+    function isDxf(a){ return getExt(a.fileName||a.name||a.url||'')==='.dxf'; }
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function openViewer(att, cardId){
+      var fileName = att.fileName || att.name;
+      return t.modal({
+        title: att.name || fileName,
+        url: './dxf-viewer.html',
+        args: { cardId: cardId, attachmentId: att.id, fileName: fileName },
+        accentColor: '#172b4d',
+        fullscreen: true
+      });
+    }
+
+    t.render(function(){
+      return t.card('id','attachments').then(function(card){
+        var atts=(card.attachments||[]).filter(isDxf);
+        var el=document.getElementById('list'); el.innerHTML='';
+        if (atts.length===0){ el.innerHTML='<div class="empty">Нет DXF-файлов на карточке.</div>'; return t.sizeTo('#list'); }
+        atts.forEach(function(att){
+          var fileName=att.fileName||att.name||'';
+          var row=document.createElement('div'); row.className='row';
+          var nm=document.createElement('span'); nm.className='name';
+          var ext=document.createElement('span'); ext.className='ext'; ext.textContent='DXF';
+          var txt=document.createElement('span'); txt.textContent=att.name||fileName;
+          nm.appendChild(ext); nm.appendChild(txt);
+          var btn=document.createElement('button'); btn.className='btn'; btn.type='button'; btn.textContent='Открыть / Расчёт';
+          btn.addEventListener('click', function(){ openViewer(att, card.id); });
+          row.appendChild(nm); row.appendChild(btn); el.appendChild(row);
+        });
+        return t.sizeTo('#list');
+      }).catch(function(err){
+        document.getElementById('list').innerHTML='<div class="empty">Ошибка: '+esc(err&&err.message?err.message:'неизвестно')+'</div>';
+        return t.sizeTo('#list');
+      });
+    });
+  </script>
+</body>
+</html>

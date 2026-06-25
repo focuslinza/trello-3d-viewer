@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>DXF / Раскрой - Connector</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+  <script>
+    var SUPPORTED_EXTENSIONS = ['.dxf'];
+
+    function getExtension(name) {
+      var match = /\.[^.]+$/.exec((name || '').toLowerCase());
+      return match ? match[0] : '';
+    }
+    function isDxfAttachment(attachment) {
+      var name = attachment.fileName || attachment.name || attachment.url || '';
+      return SUPPORTED_EXTENSIONS.indexOf(getExtension(name)) !== -1;
+    }
+
+    window.TrelloPowerUp.initialize({
+      'attachment-sections': function (t, options) {
+        var claimed = (options.entries || []).filter(isDxfAttachment);
+        if (claimed.length === 0) return [];
+        return [
+          {
+            id: 'dxf-raskroy-section',
+            claimed: claimed,
+            icon: t.signUrl('./dxf-icon.svg'),
+            title: 'DXF / Раскрой',
+            content: {
+              type: 'iframe',
+              url: t.signUrl('./dxf-section.html'),
+              height: Math.min(40 + claimed.length * 34, 300)
+            }
+          }
+        ];
+      }
+    });
+  </script>
+</body>
+</html>

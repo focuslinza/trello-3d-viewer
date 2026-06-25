@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>DXF Viewer</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.js"></script>
+  <style>
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+      font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:#172b4d; }
+    #wrap { position:fixed; inset:0; display:flex; }
+    #left { position:relative; flex:1; background:linear-gradient(180deg,#f6f9fc,#e4eaf1); }
+    #cv { display:block; width:100%; height:100%; }
+    #hint { position:absolute; bottom:10px; left:12px; font-size:11px; color:#6b7c93; pointer-events:none; }
+    #side { width:320px; box-sizing:border-box; padding:16px 18px; background:#fff; border-left:1px solid #e3e8ef; overflow:auto; }
+    #side h2 { font-size:15px; margin:0 0 4px; }
+    #fileName { font-size:12px; color:#6b7c93; margin-bottom:12px; word-break:break-all; }
+    .metric { display:flex; justify-content:space-between; align-items:baseline; padding:7px 0; border-bottom:1px solid #eef1f5; }
+    .metric .k { font-size:12px; color:#5e6c84; }
+    .metric .v { font-size:15px; font-weight:700; color:#172b4d; }
+    .metric .u { font-size:11px; color:#8a96a6; font-weight:400; margin-left:3px; }
+    .group { margin-top:14px; }
+    .group label { display:block; font-size:12px; font-weight:600; color:#5e6c84; margin-bottom:4px; }
+    input[type=number], select {
+      width:100%; box-sizing:border-box; padding:8px 10px; font-size:14px; border:1px solid #dfe1e6; border-radius:5px; background:#fafbfc;
+    }
+    input:focus, select:focus { background:#fff; border-color:#4c9aff; outline:none; }
+    .bend-edit { display:flex; align-items:center; gap:8px; }
+    .bend-edit input { width:70px; }
+    .save { width:100%; margin-top:16px; background:#0c66e4; color:#fff; border:none; border-radius:6px; padding:10px; font-size:14px; font-weight:600; cursor:pointer; }
+    .save:hover { background:#0055cc; }
+    .saved-msg { margin-top:8px; font-size:12px; color:#1f845a; text-align:center; min-height:16px; }
+    .note { margin-top:14px; font-size:11px; color:#8a96a6; line-height:1.5; }
+    #overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px;
+      background:rgba(246,249,252,0.9); color:#243b53; text-align:center; padding:24px; box-sizing:border-box; }
+    #overlay.hidden { display:none; }
+    .spinner { width:32px; height:32px; border-radius:50%; border:3px solid rgba(12,102,228,0.25); border-top-color:#0c66e4; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    #ov-text { font-size:13px; color:#46586e; max-width:460px; }
+    .legend { position:absolute; top:10px; left:12px; background:rgba(255,255,255,0.9); border:1px solid #dde4ec; border-radius:6px; padding:6px 9px; font-size:11px; color:#42526e; }
+    .legend .s { display:inline-block; width:14px; height:3px; vertical-align:middle; margin-right:5px; border-radius:2px; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="left">
+      <canvas id="cv"></canvas>
+      <div class="legend">
+        <div><span class="s" style="background:#1a3d6b;"></span>Линия реза</div>
+        <div><span class="s" style="background:#e8590c;"></span>Линия гиба</div>
+      </div>
+      <div id="hint">Колесо — масштаб, перетаскивание — сдвиг</div>
+      <div id="overlay">
+        <div class="spinner"></div>
+        <div id="ov-text">Загрузка DXF…</div>
+      </div>
+    </div>
+    <div id="side">
+      <h2>Расчёт раскроя</h2>
+      <div id="fileName"></div>
+      <div id="metrics"></div>
+
+      <div class="group">
+        <label>Число гибов (можно поправить)</label>
+        <div class="bend-edit">
+          <input type="number" id="bendInput" min="0" step="1" />
+          <span style="font-size:11px;color:#8a96a6;">определено автоматически по слою гиба</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <label for="thickness">Толщина металла, мм</label>
+        <input type="number" id="thickness" min="0" step="0.1" placeholder="например, 2" />
+      </div>
+
+      <div class="group">
+        <label for="material">Тип металла</label>
+        <select id="material">
+          <option value="">— выберите —</option>
+          <option>Сталь</option>
+          <option>Нержавеющая сталь</option>
+          <option>Алюминий</option>
+          <option>Оцинкованная сталь</option>
+          <option>Латунь</option>
+          <option>Медь</option>
+          <option>Другое</option>
+        </select>
+      </div>
+
+      <button class="save" id="saveBtn">Сохранить расчёт</button>
+      <div class="saved-msg" id="savedMsg"></div>
+
+      <div class="note" id="note"></div>
+    </div>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="./dxf-calc.js"></script>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var cardId = t.arg('cardId'), attachmentId = t.arg('attachmentId'), fileName = t.arg('fileName');
+
+    var ovText = document.getElementById('ov-text');
+    var overlay = document.getElementById('overlay');
+    function showOverlay(msg){ overlay.classList.remove('hidden'); ovText.textContent=msg; overlay.querySelector('.spinner').style.display='block'; }
+    function showOverlayError(msg){ overlay.classList.remove('hidden'); ovText.textContent=msg; overlay.querySelector('.spinner').style.display='none'; }
+    function hideOverlay(){ overlay.classList.add('hidden'); }
+
+    document.getElementById('fileName').textContent = fileName || '';
+
+    function fmt(n, dp){ return (Math.round(n*Math.pow(10,dp))/Math.pow(10,dp)).toLocaleString('ru-RU'); }
+
+    function downloadUrl(){
+      var p = new URLSearchParams({ cardId: cardId, attachmentId: attachmentId, fileName: fileName });
+      return window.WORKER_URL.replace(/\/$/,'') + '/download?' + p.toString();
+    }
+
+    // ---------- canvas rendering ----------
+    var canvas = document.getElementById('cv');
+    var ctx = canvas.getContext('2d');
+    var polylines = [], bbox = null;
+    var view = { scale:1, tx:0, ty:0 };
+    var dpr = Math.min(window.devicePixelRatio||1, 2);
+
+    function resizeCanvas(){
+      var w = canvas.clientWidth, h = canvas.clientHeight;
+      canvas.width = w*dpr; canvas.height = h*dpr;
+    }
+    function fitView(){
+      resizeCanvas();
+      if (!bbox) return;
+      var w = canvas.width, h = canvas.height;
+      var bw = (bbox.maxX-bbox.minX)||1, bh = (bbox.maxY-bbox.minY)||1;
+      var s = 0.9*Math.min(w/bw, h/bh);
+      var cx = (bbox.minX+bbox.maxX)/2, cy = (bbox.minY+bbox.maxY)/2;
+      view.scale = s;
+      view.tx = w/2 - cx*s;
+      view.ty = h/2 + cy*s;
+      draw();
+    }
+    function draw(){
+      var w = canvas.width, h = canvas.height;
+      ctx.clearRect(0,0,w,h);
+      for (var i=0;i<polylines.length;i++){
+        var pl = polylines[i];
+        if (pl.kind==='ignore') continue;
+        ctx.beginPath();
+        if (pl.kind==='bend'){ ctx.strokeStyle='#e8590c'; ctx.lineWidth=1.4*dpr; ctx.setLineDash([6*dpr,4*dpr]); }
+        else { ctx.strokeStyle='#1a3d6b'; ctx.lineWidth=1.6*dpr; ctx.setLineDash([]); }
+        var p0 = pl.pts[0];
+        ctx.moveTo(p0.x*view.scale+view.tx, -p0.y*view.scale+view.ty);
+        for (var j=1;j<pl.pts.length;j++){
+          ctx.lineTo(pl.pts[j].x*view.scale+view.tx, -pl.pts[j].y*view.scale+view.ty);
+        }
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+    // wheel zoom around cursor
+    canvas.addEventListener('wheel', function(e){
+      e.preventDefault();
+      var rect = canvas.getBoundingClientRect();
+      var mx = (e.clientX-rect.left)*dpr, my=(e.clientY-rect.top)*dpr;
+      var f = e.deltaY<0 ? 1.12 : 1/1.12;
+      var wx = (mx-view.tx)/view.scale, wy=(view.ty-my)/view.scale;
+      view.scale *= f;
+      view.tx = mx - wx*view.scale;
+      view.ty = my + wy*view.scale;
+      draw();
+    }, { passive:false });
+    // drag pan
+    var dragging=false, last=null;
+    canvas.addEventListener('pointerdown', function(e){ dragging=true; last={x:e.clientX,y:e.clientY}; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener('pointermove', function(e){ if(!dragging)return; var dx=(e.clientX-last.x)*dpr, dy=(e.clientY-last.y)*dpr; view.tx+=dx; view.ty+=dy; last={x:e.clientX,y:e.clientY}; draw(); });
+    canvas.addEventListener('pointerup', function(e){ dragging=false; });
+    window.addEventListener('resize', fitView);
+
+    // ---------- load saved inputs for this attachment ----------
+    function loadSaved(){
+      return t.get('card','shared','dxfMetrics', {}).then(function(all){
+        var rec = all && all[attachmentId];
+        if (rec){
+          if (rec.thicknessMm!=null) document.getElementById('thickness').value = rec.thicknessMm;
+          if (rec.material) document.getElementById('material').value = rec.material;
+          if (rec.bendCount!=null) document.getElementById('bendInput').value = rec.bendCount;
+        }
+      }).catch(function(){});
+    }
+
+    // ---------- run ----------
+    showOverlay('Скачивание DXF из Trello…');
+    fetch(downloadUrl())
+      .then(function(r){ if(!r.ok) return r.text().then(function(tx){ throw new Error('Не удалось скачать ('+r.status+'). '+tx); }); return r.arrayBuffer(); })
+      .then(function(buf){
+        showOverlay('Разбор чертежа…');
+        var text = new TextDecoder('utf-8').decode(new Uint8Array(buf));
+        var dxf;
+        try { dxf = new window.DxfParser().parseSync(text); }
+        catch(err){ throw new Error('Не удалось разобрать DXF: '+(err&&err.message?err.message:err)); }
+
+        var res = window.DXFCALC.compute(dxf);
+        polylines = res.polylines; bbox = res.bbox;
+        if (!bbox){ throw new Error('В файле не найдено геометрии для расчёта.'); }
+        var m = res.metrics;
+
+        // metrics panel
+        var html='';
+        html+='<div class="metric"><span class="k">Габарит</span><span class="v">'+fmt(m.bboxW_mm,1)+' × '+fmt(m.bboxH_mm,1)+'<span class="u">мм</span></span></div>';
+        html+='<div class="metric"><span class="k">Площадь листа (габарит)</span><span class="v">'+fmt(m.bboxAreaM2,4)+'<span class="u">м²</span></span></div>';
+        html+='<div class="metric"><span class="k">Площадь детали</span><span class="v">'+fmt(m.partAreaM2,4)+'<span class="u">м²</span></span></div>';
+        html+='<div class="metric"><span class="k">Длина реза</span><span class="v">'+fmt(m.cutLenM,3)+'<span class="u">м</span></span></div>';
+        document.getElementById('metrics').innerHTML = html;
+
+        document.getElementById('bendInput').value = m.bendCount;
+
+        var note = 'Единицы файла: '+m.unitName+'. ';
+        if (!m.unitsAreMm) note += 'Внимание: файл, похоже, не в миллиметрах — проверьте габарит. ';
+        note += 'Площадь и длина реза вычислены по геометрии. Число гибов определено по слою с названием вроде «BEND/СГИБ» — если в вашем DXF гибы на другом слое, поправьте число вручную. Толщина и материал в DXF обычно не хранятся, поэтому вводятся вручную.';
+        document.getElementById('note').textContent = note;
+
+        // store computed metrics for saving
+        window.__computed = m;
+
+        return loadSaved();
+      })
+      .then(function(){ hideOverlay(); fitView(); })
+      .catch(function(err){ showOverlayError((err&&err.message)||String(err)); });
+
+    // ---------- save ----------
+    document.getElementById('saveBtn').addEventListener('click', function(){
+      var m = window.__computed; if(!m) return;
+      var rec = {
+        fileName: fileName,
+        bboxW_mm: m.bboxW_mm, bboxH_mm: m.bboxH_mm,
+        bboxAreaM2: m.bboxAreaM2, partAreaM2: m.partAreaM2,
+        cutLenM: m.cutLenM,
+        bendCount: parseInt(document.getElementById('bendInput').value,10) || 0,
+        thicknessMm: parseFloat(document.getElementById('thickness').value) || null,
+        material: document.getElementById('material').value || null,
+        unitName: m.unitName,
+        savedAt: Date.now()
+      };
+      var msg = document.getElementById('savedMsg');
+      msg.textContent = 'Сохранение…';
+      t.get('card','shared','dxfMetrics', {}).then(function(all){
+        all = all || {}; all[attachmentId] = rec;
+        return t.set('card','shared','dxfMetrics', all);
+      }).then(function(){
+        msg.textContent = 'Сохранено ✓ Данные готовы для калькулятора.';
+        setTimeout(function(){ msg.textContent=''; }, 4000);
+      }).catch(function(e){ msg.textContent = 'Ошибка сохранения: '+(e&&e.message?e.message:''); });
+    });
+  </script>
+</body>
+</html>
