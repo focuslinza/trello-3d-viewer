@@ -62,10 +62,41 @@ window.DXFCALC = (function () {
   function polylineLength(pts){ var L=0; for(var i=0;i<pts.length-1;i++) L+=dist(pts[i],pts[i+1]); return L; }
   function shoelace(pts){ var A=0; for(var i=0;i<pts.length;i++){var j=(i+1)%pts.length; A+=pts[i].x*pts[j].y - pts[j].x*pts[i].y;} return Math.abs(A)/2; }
 
+  // Many CAD exports (e.g. KOMPAS, AutoCAD) draw a contour as many separate
+  // LINE/ARC pieces instead of one closed polyline. Stitch those pieces back
+  // into closed loops so the enclosed area can be measured.
+  function stitchLoops(edges, tol){
+    var used = new Array(edges.length); var loops=[];
+    function near(a,b){ return Math.abs(a.x-b.x)<=tol && Math.abs(a.y-b.y)<=tol; }
+    for (var i=0;i<edges.length;i++){
+      if (used[i]) continue;
+      used[i]=true;
+      var chain = edges[i].slice();
+      var start = chain[0];
+      var guard=0;
+      while (guard++ < edges.length+2){
+        var end = chain[chain.length-1];
+        if (near(end,start) && chain.length>2){ loops.push(chain); break; }
+        var found=-1, rev=false;
+        for (var j=0;j<edges.length;j++){
+          if (used[j]) continue;
+          var e=edges[j];
+          if (near(e[0],end)){ found=j; rev=false; break; }
+          if (near(e[e.length-1],end)){ found=j; rev=true; break; }
+        }
+        if (found<0) break;
+        used[found]=true;
+        var seg=edges[found].slice(); if (rev) seg.reverse();
+        chain = chain.concat(seg.slice(1));
+      }
+    }
+    return loops;
+  }
+
   function compute(dxf){
     var insunits = dxf.header && dxf.header['$INSUNITS'];
     var u = unitToMeters(insunits);
-    var cutLen=0, bendCount=0, closedAreas=[];
+    var cutLen=0, bendCount=0, closedAreas=[], openEdges=[];
     var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
     var polylines=[]; // {pts, kind}
     function track(p){ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; }
@@ -91,7 +122,13 @@ window.DXFCALC = (function () {
       if (kind==='ignore') return;
       cutLen += polylineLength(pts);
       if (closed) closedAreas.push(shoelace(pts));
+      else openEdges.push(pts);
     });
+
+    // stitch separate line/arc edges into closed loops, add their areas
+    var maxDim = (isFinite(minX) ? Math.max(maxX-minX, maxY-minY) : 0) || 1;
+    var tol = Math.max(maxDim*1e-4, 1e-3);
+    stitchLoops(openEdges, tol).forEach(function(lp){ closedAreas.push(shoelace(lp)); });
 
     var areaMm2=0;
     if (closedAreas.length){
