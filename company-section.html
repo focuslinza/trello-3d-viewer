@@ -89,10 +89,12 @@
 
         return Promise.all([
           CRM.getCompanyById(t, companyId),
-          CRM.getCardContacts(t)
+          CRM.getCardContacts(t),
+          CRM.getCardObjectId(t)
         ]).then(function (res) {
           var company = res[0];
           var cardContactIds = res[1] || [];
+          var cardObjectId = res[2] || null;
 
           if (!company) {
             root.innerHTML =
@@ -110,6 +112,12 @@
           html += '<div class="company-name">' + CRM.esc(company.name) + '</div>';
           if (company.bin) html += '<div class="req">БИН/ИИН: ' + CRM.esc(company.bin) + '</div>';
           if (company.phone) html += '<div class="req">Тел: ' + CRM.esc(company.phone) + '</div>';
+
+          var obj = (company.objects || []).filter(function (o) { return o.id === cardObjectId; })[0];
+          if (obj) {
+            html += '<div class="req" style="margin-top:4px;">Объект: ' + CRM.esc(obj.name) +
+              (obj.addr ? ' — ' + CRM.esc(obj.addr) : '') + '</div>';
+          }
 
           if (toShow.length) {
             html += '<div class="contacts">';

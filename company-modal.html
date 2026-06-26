@@ -69,6 +69,7 @@
       directory: [],
       cardCompanyId: null,
       cardContacts: [],
+      cardObjectId: null,
       nearFull: false
     };
 
@@ -76,11 +77,13 @@
       return Promise.all([
         CRM.getDirectory(t),
         CRM.getCardCompanyId(t),
-        CRM.getCardContacts(t)
+        CRM.getCardContacts(t),
+        CRM.getCardObjectId(t)
       ]).then(function (res) {
         state.directory = res[0] || [];
         state.cardCompanyId = res[1] || null;
         state.cardContacts = res[2] || [];
+        state.cardObjectId = res[3] || null;
         renderHome();
       });
     }
@@ -170,6 +173,28 @@
         '<button class="btn secondary small" id="changeCompany">Сменить компанию</button>' +
         '</div>';
 
+      html += '<h3>Объекты (филиалы)</h3>';
+      var objects = company.objects || [];
+      if (objects.length === 0) {
+        html += '<div class="muted">Пока нет объектов. Добавьте филиал/объект с адресом.</div>';
+      } else {
+        objects.forEach(function (o) {
+          var sel = state.cardObjectId === o.id ? 'checked' : '';
+          html += '<div class="contact-card">';
+          html += '<div class="top"><div>' +
+            '<div class="nm">' + CRM.esc(o.name || 'Без названия') + '</div>' +
+            (o.addr ? '<div class="num">' + CRM.esc(o.addr) + '</div>' : '') +
+            '</div></div>';
+          html += '<div class="contact-actions">';
+          html += '<button class="btn secondary small" data-obj-edit="' + o.id + '">Изменить</button>';
+          html += '<button class="btn danger small" data-obj-del="' + o.id + '">Удалить</button>';
+          html += '</div>';
+          html += '<label class="enq"><input type="radio" name="cardObject" data-obj-pick="' + o.id + '" ' + sel + '/> Эта заявка для этого объекта</label>';
+          html += '</div>';
+        });
+      }
+      html += '<div class="btnbar"><button class="btn" id="addObject">+ Добавить объект</button></div>';
+
       html += '<h3>Контакты компании</h3>';
       var contacts = company.contacts || [];
       if (contacts.length === 0) {
@@ -227,6 +252,27 @@
           toggleEnquiry(el.getAttribute('data-enq'), el.checked);
         });
       });
+
+      Array.prototype.forEach.call(document.querySelectorAll('[data-obj-edit]'), function (el) {
+        el.addEventListener('click', function () {
+          var oid = el.getAttribute('data-obj-edit');
+          var obj = (company.objects || []).filter(function (x) { return x.id === oid; })[0];
+          renderObjectForm(obj, company.id);
+        });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-obj-del]'), function (el) {
+        el.addEventListener('click', function () {
+          deleteObject(company.id, el.getAttribute('data-obj-del'));
+        });
+      });
+      // radio click toggles selection (clicking the chosen one again clears it)
+      Array.prototype.forEach.call(document.querySelectorAll('[data-obj-pick]'), function (el) {
+        el.addEventListener('click', function () {
+          var oid = el.getAttribute('data-obj-pick');
+          selectObjectForCard(state.cardObjectId === oid ? null : oid);
+        });
+      });
+      document.getElementById('addObject').addEventListener('click', function () { renderObjectForm(null, company.id); });
     }
 
     // ---------- COMPANY FORM ----------
@@ -260,7 +306,7 @@
     }
 
     function saveCompany(existing) {
-      var company = { id: existing.id || CRM.newId(), contacts: existing.contacts || [] };
+      var company = { id: existing.id || CRM.newId(), contacts: existing.contacts || [], objects: existing.objects || [] };
       CRM.COMPANY_FIELDS.forEach(function (f) {
         var el = document.getElementById('f_' + f.key);
         if (f.type === 'checkbox') company[f.key] = !!el.checked;
@@ -352,6 +398,66 @@
       if (!checked && idx !== -1) set.splice(idx, 1);
       state.cardContacts = set;
       CRM.setCardContacts(t, set);
+    }
+
+    // ---------- OBJECT (branch) FORM ----------
+    function renderObjectForm(object, companyId) {
+      var isNew = !object;
+      object = object || {};
+      var html = '<h2>' + (isNew ? 'Новый объект' : 'Объект') + '</h2>';
+      html += '<div class="row"><label class="fld" for="o_name">Наименование объекта *</label>' +
+        '<input type="text" id="o_name" value="' + CRM.esc(object.name || '') + '" placeholder="Склад №2 / Магазин на Абая" /></div>';
+      html += '<div class="row"><label class="fld" for="o_addr">Адрес объекта</label>' +
+        '<input type="text" id="o_addr" value="' + CRM.esc(object.addr || '') + '" placeholder="г. Астана, ул. ..., д. ..." /></div>';
+      html += '<div class="req-note">Адрес объекта потом подставится в счёт/доставку.</div>';
+      html += '<div class="btnbar">' +
+        '<button class="btn" id="saveObject">Сохранить</button>' +
+        '<button class="btn secondary" id="cancelObject">Отмена</button>' +
+        '</div>';
+      app.innerHTML = html;
+
+      document.getElementById('saveObject').addEventListener('click', function () { saveObject(object, companyId); });
+      document.getElementById('cancelObject').addEventListener('click', function () { renderHome(); });
+    }
+
+    function saveObject(existing, companyId) {
+      var name = (document.getElementById('o_name').value || '').trim();
+      if (!name) { alert('Укажите наименование объекта.'); return; }
+      var object = {
+        id: existing.id || CRM.newId(),
+        name: name,
+        addr: (document.getElementById('o_addr').value || '').trim()
+      };
+      CRM.getCompanyById(t, companyId).then(function (company) {
+        if (!company) throw new Error('Компания не найдена.');
+        company.objects = company.objects || [];
+        var found = false;
+        for (var i = 0; i < company.objects.length; i++) {
+          if (company.objects[i].id === object.id) { company.objects[i] = object; found = true; break; }
+        }
+        if (!found) company.objects.push(object);
+        return CRM.upsertCompany(t, company);
+      }).then(function (r) {
+        state.nearFull = r.info && r.info.nearFull;
+      }).then(loadAll).catch(function (e) { alert(e.message || 'Не удалось сохранить объект.'); });
+    }
+
+    function deleteObject(companyId, objectId) {
+      if (!confirm('Удалить этот объект?')) return;
+      CRM.getCompanyById(t, companyId).then(function (company) {
+        company.objects = (company.objects || []).filter(function (o) { return o.id !== objectId; });
+        return CRM.upsertCompany(t, company);
+      }).then(function () {
+        if (state.cardObjectId === objectId) {
+          state.cardObjectId = null;
+          return CRM.setCardObjectId(t, null);
+        }
+      }).then(loadAll).catch(function (e) { alert(e.message || 'Ошибка.'); });
+    }
+
+    function selectObjectForCard(objectId) {
+      state.cardObjectId = objectId || null;
+      CRM.setCardObjectId(t, state.cardObjectId).then(function () { renderHome(); });
     }
 
     loadAll().catch(function (err) {

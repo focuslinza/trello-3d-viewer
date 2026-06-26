@@ -82,6 +82,12 @@ window.CRM = (function () {
   function setCardContacts(t, ids) {
     return t.set('card', 'shared', 'cardContacts', ids || []);
   }
+  function getCardObjectId(t) {
+    return t.get('card', 'shared', 'objectId', null);
+  }
+  function setCardObjectId(t, id) {
+    return t.set('card', 'shared', 'objectId', id || null);
+  }
 
   // ---- WhatsApp / phone ----
   function toWhatsApp(raw) {
@@ -129,6 +135,8 @@ window.CRM = (function () {
     setCardCompanyId: setCardCompanyId,
     getCardContacts: getCardContacts,
     setCardContacts: setCardContacts,
+    getCardObjectId: getCardObjectId,
+    setCardObjectId: setCardObjectId,
     toWhatsApp: toWhatsApp,
     waLink: waLink,
     telLink: telLink,
