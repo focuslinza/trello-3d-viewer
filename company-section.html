@@ -123,12 +123,7 @@
             html += '<div class="req">Объект: ' + CRM.esc(obj.name) + '</div>';
             if (obj.addr) {
               var mu = CRM.mapUrls(obj.addr);
-              html += '<a class="addr-link" href="' + mu.gis + '" target="_blank" rel="noopener" title="Построить маршрут в 2ГИС">' + CRM.esc(obj.addr) + '</a>';
-              html += '<div class="map-links"><span class="lbl">Маршрут:</span>' +
-                '<a href="' + mu.gis + '" target="_blank" rel="noopener">2ГИС</a>' +
-                '<a href="' + mu.google + '" target="_blank" rel="noopener">Google</a>' +
-                '<a href="' + mu.yandex + '" target="_blank" rel="noopener">Яндекс</a>' +
-                '</div>';
+              html += '<a class="addr-link" href="' + mu.gis + '" target="_blank" rel="noopener" title="Открыть в 2ГИС">' + CRM.esc(obj.addr) + '</a>';
             }
           }
 

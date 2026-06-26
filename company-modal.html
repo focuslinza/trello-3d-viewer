@@ -202,12 +202,7 @@
           if (o.addr) {
             var mu = CRM.mapUrls(o.addr);
             addrHtml =
-              '<a class="addr-link" href="' + mu.gis + '" target="_blank" rel="noopener" title="Построить маршрут в 2ГИС">' + CRM.esc(o.addr) + '</a>' +
-              '<div class="map-links"><span class="lbl">Маршрут:</span>' +
-              '<a href="' + mu.gis + '" target="_blank" rel="noopener">2ГИС</a>' +
-              '<a href="' + mu.google + '" target="_blank" rel="noopener">Google</a>' +
-              '<a href="' + mu.yandex + '" target="_blank" rel="noopener">Яндекс</a>' +
-              '</div>';
+              '<a class="addr-link" href="' + mu.gis + '" target="_blank" rel="noopener" title="Открыть в 2ГИС">' + CRM.esc(o.addr) + '</a>';
           }
           html += '<div class="contact-card">';
           html += '<div class="top"><div>' +
