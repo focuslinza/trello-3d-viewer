@@ -26,21 +26,28 @@
     .contact .role { font-size: 11px; color: var(--muted); }
     .contact .num { font-size: 12px; color: var(--muted); }
     .actions { display: flex; gap: 6px; flex: 0 0 auto; }
-    a.wa {
-      background: #25d366; color: #fff; text-decoration: none; font-size: 12px; font-weight: 600;
-      padding: 5px 10px; border-radius: 4px; white-space: nowrap;
+    /* ---- unified buttons & action links ---- */
+    a.wa, a.call, button.btn, .map-links a {
+      display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+      box-sizing: border-box; border-radius: 5px; font-weight: 600; cursor: pointer;
+      text-decoration: none; white-space: nowrap; transition: background .05s ease;
     }
-    a.call {
-      background: transparent; color: var(--txt); text-decoration: none; font-size: 12px;
-      padding: 5px 9px; border-radius: 4px; border: 1px solid var(--line); white-space: nowrap;
-    }
+    a.wa { background: #25d366; color: #fff; font-size: 12px; padding: 7px 11px; }
+    a.wa:active { background: #1da851; }
+    a.call { background: transparent; color: var(--txt); border: 1px solid var(--line); font-size: 12px; padding: 7px 10px; }
+    a.call:active { background: rgba(127,127,127,0.18); }
     .toolbar { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
-    button.btn {
-      background: #0c66e4; color: #fff; border: none; border-radius: 4px;
-      padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
-    }
+    button.btn { background: #0c66e4; color: #fff; border: none; padding: 8px 13px; font-size: 13px; }
+    button.btn:active { background: #09326c; }
     button.btn.secondary { background: transparent; color: var(--txt); border: 1px solid var(--line); }
-    button.btn:hover { filter: brightness(1.05); }
+    button.btn.secondary:active { background: rgba(127,127,127,0.18); }
+    /* clickable address + map route links */
+    a.addr-link { color: #4c9aff; text-decoration: none; font-size: 12px; border-bottom: 1px dashed rgba(76,154,255,0.6); cursor: pointer; }
+    a.addr-link:hover { border-bottom-style: solid; }
+    .map-links { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin: 3px 0 2px; }
+    .map-links .lbl { font-size: 11px; color: var(--muted); }
+    .map-links a { background: transparent; color: #4c9aff; border: 1px solid var(--line); font-size: 11px; padding: 4px 8px; }
+    .map-links a:active { background: rgba(76,154,255,0.18); }
     .empty-box { padding: 6px 2px; }
   </style>
 </head>
@@ -114,7 +121,15 @@
           var obj = (company.objects || []).filter(function (o) { return o.id === cardObjectId; })[0];
           if (obj) {
             html += '<div class="req">Объект: ' + CRM.esc(obj.name) + '</div>';
-            if (obj.addr) html += '<div class="req">Адрес: ' + CRM.esc(obj.addr) + '</div>';
+            if (obj.addr) {
+              var mu = CRM.mapUrls(obj.addr);
+              html += '<a class="addr-link" href="' + mu.gis + '" target="_blank" rel="noopener" title="Построить маршрут в 2ГИС">' + CRM.esc(obj.addr) + '</a>';
+              html += '<div class="map-links"><span class="lbl">Маршрут:</span>' +
+                '<a href="' + mu.gis + '" target="_blank" rel="noopener">2ГИС</a>' +
+                '<a href="' + mu.google + '" target="_blank" rel="noopener">Google</a>' +
+                '<a href="' + mu.yandex + '" target="_blank" rel="noopener">Яндекс</a>' +
+                '</div>';
+            }
           }
 
           if (toShow.length) {

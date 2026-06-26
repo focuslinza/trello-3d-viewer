@@ -106,6 +106,16 @@ window.CRM = (function () {
     return d ? 'tel:+' + d : '';
   }
 
+  // ---- map route links for an address ----
+  function mapUrls(addr) {
+    var q = encodeURIComponent(addr || '');
+    return {
+      gis: 'https://2gis.kz/search/' + q,                                   // 2ГИС (поиск адреса, дальше «Проезд»)
+      google: 'https://www.google.com/maps/dir/?api=1&destination=' + q,    // Google: маршрут до адреса
+      yandex: 'https://yandex.kz/maps/?rtext=~' + q + '&rtt=auto'           // Яндекс: маршрут на авто
+    };
+  }
+
   // ---- field labels (for the company form / invoice later) ----
   var COMPANY_FIELDS = [
     { key: 'name', label: 'Название компании', placeholder: 'ТОО «Альфа»', required: true },
@@ -140,6 +150,7 @@ window.CRM = (function () {
     toWhatsApp: toWhatsApp,
     waLink: waLink,
     telLink: telLink,
+    mapUrls: mapUrls,
     COMPANY_FIELDS: COMPANY_FIELDS,
     esc: esc
   };
