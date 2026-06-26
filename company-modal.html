@@ -93,6 +93,15 @@
       else { renderPicker(); }
     }
 
+    // Link the chosen company to this card, then refresh the view.
+    function assignCompany(id) {
+      if (!id) return;
+      CRM.setCardCompanyId(t, id).then(function () {
+        state.cardCompanyId = id;
+        renderHome();
+      });
+    }
+
     function renderPicker(filter) {
       filter = (filter || '').toLowerCase();
       var matches = state.directory.filter(function (c) {
