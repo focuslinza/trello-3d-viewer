@@ -28,7 +28,7 @@
     .btn { background: #0c66e4 !important; color: #fff !important; border: none !important; padding: 9px 14px; font-size: 13px; filter: none !important; }
     .btn.secondary { background: #f4f5f7 !important; color: #172b4d !important; border: 1px solid #dfe1e6 !important; }
     .btn.danger { background: #fbe9e7 !important; color: #c9372c !important; border: 1px solid #f5c2bd !important; }
-    .btn.small { padding: 7px 12px; font-size: 12px; }
+    .btn.small { height: 32px; padding: 0 12px; font-size: 12px; }
     /* hover: keep the same color (override Trello base button hover) */
     .btn:hover { background: #0c66e4 !important; color: #fff !important; filter: none !important; }
     .btn.secondary:hover { background: #f4f5f7 !important; color: #172b4d !important; }
@@ -37,11 +37,24 @@
     .btn:active { background: #09326c !important; color: #fff !important; }
     .btn.secondary:active { background: #c1c7d0 !important; color: #172b4d !important; }
     .btn.danger:active { background: #f4b6ae !important; color: #7a211a !important; }
-    /* WhatsApp / call share the same size as .btn.small */
-    a.wa { background: #25d366; color: #fff; padding: 7px 12px; font-size: 12px; }
+    /* WhatsApp / call: same height as .btn.small */
+    a.wa { background: #25d366; color: #fff; height: 32px; padding: 0 13px; font-size: 12px; }
     a.wa:active { background: #1da851; }
-    a.call { background: #f4f5f7; color: #172b4d; border: 1px solid #dfe1e6; padding: 7px 12px; font-size: 12px; }
+    a.call { background: #f4f5f7; color: #172b4d; border: 1px solid #dfe1e6; height: 32px; padding: 0 13px; font-size: 12px; }
     a.call:active { background: #c1c7d0; }
+    /* square custom checkboxes & radios: transparent when off, white check when on */
+    .enq input, .check input {
+      -webkit-appearance: none; appearance: none; margin: 0;
+      width: 18px; height: 18px; flex: 0 0 auto; box-sizing: border-box;
+      border: 2px solid #8a96a6; border-radius: 4px; background: transparent;
+      cursor: pointer; position: relative;
+    }
+    .enq input:checked, .check input:checked { background: #0c66e4; border-color: #0c66e4; }
+    .enq input:checked::after, .check input:checked::after {
+      content: ""; position: absolute; left: 5px; top: 1px;
+      width: 4px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
     /* clickable address + map route links */
     a.addr-link { color: #0c66e4; text-decoration: none; font-size: 12px; border-bottom: 1px dashed #9bb8e8; cursor: pointer; }
     a.addr-link:hover { border-bottom-style: solid; }
