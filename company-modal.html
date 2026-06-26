@@ -173,10 +173,10 @@
         '<button class="btn secondary small" id="changeCompany">Сменить компанию</button>' +
         '</div>';
 
-      html += '<h3>Объекты (филиалы)</h3>';
+      html += '<h3>Объекты</h3>';
       var objects = company.objects || [];
       if (objects.length === 0) {
-        html += '<div class="muted">Пока нет объектов. Добавьте филиал/объект с адресом.</div>';
+        html += '<div class="muted">Пока нет объектов. Добавьте объект с адресом.</div>';
       } else {
         objects.forEach(function (o) {
           var sel = state.cardObjectId === o.id ? 'checked' : '';

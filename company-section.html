@@ -110,26 +110,20 @@
 
           var html = '';
           html += '<div class="company-name">' + CRM.esc(company.name) + '</div>';
-          if (company.bin) html += '<div class="req">БИН/ИИН: ' + CRM.esc(company.bin) + '</div>';
-          if (company.phone) html += '<div class="req">Тел: ' + CRM.esc(company.phone) + '</div>';
 
           var obj = (company.objects || []).filter(function (o) { return o.id === cardObjectId; })[0];
           if (obj) {
-            html += '<div class="req" style="margin-top:4px;">Объект: ' + CRM.esc(obj.name) +
-              (obj.addr ? ' — ' + CRM.esc(obj.addr) : '') + '</div>';
+            html += '<div class="req">Объект: ' + CRM.esc(obj.name) + '</div>';
+            if (obj.addr) html += '<div class="req">Адрес: ' + CRM.esc(obj.addr) + '</div>';
           }
 
           if (toShow.length) {
             html += '<div class="contacts">';
-            if (selected.length) {
-              html += '<div class="req" style="margin-bottom:4px;">Контакты по этой заявке:</div>';
-            } else {
-              html += '<div class="req" style="margin-bottom:4px;">Контакты компании:</div>';
-            }
+            html += '<div class="req" style="margin-bottom:4px;">Заказчик:</div>';
             toShow.forEach(function (c) { html += renderContactRow(c); });
             html += '</div>';
           } else {
-            html += '<div class="req" style="margin-top:6px;">Контакты ещё не добавлены.</div>';
+            html += '<div class="req" style="margin-top:6px;">Контакт заказчика ещё не добавлен.</div>';
           }
 
           html += '<div class="toolbar">' +
