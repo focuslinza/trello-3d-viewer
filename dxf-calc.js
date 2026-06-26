@@ -18,12 +18,23 @@ window.DXFCALC = (function () {
   function unitName(insunits){ return ({1:'дюймы',2:'футы',4:'мм',5:'см',6:'м'})[insunits] || 'мм (предположительно)'; }
   function isMm(insunits){ return !insunits || insunits===4; }
 
-  function isBendLayer(name){ return /bend|сгиб|biege|gib|fold|\bbn\b/i.test(name||''); }
-  function isIgnoredLayer(name){ return /dim|text|annot|center|осев|размер|hidden|note|штрих|defpoints/i.test(name||''); }
+  // Bend centerlines: Onshape uses SHEETMETAL_BEND_LINES_UP/DOWN; others use
+  // BEND/СГИБ. The bend "tangent" lines mark the bend region edges, not the
+  // bend itself, so they must NOT be counted.
+  function isBendLayer(name){
+    name = name || '';
+    if (/tangent/i.test(name)) return false;
+    return /bend|сгиб|biege|\bgib\b|fold/i.test(name);
+  }
+  // Non-cut helper geometry (annotations, construction, view lines, tangents…)
+  function isIgnoredLayer(name){
+    return /dim|text|annot|center|осев|размер|hidden|note|штрих|defpoints|tangent|section|detail_view|virtual|thread|explode|break|hatch|construction|sketch|invisible|centermark|tables|images/i.test(name||'');
+  }
 
   // Detect bend lines marked as PAIRS of small semicircular notches on opposite
   // edges (the way a KOMPAS engineer marks a bend for the press-brake operator).
   // arcs: [{cx,cy,r,sweepDeg}] ; bbox: {minX,minY,maxX,maxY}
+  // Returns array of bend positions: [{axis:'y'|'x', coord}] (one per bend line).
   function detectBendNotches(arcs, bbox){
     var W=bbox.maxX-bbox.minX, H=bbox.maxY-bbox.minY, minDim=Math.min(W,H)||1;
     var edgeTol=Math.max(minDim*0.01,1);
@@ -38,14 +49,20 @@ window.DXFCALC = (function () {
       if(onLeft||onRight) horizY.push(a.cy);
       else if(onBot||onTop) vertX.push(a.cx);
     });
-    function clusters(vals){
-      if(!vals.length) return 0;
+    function clusterMeans(vals){
+      if(!vals.length) return [];
       vals.sort(function(a,b){return a-b;});
-      var tol=Math.max(minDim*0.02,2), n=1;
-      for(var i=1;i<vals.length;i++) if(vals[i]-vals[i-1]>tol) n++;
-      return n;
+      var tol=Math.max(minDim*0.02,2), groups=[[vals[0]]];
+      for(var i=1;i<vals.length;i++){
+        if(vals[i]-vals[i-1]>tol) groups.push([]);
+        groups[groups.length-1].push(vals[i]);
+      }
+      return groups.map(function(g){ return g.reduce(function(s,v){return s+v;},0)/g.length; });
     }
-    return clusters(horizY)+clusters(vertX);
+    var out=[];
+    clusterMeans(horizY).forEach(function(y){ out.push({axis:'y', coord:y}); });
+    clusterMeans(vertX).forEach(function(x){ out.push({axis:'x', coord:x}); });
+    return out;
   }
 
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
@@ -164,7 +181,15 @@ window.DXFCALC = (function () {
 
     // bends from notch pairs (KOMPAS) added to bends from bend-layer lines (Onshape)
     if (isFinite(minX)){
-      bendCount += detectBendNotches(arcsForBend, {minX:minX,minY:minY,maxX:maxX,maxY:maxY});
+      var notchBends = detectBendNotches(arcsForBend, {minX:minX,minY:minY,maxX:maxX,maxY:maxY});
+      bendCount += notchBends.length;
+      // draw a bend line across the part between each detected notch pair
+      notchBends.forEach(function(b){
+        var seg = (b.axis==='y')
+          ? [{x:minX,y:b.coord},{x:maxX,y:b.coord}]
+          : [{x:b.coord,y:minY},{x:b.coord,y:maxY}];
+        polylines.push({ pts: seg, kind: 'bend' });
+      });
     }
 
     var areaMm2=0;
