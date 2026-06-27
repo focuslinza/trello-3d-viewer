@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Калькулятор стоимости</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <script src="./crm-common.js"></script>
+  <script src="./calc-engine.js"></script>
+  <style>
+    html[data-color-mode="light"] { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
+    html[data-color-mode="dark"]  { --bg:#1d2125; --txt:#c7d1db; --muted:#9fadbc; --chip:#22272b; --line:#3c4149; --card:#22272b; }
+    html { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--txt);
+      font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size:13px; }
+    #app { max-width:1000px; margin:0 auto; padding:14px 16px 120px; }
+    h2 { font-size:15px; margin:0 0 2px; }
+    .sub { color:var(--muted); font-size:12px; margin-bottom:12px; }
+    .sec { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:12px; }
+    .sec h3 { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 8px; }
+    .lines { display:flex; flex-direction:column; gap:6px; }
+    .ln { display:flex; align-items:center; gap:6px; }
+    .ln select, .ln input { height:32px; border:1px solid var(--line); border-radius:4px; background:var(--bg); color:var(--txt); font-size:13px; padding:0 6px; }
+    .ln .grow { flex:1 1 auto; min-width:120px; }
+    .ln .num { width:92px; text-align:right; }
+    .ln .lt { width:120px; text-align:right; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .ln .del { flex:0 0 auto; width:28px; height:28px; border:none; background:transparent; color:var(--muted); font-size:18px; cursor:pointer; border-radius:4px; }
+    .ln .del:hover { background:var(--chip); color:#c9372c; }
+    .add { margin-top:8px; background:transparent; color:#0c66e4; border:1px dashed #0c66e4; border-radius:4px; padding:6px 10px; font-size:12px; font-weight:600; cursor:pointer; }
+    .add:hover { background:rgba(12,102,228,.08); }
+    .params { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; }
+    .fld { display:flex; flex-direction:column; gap:3px; }
+    .fld label { font-size:11px; color:var(--muted); }
+    .fld select, .fld input { height:32px; border:1px solid var(--line); border-radius:4px; background:var(--bg); color:var(--txt); font-size:13px; padding:0 6px; }
+    .chk { display:flex; align-items:center; gap:6px; height:32px; }
+    .pull { background:#0c66e4; color:#fff; border:none; border-radius:4px; padding:7px 14px; font-size:12px; font-weight:600; cursor:pointer; height:34px; }
+    .pull:hover { background:#0055cc; }
+    .pull.ghost { background:transparent; color:#0c66e4; border:1px solid #0c66e4; }
+    .hint { font-size:11px; color:var(--muted); margin-top:6px; }
+    /* sticky total bar */
+    #bar { position:fixed; left:0; right:0; bottom:0; background:var(--bg); border-top:1px solid var(--line); padding:10px 16px; }
+    #bar .inner { max-width:1000px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:14px; }
+    .totals { font-size:12px; color:var(--muted); }
+    .totals .big { font-size:20px; font-weight:700; color:var(--txt); }
+    .totals .big span { font-size:13px; font-weight:600; color:var(--muted); }
+    .actions { display:flex; gap:8px; }
+    .actions button { height:36px; border-radius:4px; font-size:13px; font-weight:600; cursor:pointer; padding:0 16px; border:none; }
+    .save { background:#1f845a; color:#fff; }
+    .save:hover { background:#1a6f4c; }
+    .save:disabled { opacity:.6; cursor:default; }
+    .close { background:var(--chip); color:var(--txt); }
+    .msg { font-size:12px; margin-top:4px; min-height:14px; }
+    .ok { color:#1f845a; } .err { color:#c9372c; }
+    .brk { display:flex; flex-direction:column; gap:2px; margin-top:6px; }
+    .brk .r { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
+    .brk .r b { color:var(--txt); font-weight:600; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2 id="cardTitle">Калькулятор стоимости</h2>
+    <div class="sub" id="meta">—</div>
+
+    <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
+      <span class="hint" id="dxfHint"></span>
+    </div>
+
+    <div class="sec">
+      <h3>Работы (резка / гибка / сварка)</h3>
+      <div class="lines" id="opLines"></div>
+      <button class="add" id="addOp" type="button">+ добавить работу</button>
+    </div>
+
+    <div class="sec">
+      <h3>Материалы (лист / профиль / труба / прут)</h3>
+      <div class="lines" id="matLines"></div>
+      <button class="add" id="addMat" type="button">+ добавить материал</button>
+    </div>
+
+    <div class="sec">
+      <h3>Компоненты (колёса / крепёж / смазка / краска / заглушки)</h3>
+      <div class="lines" id="cmpLines"></div>
+      <button class="add" id="addCmp" type="button">+ добавить компонент</button>
+    </div>
+
+    <div class="sec">
+      <h3>Параметры заказа</h3>
+      <div class="params">
+        <div class="fld">
+          <label>Инженерные</label>
+          <select id="eng">
+            <option value="0">нет (0%)</option>
+            <option value="0.03">всё готово (3%)</option>
+            <option value="0.09">есть чертёж (9%)</option>
+            <option value="0.18" selected>инж. работы (18%)</option>
+            <option value="1">новый продукт (100%)</option>
+          </select>
+        </div>
+        <div class="fld">
+          <label>Срочность</label>
+          <select id="urg">
+            <option value="0" selected>нет</option>
+            <option value="1">1 день</option>
+            <option value="2">2 дня</option>
+          </select>
+        </div>
+        <div class="fld">
+          <label>Шлейф, % от сварки</label>
+          <input type="number" id="shleif" value="50" min="0" step="5" style="width:120px" />
+        </div>
+        <div class="fld">
+          <label>Налог, % (вычитается из итога)</label>
+          <input type="number" id="tax" value="16" min="0" step="1" style="width:140px" />
+        </div>
+        <div class="fld">
+          <label>&nbsp;</label>
+          <label class="chk"><input type="checkbox" id="montazh" /> Монтаж</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="bar">
+    <div class="inner">
+      <div class="totals">
+        <div class="brk" id="brk"></div>
+        <div class="big" id="totalBig">0 <span>₸</span></div>
+        <div class="msg" id="msg"></div>
+      </div>
+      <div class="actions">
+        <button class="close" id="btnClose" type="button">Закрыть</button>
+        <button class="save" id="btnSave" type="button">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    var t = window.TrelloPowerUp.iframe();
+    var CALC = window.CALC;
+    var WORKER = window.WORKER_URL;
+    var fmt = function(n){ return (Math.round((+n||0))).toLocaleString('ru-RU'); };
+    var fmt2 = function(n){ return (Math.round((+n||0)*100)/100).toLocaleString('ru-RU'); };
+
+    // ---- catalogs ----
+    var TH = CALC.TH; // allowed thicknesses
+    var OP_KINDS = [
+      ['cut','Резка листа (м)'], ['cutTube','Резка трубы/профиля (м)'],
+      ['bend','Гибка листа (кол.)'], ['bendTube','Гибка трубы (кол.)'], ['bendRod','Гибка прута (кол.)'],
+      ['weldSS','Сварка нерж (см)'], ['weldBlack','Сварка черн (см)']
+    ];
+    function groupBySection(map){
+      var groups={}, order=[];
+      Object.keys(map).forEach(function(code){
+        var sec=map[code].sec||'Прочее';
+        if(!groups[sec]){ groups[sec]=[]; order.push(sec); }
+        groups[sec].push({code:code, label:map[code].lbl||code, spec:map[code].spec});
+      });
+      return {groups:groups, order:order};
+    }
+    var MATG = groupBySection(CALC.MAT);
+    var CMPG = groupBySection(CALC.CMP);
+
+    function catalogSelect(grouped, selected){
+      var s=document.createElement('select'); s.className='grow';
+      var empty=document.createElement('option'); empty.value=''; empty.textContent='— выбрать —'; s.appendChild(empty);
+      grouped.order.forEach(function(sec){
+        var og=document.createElement('optgroup'); og.label=sec;
+        grouped.groups[sec].forEach(function(it){
+          var o=document.createElement('option'); o.value=it.code;
+          o.textContent=it.label + (it.spec? '  ['+it.spec+']':'');
+          if(it.code===selected) o.selected=true;
+          og.appendChild(o);
+        });
+        s.appendChild(og);
+      });
+      return s;
+    }
+    function thicknessSelect(selected){
+      var s=document.createElement('select'); s.style.width='86px';
+      TH.forEach(function(th){
+        var o=document.createElement('option'); o.value=th; o.textContent=th+' мм';
+        if(+selected===th) o.selected=true; s.appendChild(o);
+      });
+      return s;
+    }
+    function kindSelect(selected){
+      var s=document.createElement('select'); s.className='grow';
+      OP_KINDS.forEach(function(k){
+        var o=document.createElement('option'); o.value=k[0]; o.textContent=k[1];
+        if(k[0]===selected) o.selected=true; s.appendChild(o);
+      });
+      return s;
+    }
+
+    // ---- dynamic rows ----
+    function makeOpRow(data){
+      data=data||{};
+      var row=document.createElement('div'); row.className='ln';
+      var ks=kindSelect(data.kind||'cut');
+      var th=thicknessSelect(data.thickness||TH[2]);
+      var qty=document.createElement('input'); qty.type='number'; qty.className='num'; qty.min='0'; qty.step='any';
+      qty.placeholder='кол-во'; if(data.qty!=null) qty.value=data.qty;
+      var lt=document.createElement('span'); lt.className='lt'; lt.textContent='0 ₸';
+      var del=document.createElement('button'); del.className='del'; del.type='button'; del.textContent='×';
+      del.onclick=function(){ row.remove(); recompute(); };
+      [ks,th,qty].forEach(function(e){ e.addEventListener('input',recompute); e.addEventListener('change',recompute); });
+      row._read=function(){ return {kind:ks.value, thickness:+th.value, qty:+qty.value||0}; };
+      row._lt=lt;
+      row.appendChild(ks); row.appendChild(th); row.appendChild(qty); row.appendChild(lt); row.appendChild(del);
+      return row;
+    }
+    function makeCatRow(grouped, data, unitHint){
+      data=data||{};
+      var row=document.createElement('div'); row.className='ln';
+      var sel=catalogSelect(grouped, data.code||'');
+      var qty=document.createElement('input'); qty.type='number'; qty.className='num'; qty.min='0'; qty.step='any';
+      qty.placeholder=unitHint||'кол-во'; if(data.qty!=null) qty.value=data.qty;
+      var lt=document.createElement('span'); lt.className='lt'; lt.textContent='0 ₸';
+      var del=document.createElement('button'); del.className='del'; del.type='button'; del.textContent='×';
+      del.onclick=function(){ row.remove(); recompute(); };
+      [sel,qty].forEach(function(e){ e.addEventListener('input',recompute); e.addEventListener('change',recompute); });
+      row._read=function(){ return {code:sel.value, qty:+qty.value||0}; };
+      row._lt=lt;
+      row.appendChild(sel); row.appendChild(qty); row.appendChild(lt); row.appendChild(del);
+      return row;
+    }
+
+    var opLines=document.getElementById('opLines'),
+        matLines=document.getElementById('matLines'),
+        cmpLines=document.getElementById('cmpLines');
+    document.getElementById('addOp').onclick=function(){ opLines.appendChild(makeOpRow()); recompute(); };
+    document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м')); recompute(); };
+    document.getElementById('addCmp').onclick=function(){ cmpLines.appendChild(makeCatRow(CMPG,null,'шт')); recompute(); };
+
+    ['eng','urg','shleif','tax','montazh'].forEach(function(id){
+      var e=document.getElementById(id); e.addEventListener('input',recompute); e.addEventListener('change',recompute);
+    });
+
+    // ---- gather inputs + compute ----
+    function gather(){
+      var operations=[], materials=[], components=[];
+      [].forEach.call(opLines.children, function(r){ var d=r._read(); if(d.qty>0&&d.thickness>0) operations.push(d); });
+      [].forEach.call(matLines.children, function(r){ var d=r._read(); if(d.code&&d.qty>0) materials.push(d); });
+      [].forEach.call(cmpLines.children, function(r){ var d=r._read(); if(d.code&&d.qty>0) components.push(d); });
+      return {
+        operations:operations, materials:materials, components:components,
+        urgency:+document.getElementById('urg').value||0,
+        engCoef:+document.getElementById('eng').value||0,
+        montazh:document.getElementById('montazh').checked?1:0,
+        shleifRate:(+document.getElementById('shleif').value||0)/100,
+        taxRate:(+document.getElementById('tax').value||0)/100
+      };
+    }
+
+    var lastResult=null;
+    function recompute(){
+      var inp=gather();
+      var res=CALC.compute(inp);
+      lastResult={inputs:inp, result:res};
+      // per-line totals back onto rows (match by index of valid rows)
+      paintLineTotals(res);
+      // breakdown
+      var brk=document.getElementById('brk'); brk.innerHTML='';
+      function r(label,val){ if(!val) return; var d=document.createElement('div'); d.className='r'; d.innerHTML='<span>'+label+'</span><b>'+fmt(val)+' ₸</b>'; brk.appendChild(d); }
+      r('Работы', res.opsBase);
+      r('Шлейф', res.shleif);
+      r('Материалы', res.materials);
+      r('Компоненты (материал)', res.componentsMat);
+      r('Компоненты (работа)', res.componentsLabor);
+      r('Монтаж', res.montazh);
+      r('Срочность', res.urgency);
+      r('Инженерные', res.engineering);
+      r('Подытог', res.subtotal);
+      r('Налог '+Math.round(res.taxRate*100)+'%', res.taxAmount);
+      document.getElementById('totalBig').innerHTML = fmt(res.total)+' <span>₸ с налогом</span>';
+      t.sizeTo('body');
+    }
+    function paintLineTotals(res){
+      // recompute each row independently for its own line total display
+      function paint(container, kindReader){
+        [].forEach.call(container.children, function(row){
+          var d=row._read();
+          row._lt.textContent = fmt(kindReader(d))+' ₸';
+        });
+      }
+      var tax=lastResult.inputs.taxRate, shl=lastResult.inputs.shleifRate;
+      var bare={ taxRate:0, engCoef:0, shleifRate:0, montazh:0, urgency:0 };
+      paint(opLines, function(d){
+        if(!(d.qty>0&&d.thickness>0)) return 0;
+        return CALC.compute(Object.assign({operations:[d]}, bare)).subtotal;
+      });
+      paint(matLines, function(d){
+        if(!(d.code&&d.qty>0)) return 0;
+        return CALC.compute(Object.assign({materials:[d]}, bare)).subtotal;
+      });
+      paint(cmpLines, function(d){
+        if(!(d.code&&d.qty>0)) return 0;
+        return CALC.compute(Object.assign({components:[d]}, bare)).subtotal;
+      });
+    }
+
+    // ---- context (card / company / object / dxf) ----
+    var ctx={ cardId:null, cardName:'', boardId:'', status:'', companyId:null, companyName:'', objectName:'' };
+    var dxfMetrics={};
+
+    function loadContext(){
+      return t.card('id','name','idList','idBoard').then(function(card){
+        ctx.cardId=card.id; ctx.cardName=card.name; ctx.boardId=card.idBoard;
+        return t.list('name').then(function(l){ ctx.status=l&&l.name||''; }).catch(function(){});
+      }).then(function(){
+        return window.CRM.getCardCompanyId(t).then(function(cid){
+          if(!cid) return;
+          ctx.companyId=cid;
+          return window.CRM.getCompanyById(t,cid).then(function(co){
+            if(!co) return;
+            ctx.companyName=co.name||'';
+            return window.CRM.getCardObjectId(t).then(function(oid){
+              if(oid && co.objects){ var o=co.objects.filter(function(x){return x.id===oid;})[0]; if(o) ctx.objectName=o.name||''; }
+            }).catch(function(){});
+          });
+        }).catch(function(){});
+      }).then(function(){
+        return t.get('card','shared','dxfMetrics',{}).then(function(all){ dxfMetrics=all||{}; }).catch(function(){});
+      }).then(function(){
+        var meta=[];
+        if(ctx.companyName) meta.push('Компания: '+ctx.companyName);
+        if(ctx.objectName) meta.push('Объект: '+ctx.objectName);
+        if(ctx.status) meta.push('Статус: '+ctx.status);
+        document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
+        document.getElementById('meta').textContent = meta.join('  ·  ') || 'без компании';
+        var n=Object.keys(dxfMetrics).length;
+        document.getElementById('dxfHint').textContent = n? ('найдено DXF-расчётов: '+n) : 'на карточке нет сохранённых DXF-расчётов';
+        document.getElementById('pullDxf').disabled = !n;
+      });
+    }
+
+    // best-effort map DXF material+thickness -> sheet catalog code
+    function guessSheetCode(material, thickness){
+      var m=(material||'').toLowerCase();
+      var grade = m.indexOf('304')>=0 ? 'ЛИСТ 304' : m.indexOf('430')>=0 ? 'ЛИСТ 430' : (m.indexOf('черн')>=0||m.indexOf('ст3')>=0) ? 'ЛИСТ черн' : null;
+      var best=null;
+      Object.keys(CALC.MAT).forEach(function(code){
+        var M=CALC.MAT[code]; if(!M.sec) return;
+        if(grade && M.sec.indexOf(grade)<0) return;
+        // match thickness in label like "2мм (м2)"
+        var lbl=(M.lbl||'').replace(',', '.');
+        var num=parseFloat(lbl);
+        if(!isNaN(num) && Math.abs(num - (+thickness||-1))<1e-6){ if(!best) best=code; }
+      });
+      return best;
+    }
+
+    document.getElementById('pullDxf').onclick=function(){
+      var added=0;
+      Object.keys(dxfMetrics).forEach(function(k){
+        var m=dxfMetrics[k]||{}; var q=+m.quantity||1; var th=+m.thicknessMm||0;
+        if(m.cutLenM>0 && th>0){ opLines.appendChild(makeOpRow({kind:'cut', thickness:nearestTh(th), qty:round3(m.cutLenM*q)})); added++; }
+        if(m.bendCount>0 && th>0){ opLines.appendChild(makeOpRow({kind:'bend', thickness:nearestTh(th), qty:Math.round(m.bendCount*q)})); added++; }
+        if(m.partAreaM2>0){
+          var code=guessSheetCode(m.material, nearestTh(th));
+          matLines.appendChild(makeCatRow(MATG, {code:code||'', qty:round3(m.partAreaM2*q)}, 'м²')); added++;
+        }
+      });
+      document.getElementById('dxfHint').textContent = added? ('добавлено строк из DXF: '+added+' — проверьте толщину/материал') : 'нечего добавить';
+      recompute();
+    };
+    function nearestTh(th){ var best=TH[0],bd=1e9; TH.forEach(function(x){var d=Math.abs(x-th); if(d<bd){bd=d;best=x;}}); return best; }
+    function round3(x){ return Math.round(x*1000)/1000; }
+
+    // ---- restore saved inputs ----
+    function restore(){
+      return t.get('card','shared','calcData',null).then(function(d){
+        if(!d || !d.inputs) { opLines.appendChild(makeOpRow()); return; }
+        var i=d.inputs;
+        (i.operations||[]).forEach(function(o){ opLines.appendChild(makeOpRow(o)); });
+        (i.materials||[]).forEach(function(m){ matLines.appendChild(makeCatRow(MATG,m,'м²/м')); });
+        (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });
+        if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
+        if(i.engCoef!=null) document.getElementById('eng').value=i.engCoef;
+        if(i.montazh) document.getElementById('montazh').checked=true;
+        if(i.shleifRate!=null) document.getElementById('shleif').value=Math.round(i.shleifRate*100);
+        if(i.taxRate!=null) document.getElementById('tax').value=Math.round(i.taxRate*100);
+        if(!opLines.children.length && !matLines.children.length && !cmpLines.children.length) opLines.appendChild(makeOpRow());
+      }).catch(function(){ opLines.appendChild(makeOpRow()); });
+    }
+
+    // ---- save ----
+    document.getElementById('btnClose').onclick=function(){ t.closeModal(); };
+    document.getElementById('btnSave').onclick=function(){
+      var btn=this; var msg=document.getElementById('msg');
+      msg.className='msg'; msg.textContent='Сохранение…'; btn.disabled=true;
+      var inp=lastResult.inputs, res=lastResult.result;
+      var calcData={ inputs:inp, subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total, savedAt:new Date().toISOString() };
+      // 1) save to the card (compact)
+      t.set('card','shared','calcData',calcData).then(function(){
+        // 2) log to central D1 via Worker
+        var payload={
+          cardId:ctx.cardId, cardName:ctx.cardName, boardId:ctx.boardId,
+          companyId:ctx.companyId, companyName:ctx.companyName, objectName:ctx.objectName, status:ctx.status,
+          subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total, currency:'KZT',
+          lineItems:res.lineItems, inputs:inp
+        };
+        return fetch(WORKER+'/calc-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+          .then(function(r){ return r.json(); });
+      }).then(function(out){
+        if(out && out.ok){ msg.className='msg ok'; msg.textContent='Сохранено в карточку и в базу.'; }
+        else { msg.className='msg ok'; msg.textContent='Сохранено в карточку. База: '+((out&&out.error)||'не записано'); }
+        btn.disabled=false;
+        setTimeout(function(){ t.closeModal(); }, 900);
+      }).catch(function(e){
+        msg.className='msg err'; msg.textContent='Сохранено в карточку, но база недоступна: '+(e&&e.message||'сеть');
+        btn.disabled=false;
+      });
+    };
+
+    // ---- init ----
+    loadContext().then(restore).then(function(){ recompute(); t.sizeTo('body'); });
+  })();
+  </script>
+</body>
+</html>

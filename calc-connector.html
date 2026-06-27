@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Калькулятор стоимости - Connector</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+  <script>
+    // Adds a "Калькулятор стоимости" section to the card back with a button
+    // that opens the full calculator modal. Stores results on the card and
+    // logs every order to the central D1 database via the Worker.
+    window.TrelloPowerUp.initialize({
+      'card-back-section': function (t, options) {
+        return {
+          title: 'Калькулятор стоимости',
+          icon: t.signUrl('./calc-icon.svg'),
+          content: {
+            type: 'iframe',
+            url: t.signUrl('./calc-section.html'),
+            height: 96
+          }
+        };
+      }
+    });
+  </script>
+</body>
+</html>
