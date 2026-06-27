@@ -63,6 +63,11 @@
       <div id="metrics"></div>
 
       <div class="group">
+        <label for="quantity">Количество, шт</label>
+        <input type="number" id="quantity" min="1" step="1" value="1" placeholder="например, 5" />
+      </div>
+
+      <div class="group">
         <label>Число гибов (можно поправить)</label>
         <div class="bend-edit">
           <input type="number" id="bendInput" min="0" step="1" />
@@ -185,6 +190,7 @@
           if (rec.thicknessMm!=null) document.getElementById('thickness').value = rec.thicknessMm;
           if (rec.material) document.getElementById('material').value = rec.material;
           if (rec.bendCount!=null) document.getElementById('bendInput').value = rec.bendCount;
+          if (rec.quantity!=null) document.getElementById('quantity').value = rec.quantity;
         }
       }).catch(function(){});
     }
@@ -237,6 +243,7 @@
         bboxAreaM2: m.bboxAreaM2, partAreaM2: m.partAreaM2,
         cutLenM: m.cutLenM,
         bendCount: parseInt(document.getElementById('bendInput').value,10) || 0,
+        quantity: parseInt(document.getElementById('quantity').value,10) || 1,
         thicknessMm: parseFloat(document.getElementById('thickness').value) || null,
         material: document.getElementById('material').value || null,
         unitName: m.unitName,
