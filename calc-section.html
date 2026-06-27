@@ -25,11 +25,17 @@
     function fmt(n){ return (Math.round((+n||0))).toLocaleString('ru-RU'); }
 
     function openCalc(){
-      return t.modal({
-        title: 'Калькулятор стоимости',
-        url: './calc-modal.html?t=' + Date.now(),
-        fullscreen: true,
-        accentColor: '#0c66e4'
+      return t.card('id','name','idBoard').then(function(card){
+        return t.list('name').then(function(l){ return l&&l.name||''; }).catch(function(){ return ''; })
+          .then(function(status){
+            return t.modal({
+              title: 'Калькулятор стоимости',
+              url: './calc-modal.html?t=' + Date.now(),
+              fullscreen: true,
+              accentColor: '#0c66e4',
+              args: { cardId: card.id, boardId: card.idBoard, cardName: card.name||'', status: status }
+            });
+          });
       });
     }
 

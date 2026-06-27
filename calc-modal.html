@@ -60,7 +60,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v4 · загрузка…</div>
+    <div class="sub" id="meta">v5 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -307,20 +307,28 @@
     var dxfMetrics={};
 
     function loadContext(){
-      return t.card('id','name','idList','idBoard').then(function(card){
-        ctx.cardId=card.id; ctx.cardName=card.name; ctx.boardId=card.idBoard;
-        return t.list('name').then(function(l){ ctx.status=l&&l.name||''; }).catch(function(){});
-      }).then(function(){
+      ctx.cardId  = t.arg('cardId')  || null;
+      ctx.boardId = t.arg('boardId') || '';
+      ctx.cardName= t.arg('cardName')|| '';
+      ctx.status  = t.arg('status')  || '';
+      return Promise.resolve().then(function(){
+        if(!ctx.cardId){ ctx._diag='Модал открыт без cardId — обновите calc-section.html (он передаёт args).'; return; }
         return fetchBridge().then(applyBridge);
-      }).then(function(){
-        var meta=[];
-        if(ctx.companyName) meta.push('Компания: '+ctx.companyName);
-        if(ctx.objectName) meta.push('Объект: '+ctx.objectName);
-        if(ctx.status) meta.push('Статус: '+ctx.status);
-        document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
-        document.getElementById('meta').textContent = (meta.join('  ·  ') || 'без компании') + '   ·   v4';
-        renderDxfHint();
+      }).then(finishMeta).catch(function(e){
+        ctx._diag='loadContext: '+(e&&e.message||e); finishMeta();
       });
+    }
+    function finishMeta(){
+      var meta=[];
+      if(ctx.companyName) meta.push('Компания: '+ctx.companyName);
+      if(ctx.objectName) meta.push('Объект: '+ctx.objectName);
+      if(ctx.status) meta.push('Статус: '+ctx.status);
+      document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
+      document.getElementById('meta').textContent =
+        (meta.join('  ·  ') || 'без компании')
+        + '   ·   v5   ·   card …'+String(ctx.cardId||'?').slice(-6)
+        + '   ·   DXF:'+Object.keys(dxfMetrics).length;
+      renderDxfHint();
     }
 
     function fetchBridge(){
