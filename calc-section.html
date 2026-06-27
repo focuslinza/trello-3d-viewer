@@ -24,26 +24,29 @@
     var t = window.TrelloPowerUp.iframe();
     function fmt(n){ return (Math.round((+n||0))).toLocaleString('ru-RU'); }
 
+    var CARD = { id:null, board:'', name:'', status:'' };
+
     function openCalc(){
-      return t.card('id','name','idBoard').then(function(card){
-        return { id:card&&card.id||null, board:card&&card.idBoard||'', name:card&&card.name||'' };
-      }).catch(function(){ return { id:null, board:'', name:'' }; })
-      .then(function(c){
-        return t.list('name').then(function(l){ return { c:c, status:(l&&l.name)||'' }; })
-                             .catch(function(){ return { c:c, status:'' }; });
-      }).then(function(o){
-        return t.modal({
-          title: 'Калькулятор стоимости',
-          url: './calc-modal.html?t=' + Date.now(),
-          fullscreen: true,
-          accentColor: '#0c66e4',
-          args: { cardId: o.c.id, boardId: o.c.board, cardName: o.c.name, status: o.status }
-        });
+      return t.modal({
+        title: 'Калькулятор стоимости',
+        url: './calc-modal.html?t=' + Date.now(),
+        fullscreen: true,
+        accentColor: '#0c66e4',
+        args: { cardId: CARD.id, boardId: CARD.board, cardName: CARD.name, status: CARD.status }
       });
     }
 
     t.render(function(){
-      return t.get('card','shared','calcData', null).then(function(d){
+      // capture card context once (t.card works in card-back-section)
+      return t.card('id','name','idBoard').then(function(card){
+        CARD.id = card && card.id || null;
+        CARD.board = card && card.idBoard || '';
+        CARD.name = card && card.name || '';
+      }).catch(function(){}).then(function(){
+        // status is optional — fire-and-forget so it can never block rendering
+        try { t.list('name').then(function(l){ CARD.status=(l&&l.name)||''; }).catch(function(){}); } catch(e){}
+        return t.get('card','shared','calcData', null);
+      }).then(function(d){
         var el=document.getElementById('wrap');
         el.innerHTML='';
         var row=document.createElement('div'); row.className='row';
