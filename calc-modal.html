@@ -332,8 +332,9 @@
         document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
         document.getElementById('meta').textContent = meta.join('  ·  ') || 'без компании';
         var n=Object.keys(dxfMetrics).length;
-        document.getElementById('dxfHint').textContent = n? ('найдено DXF-расчётов: '+n) : 'на карточке нет сохранённых DXF-расчётов';
-        document.getElementById('pullDxf').disabled = !n;
+        document.getElementById('dxfHint').textContent = n
+          ? ('найдено DXF-расчётов: '+n+' — нажмите «Загрузить из DXF»')
+          : 'Нет сохранённого DXF-расчёта. Откройте раздел «DXF / Раскрой» → «Открыть / Расчёт» → укажите толщину → «Сохранить расчёт».';
       });
     }
 
@@ -354,17 +355,25 @@
     }
 
     document.getElementById('pullDxf').onclick=function(){
-      var added=0;
-      Object.keys(dxfMetrics).forEach(function(k){
+      var keys=Object.keys(dxfMetrics);
+      if(!keys.length){
+        document.getElementById('dxfHint').textContent='Нет сохранённого DXF-расчёта на этой карточке. Сначала сохраните его в разделе «DXF / Раскрой».';
+        return;
+      }
+      var added=0, missingTh=0;
+      keys.forEach(function(k){
         var m=dxfMetrics[k]||{}; var q=+m.quantity||1; var th=+m.thicknessMm||0;
-        if(m.cutLenM>0 && th>0){ opLines.appendChild(makeOpRow({kind:'cut', thickness:nearestTh(th), qty:round3(m.cutLenM*q)})); added++; }
-        if(m.bendCount>0 && th>0){ opLines.appendChild(makeOpRow({kind:'bend', thickness:nearestTh(th), qty:Math.round(m.bendCount*q)})); added++; }
+        if(m.cutLenM>0){ if(th>0){ opLines.appendChild(makeOpRow({kind:'cut', thickness:nearestTh(th), qty:round3(m.cutLenM*q)})); added++; } else missingTh++; }
+        if(m.bendCount>0){ if(th>0){ opLines.appendChild(makeOpRow({kind:'bend', thickness:nearestTh(th), qty:Math.round(m.bendCount*q)})); added++; } else missingTh++; }
         if(m.partAreaM2>0){
           var code=guessSheetCode(m.material, nearestTh(th));
           matLines.appendChild(makeCatRow(MATG, {code:code||'', qty:round3(m.partAreaM2*q)}, 'м²')); added++;
         }
       });
-      document.getElementById('dxfHint').textContent = added? ('добавлено строк из DXF: '+added+' — проверьте толщину/материал') : 'нечего добавить';
+      var h=document.getElementById('dxfHint');
+      if(added){ h.textContent='Добавлено строк из DXF: '+added+' — проверьте толщину/материал.'+(missingTh?' В части расчётов не указана толщина — рез/гиб не добавлены.':''); }
+      else if(missingTh){ h.textContent='В DXF-расчёте не указана толщина — откройте «DXF / Раскрой», задайте толщину и нажмите «Сохранить расчёт».'; }
+      else { h.textContent='В DXF-расчёте нет данных площади/реза для добавления.'; }
       recompute();
     };
     function nearestTh(th){ var best=TH[0],bd=1e9; TH.forEach(function(x){var d=Math.abs(x-th); if(d<bd){bd=d;best=x;}}); return best; }
