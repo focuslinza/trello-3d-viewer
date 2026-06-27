@@ -311,19 +311,22 @@
         ctx.cardId=card.id; ctx.cardName=card.name; ctx.boardId=card.idBoard;
         return t.list('name').then(function(l){ ctx.status=l&&l.name||''; }).catch(function(){});
       }).then(function(){
-        return window.CRM.getCardCompanyId(t).then(function(cid){
-          if(!cid) return;
-          ctx.companyId=cid;
-          return window.CRM.getCompanyById(t,cid).then(function(co){
-            if(!co) return;
-            ctx.companyName=co.name||'';
-            return window.CRM.getCardObjectId(t).then(function(oid){
+        // cross-power-up read via Worker (Trello REST): DXF metrics + CRM company
+        var u=WORKER+'/plugindata?cardId='+encodeURIComponent(ctx.cardId)+(ctx.boardId?'&boardId='+encodeURIComponent(ctx.boardId):'');
+        return fetch(u).then(function(r){ return r.json(); }).then(function(d){
+          if(!d||!d.ok) return;
+          var cd=d.cardData||{}, bd=d.boardData||{};
+          dxfMetrics = cd.dxfMetrics || {};
+          var cid=cd.companyId;
+          if(cid && Array.isArray(bd.companies)){
+            var co=bd.companies.filter(function(x){return x.id===cid;})[0];
+            if(co){
+              ctx.companyId=cid; ctx.companyName=co.name||'';
+              var oid=cd.objectId;
               if(oid && co.objects){ var o=co.objects.filter(function(x){return x.id===oid;})[0]; if(o) ctx.objectName=o.name||''; }
-            }).catch(function(){});
-          });
+            }
+          }
         }).catch(function(){});
-      }).then(function(){
-        return t.get('card','shared','dxfMetrics',{}).then(function(all){ dxfMetrics=all||{}; }).catch(function(){});
       }).then(function(){
         var meta=[];
         if(ctx.companyName) meta.push('Компания: '+ctx.companyName);
