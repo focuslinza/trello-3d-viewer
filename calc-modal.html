@@ -60,7 +60,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v5 · загрузка…</div>
+    <div class="sub" id="meta">v6 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -311,8 +311,19 @@
       ctx.boardId = t.arg('boardId') || '';
       ctx.cardName= t.arg('cardName')|| '';
       ctx.status  = t.arg('status')  || '';
+      ctx._src = ctx.cardId ? 'arg' : '';
       return Promise.resolve().then(function(){
-        if(!ctx.cardId){ ctx._diag='Модал открыт без cardId — обновите calc-section.html (он передаёт args).'; return; }
+        if(ctx.cardId) return;
+        // fallback: ask the card directly from inside the modal
+        return t.card('id','name').then(function(c){
+          if(c&&c.id){ ctx.cardId=c.id; ctx.cardName=ctx.cardName||c.name||''; ctx._src='card'; }
+        }).catch(function(){});
+      }).then(function(){
+        if(ctx.cardId && !ctx.boardId){
+          return t.board('id').then(function(b){ ctx.boardId=(b&&b.id)||''; }).catch(function(){});
+        }
+      }).then(function(){
+        if(!ctx.cardId){ ctx._diag='Не удалось получить cardId (ни из args, ни из t.card).'; return; }
         return fetchBridge().then(applyBridge);
       }).then(finishMeta).catch(function(e){
         ctx._diag='loadContext: '+(e&&e.message||e); finishMeta();
@@ -326,7 +337,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v5   ·   card …'+String(ctx.cardId||'?').slice(-6)
+        + '   ·   v6   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
