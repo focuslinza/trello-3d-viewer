@@ -313,20 +313,29 @@
       }).then(function(){
         // cross-power-up read via Worker (Trello REST): DXF metrics + CRM company
         var u=WORKER+'/plugindata?cardId='+encodeURIComponent(ctx.cardId)+(ctx.boardId?'&boardId='+encodeURIComponent(ctx.boardId):'');
-        return fetch(u).then(function(r){ return r.json(); }).then(function(d){
-          if(!d||!d.ok) return;
-          var cd=d.cardData||{}, bd=d.boardData||{};
-          dxfMetrics = cd.dxfMetrics || {};
-          var cid=cd.companyId;
-          if(cid && Array.isArray(bd.companies)){
-            var co=bd.companies.filter(function(x){return x.id===cid;})[0];
-            if(co){
-              ctx.companyId=cid; ctx.companyName=co.name||'';
-              var oid=cd.objectId;
-              if(oid && co.objects){ var o=co.objects.filter(function(x){return x.id===oid;})[0]; if(o) ctx.objectName=o.name||''; }
+        return fetch(u).then(function(r){
+          return r.json().then(function(j){ return {status:r.status, j:j}; })
+                         .catch(function(){ return {status:r.status, j:null}; });
+        }).then(function(res){
+          if(res.j && res.j.ok){
+            var cd=res.j.cardData||{}, bd=res.j.boardData||{};
+            dxfMetrics = cd.dxfMetrics || {};
+            ctx._dxfKeys = Object.keys(dxfMetrics).length;
+            var cid=cd.companyId;
+            if(cid && Array.isArray(bd.companies)){
+              var co=bd.companies.filter(function(x){return x.id===cid;})[0];
+              if(co){
+                ctx.companyId=cid; ctx.companyName=co.name||'';
+                var oid=cd.objectId;
+                if(oid && co.objects){ var o=co.objects.filter(function(x){return x.id===oid;})[0]; if(o) ctx.objectName=o.name||''; }
+              }
             }
+          } else {
+            ctx._diag = 'Worker /plugindata вернул HTTP '+res.status+(res.j&&res.j.error?(': '+res.j.error):'. Похоже, Worker не обновлён — задеплойте новый worker.js.');
           }
-        }).catch(function(){});
+        }).catch(function(e){
+          ctx._diag = 'Не удалось обратиться к Worker /plugindata: '+(e&&e.message||'сеть')+'. Проверьте, что Worker задеплоен.';
+        });
       }).then(function(){
         var meta=[];
         if(ctx.companyName) meta.push('Компания: '+ctx.companyName);
@@ -335,9 +344,11 @@
         document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
         document.getElementById('meta').textContent = meta.join('  ·  ') || 'без компании';
         var n=Object.keys(dxfMetrics).length;
-        document.getElementById('dxfHint').textContent = n
-          ? ('найдено DXF-расчётов: '+n+' — нажмите «Загрузить из DXF»')
-          : 'Нет сохранённого DXF-расчёта. Откройте раздел «DXF / Раскрой» → «Открыть / Расчёт» → укажите толщину → «Сохранить расчёт».';
+        document.getElementById('dxfHint').textContent = ctx._diag
+          ? ctx._diag
+          : (n
+            ? ('найдено DXF-расчётов: '+n+' — нажмите «Загрузить из DXF»')
+            : 'Нет сохранённого DXF-расчёта на этой карточке. Сначала сохраните его в разделе «DXF / Раскрой» («Открыть / Расчёт» → толщина → «Сохранить расчёт»).');
       });
     }
 
