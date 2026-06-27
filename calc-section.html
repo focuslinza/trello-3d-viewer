@@ -27,7 +27,7 @@
     function openCalc(){
       return t.modal({
         title: 'Калькулятор стоимости',
-        url: './calc-modal.html',
+        url: './calc-modal.html?t=' + Date.now(),
         fullscreen: true,
         accentColor: '#0c66e4'
       });
