@@ -37,13 +37,14 @@
     }
 
     t.render(function(){
-      // capture card context once (t.card works in card-back-section)
-      return t.card('id','name','idBoard').then(function(card){
+      // capture card id/name with the minimal field set (matches the working DXF section)
+      return t.card('id','name').then(function(card){
         CARD.id = card && card.id || null;
-        CARD.board = card && card.idBoard || '';
         CARD.name = card && card.name || '';
       }).catch(function(){}).then(function(){
-        // status is optional — fire-and-forget so it can never block rendering
+        return t.board('id').then(function(b){ CARD.board=(b&&b.id)||''; }).catch(function(){});
+      }).then(function(){
+        // list (status) is optional — fire-and-forget so it can never block the chain
         try { t.list('name').then(function(l){ CARD.status=(l&&l.name)||''; }).catch(function(){}); } catch(e){}
         return t.get('card','shared','calcData', null);
       }).then(function(d){
