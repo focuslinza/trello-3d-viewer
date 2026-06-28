@@ -5,6 +5,7 @@
   <title>DXF Viewer</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.js"></script>
+  <script src="./calc-engine.js?v=8"></script>
   <style>
     html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden;
       font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:#172b4d; }
@@ -81,16 +82,9 @@
       </div>
 
       <div class="group">
-        <label for="material">Тип металла</label>
+        <label for="material">Материал листа (как в калькуляторе)</label>
         <select id="material">
           <option value="">— выберите —</option>
-          <option>Сталь</option>
-          <option>Нержавеющая сталь</option>
-          <option>Алюминий</option>
-          <option>Оцинкованная сталь</option>
-          <option>Латунь</option>
-          <option>Медь</option>
-          <option>Другое</option>
         </select>
       </div>
 
@@ -106,6 +100,45 @@
   <script>
     var t = window.TrelloPowerUp.iframe();
     var cardId = t.arg('cardId'), attachmentId = t.arg('attachmentId'), fileName = t.arg('fileName');
+
+    // ---- sheet material catalog (identical to the calculator) ----
+    function parseThicknessFromLabel(lbl){
+      // "2мм (м2)", "0,8мм (м2)", "1.5мм (м2)", "1мм Рифл (м2)"
+      var mm = String(lbl||'').replace(',', '.').match(/([\d.]+)\s*мм/i);
+      return mm ? parseFloat(mm[1]) : null;
+    }
+    function buildMaterialOptions(){
+      var sel = document.getElementById('material');
+      if (!window.CALC || !window.CALC.MAT) return;
+      var MAT = window.CALC.MAT;
+      // group sheets (sections starting with "ЛИСТ") by section
+      var groups = {}, order = [];
+      Object.keys(MAT).forEach(function(code){
+        var sec = MAT[code].sec || '';
+        if (sec.indexOf('ЛИСТ') !== 0) return; // sheets only — DXF parts are cut from sheet
+        if (!groups[sec]) { groups[sec] = []; order.push(sec); }
+        groups[sec].push({ code: code, lbl: MAT[code].lbl, spec: MAT[code].spec, th: parseThicknessFromLabel(MAT[code].lbl) });
+      });
+      order.forEach(function(sec){
+        var og = document.createElement('optgroup'); og.label = sec;
+        groups[sec].forEach(function(it){
+          var o = document.createElement('option');
+          o.value = it.code;
+          o.textContent = it.lbl + (it.spec ? '  ['+it.spec+']' : '');
+          o.setAttribute('data-th', it.th!=null ? it.th : '');
+          o.setAttribute('data-name', sec + ' ' + it.lbl);
+          og.appendChild(o);
+        });
+        sel.appendChild(og);
+      });
+      // picking a material auto-fills thickness (still editable)
+      sel.addEventListener('change', function(){
+        var opt = sel.options[sel.selectedIndex];
+        var th = opt && opt.getAttribute('data-th');
+        if (th) document.getElementById('thickness').value = th;
+      });
+    }
+    buildMaterialOptions();
 
     var ovText = document.getElementById('ov-text');
     var overlay = document.getElementById('overlay');
@@ -188,7 +221,7 @@
         var rec = all && all[attachmentId];
         if (rec){
           if (rec.thicknessMm!=null) document.getElementById('thickness').value = rec.thicknessMm;
-          if (rec.material) document.getElementById('material').value = rec.material;
+          if (rec.materialCode) document.getElementById('material').value = rec.materialCode;
           if (rec.bendCount!=null) document.getElementById('bendInput').value = rec.bendCount;
           if (rec.quantity!=null) document.getElementById('quantity').value = rec.quantity;
         }
@@ -223,7 +256,7 @@
 
         var note = 'Единицы файла: '+m.unitName+'. ';
         if (!m.unitsAreMm) note += 'Внимание: файл, похоже, не в миллиметрах — проверьте габарит. ';
-        note += 'Площадь и длина реза вычислены по геометрии. Число гибов определено по слою с названием вроде «BEND/СГИБ» — если в вашем DXF гибы на другом слое, поправьте число вручную. Толщина и материал в DXF обычно не хранятся, поэтому вводятся вручную.';
+        note += 'Площадь и длина реза вычислены по геометрии. Число гибов определено по слою с названием вроде «BEND/СГИБ» — если в вашем DXF гибы на другом слое, поправьте число вручную. Толщина в DXF не хранится: выберите материал листа из списка (как в калькуляторе) — толщина подставится автоматически, при необходимости поправьте.';
         document.getElementById('note').textContent = note;
 
         // store computed metrics for saving
@@ -237,6 +270,8 @@
     // ---------- save ----------
     document.getElementById('saveBtn').addEventListener('click', function(){
       var m = window.__computed; if(!m) return;
+      var matSel = document.getElementById('material');
+      var matOpt = matSel.options[matSel.selectedIndex];
       var rec = {
         fileName: fileName,
         bboxW_mm: m.bboxW_mm, bboxH_mm: m.bboxH_mm,
@@ -245,7 +280,8 @@
         bendCount: parseInt(document.getElementById('bendInput').value,10) || 0,
         quantity: parseInt(document.getElementById('quantity').value,10) || 1,
         thicknessMm: parseFloat(document.getElementById('thickness').value) || null,
-        material: document.getElementById('material').value || null,
+        materialCode: matSel.value || null,
+        material: (matOpt && matOpt.getAttribute('data-name')) || null,
         unitName: m.unitName,
         savedAt: Date.now()
       };

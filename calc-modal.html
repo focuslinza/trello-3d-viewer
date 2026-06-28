@@ -407,7 +407,7 @@
         if(m.cutLenM>0){ if(th>0){ opLines.appendChild(makeOpRow({kind:'cut', thickness:nearestTh(th), qty:round3(m.cutLenM*q)})); added++; } else missingTh++; }
         if(m.bendCount>0){ if(th>0){ opLines.appendChild(makeOpRow({kind:'bend', thickness:nearestTh(th), qty:Math.round(m.bendCount*q)})); added++; } else missingTh++; }
         if(m.partAreaM2>0){
-          var code=guessSheetCode(m.material, nearestTh(th));
+          var code = m.materialCode || guessSheetCode(m.material, nearestTh(th));
           matLines.appendChild(makeCatRow(MATG, {code:code||'', qty:round3(m.partAreaM2*q)}, 'м²')); added++;
         }
       });
