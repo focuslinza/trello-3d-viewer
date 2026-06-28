@@ -21,6 +21,19 @@
             height: 96
           }
         };
+      },
+      'board-buttons': function (t, options) {
+        return [{
+          icon: { dark: t.signUrl('./calc-icon.svg'), light: t.signUrl('./calc-icon.svg') },
+          text: 'Зарплата / Работники',
+          callback: function (t) {
+            return t.modal({
+              url: t.signUrl('./workers-modal.html') + '?t=' + Date.now(),
+              fullscreen: true,
+              title: 'Зарплата и работники'
+            });
+          }
+        }];
       }
     });
   </script>

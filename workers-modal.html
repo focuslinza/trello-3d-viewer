@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Зарплата и работники</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{
+      --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3;
+      --muted:#9fadbc; --accent:#4f8cff; --accent2:#2f6f4f; --danger:#b04a4a;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+      font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px}
+    #app{max-width:900px;margin:0 auto;padding:16px 16px 40px}
+    h2{margin:0 0 4px;font-size:18px}
+    .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+    .sec{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+    .sec h3{margin:0 0 10px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+    input,select{background:var(--bg);color:var(--txt);border:1px solid var(--line);
+      border-radius:8px;padding:8px 10px;font-size:14px;width:100%}
+    input:focus,select:focus{outline:none;border-color:var(--accent)}
+    .daysrow{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+    .daysrow .group{min-width:160px}
+    .hint{color:var(--muted);font-size:12px}
+    table{width:100%;border-collapse:collapse}
+    th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+    th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+    td .nm{min-width:160px}
+    td .sal{max-width:140px;text-align:right}
+    .wage{color:#a8d5b5;white-space:nowrap}
+    .btn{border:1px solid var(--line);background:var(--bg);color:var(--txt);
+      border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px}
+    .btn:hover{border-color:var(--accent)}
+    .btn.save{background:var(--accent2);border-color:var(--accent2)}
+    .btn.del{color:#e9b3b3;border-color:#5a3a3a}
+    .btn.add{border-style:dashed;color:var(--accent);width:100%;padding:10px}
+    .actions{display:flex;gap:6px;justify-content:flex-end}
+    .msg{font-size:12px;color:var(--muted);margin-top:8px;min-height:16px}
+    .empty{color:var(--muted);padding:14px 0}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2>Зарплата и работники</h2>
+    <div class="sub" id="meta">v1 · загрузка…</div>
+
+    <div class="sec">
+      <h3>Рабочие дни месяца</h3>
+      <div class="daysrow">
+        <div class="group">
+          <label for="month">Месяц</label>
+          <input type="month" id="month" />
+        </div>
+        <div class="group">
+          <label for="workdays">Рабочих дней (будни)</label>
+          <input type="number" id="workdays" min="1" max="31" step="1" />
+        </div>
+        <div class="hint" id="autoHint"></div>
+      </div>
+      <div class="hint" style="margin-top:8px">Дневная ставка = оклад ÷ рабочие дни. По умолчанию берутся будни месяца (пн–пт); можно поправить вручную.</div>
+    </div>
+
+    <div class="sec">
+      <h3>Работники</h3>
+      <table id="tbl">
+        <thead>
+          <tr><th>Имя</th><th>Оклад, ₸/мес</th><th>Ставка/день</th><th></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="emptyHint" style="display:none">Пока нет работников. Добавьте первого.</div>
+      <div style="margin-top:12px"><button class="btn add" id="addBtn" type="button">+ добавить работника</button></div>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.WORKER_URL || '').replace(/\/+$/,'');
+    var rowsEl = document.getElementById('rows');
+    var msgEl = document.getElementById('msg');
+
+    function fmt(n){ return (Math.round(n||0)).toLocaleString('ru-RU'); }
+    function workdaysInMonth(y, m){ // m: 1-12
+      var d=new Date(y, m-1, 1), n=0;
+      while(d.getMonth()===m-1){ var wd=d.getDay(); if(wd>=1&&wd<=5)n++; d.setDate(d.getDate()+1); }
+      return n;
+    }
+    function currentWorkdays(){
+      var v=parseInt(document.getElementById('workdays').value,10);
+      return (v && v>0) ? v : 22;
+    }
+    function recalcWages(){
+      var wd=currentWorkdays();
+      [].forEach.call(rowsEl.querySelectorAll('tr'), function(tr){
+        var sal=parseFloat(tr.querySelector('.sal').value)||0;
+        tr.querySelector('.wage').textContent = fmt(sal/wd)+' ₸';
+      });
+    }
+
+    function makeRow(w){
+      w = w || { id:'', name:'', salary:'' };
+      var tr=document.createElement('tr');
+      tr.setAttribute('data-id', w.id||'');
+      tr.innerHTML =
+        '<td><input class="nm" type="text" placeholder="Имя работника" value="'+(w.name?String(w.name).replace(/"/g,'&quot;'):'')+'"></td>'+
+        '<td><input class="sal" type="number" min="0" step="1000" placeholder="например, 400000" value="'+(w.salary!=null?w.salary:'')+'"></td>'+
+        '<td class="wage">—</td>'+
+        '<td><div class="actions">'+
+          '<button class="btn save" type="button">Сохранить</button>'+
+          '<button class="btn del" type="button">Удалить</button>'+
+        '</div></td>';
+      tr.querySelector('.sal').addEventListener('input', recalcWages);
+      tr.querySelector('.save').addEventListener('click', function(){ saveRow(tr); });
+      tr.querySelector('.del').addEventListener('click', function(){ delRow(tr); });
+      return tr;
+    }
+
+    function setMsg(s){ msgEl.textContent = s||''; }
+
+    function loadWorkers(){
+      if(!WORKER){ setMsg('Не задан адрес сервера (config.js).'); return; }
+      setMsg('Загрузка…');
+      return fetch(WORKER+'/workers-list?cb='+Date.now())
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          rowsEl.innerHTML='';
+          var ws=(d&&d.workers)||[];
+          ws.forEach(function(w){ rowsEl.appendChild(makeRow(w)); });
+          document.getElementById('emptyHint').style.display = ws.length? 'none':'block';
+          recalcWages();
+          setMsg(ws.length? '' : '');
+          document.getElementById('meta').textContent = 'v1 · работников: '+ws.length;
+        })
+        .catch(function(e){ setMsg('Ошибка загрузки: '+(e&&e.message||e)); });
+    }
+
+    function saveRow(tr){
+      var name=tr.querySelector('.nm').value.trim();
+      var salary=parseFloat(tr.querySelector('.sal').value)||0;
+      if(!name){ setMsg('Введите имя.'); return; }
+      if(!salary){ setMsg('Введите оклад.'); return; }
+      var id=tr.getAttribute('data-id')||'';
+      setMsg('Сохранение…');
+      fetch(WORKER+'/workers-save', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary })
+      }).then(function(r){ return r.json(); })
+        .then(function(d){
+          if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; }
+          else setMsg('Не удалось сохранить: '+(d&&d.error||'?'));
+        }).catch(function(e){ setMsg('Ошибка: '+(e&&e.message||e)); });
+    }
+
+    function delRow(tr){
+      var id=tr.getAttribute('data-id')||'';
+      var name=tr.querySelector('.nm').value.trim()||'работника';
+      if(!id){ tr.remove(); return; } // unsaved row — just drop
+      if(!confirm('Удалить '+name+'? (записи в заказах сохранятся)')) return;
+      setMsg('Удаление…');
+      fetch(WORKER+'/workers-delete', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ id:id })
+      }).then(function(r){ return r.json(); })
+        .then(function(d){
+          if(d&&d.ok){ tr.remove(); setMsg('Удалён: '+name); if(!rowsEl.children.length) document.getElementById('emptyHint').style.display='block'; }
+          else setMsg('Не удалось удалить: '+(d&&d.error||'?'));
+        }).catch(function(e){ setMsg('Ошибка: '+(e&&e.message||e)); });
+    }
+
+    // month / workdays controls
+    (function initMonth(){
+      var now=new Date();
+      var mEl=document.getElementById('month');
+      mEl.value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+      function applyAuto(){
+        var parts=mEl.value.split('-'); var y=+parts[0], m=+parts[1];
+        var auto=workdaysInMonth(y,m);
+        document.getElementById('workdays').value = auto;
+        document.getElementById('autoHint').textContent = 'авто: '+auto+' будних дней';
+        recalcWages();
+      }
+      mEl.addEventListener('change', applyAuto);
+      document.getElementById('workdays').addEventListener('input', recalcWages);
+      applyAuto();
+    })();
+
+    document.getElementById('addBtn').addEventListener('click', function(){
+      var tr=makeRow(); rowsEl.appendChild(tr); document.getElementById('emptyHint').style.display='none';
+      tr.querySelector('.nm').focus();
+    });
+
+    loadWorkers();
+  </script>
+</body>
+</html>
