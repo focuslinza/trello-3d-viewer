@@ -59,7 +59,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v9 · загрузка…</div>
+    <div class="sub" id="meta">v10 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -339,7 +339,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v9   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
+        + '   ·   v10   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
@@ -449,6 +449,16 @@
       var btn=this; var msg=document.getElementById('msg');
       msg.className='msg'; msg.textContent='Сохранение…'; btn.disabled=true;
       var inp=lastResult.inputs, res=lastResult.result;
+      // per-stage costs for the earnings report (Резка/Гибка/Сварка/Сборка/Инженер)
+      var byKind={}; (res.lineItems||[]).forEach(function(li){ if(li.kind) byKind[li.kind]=(byKind[li.kind]||0)+(li.lineTotal||0); });
+      function sk(ks){ return ks.reduce(function(s,k){ return s+(byKind[k]||0); },0); }
+      var stageCosts={
+        eng:(res.engineering||0)+(res.urgency||0),
+        cut:sk(['cut','cutTube']),
+        bend:sk(['bend','bendTube','bendRod']),
+        weld:sk(['weldSS','weldBlack']),
+        assembly:(res.shleif||0)+(res.componentsLabor||0)
+      };
       var calcData={ inputs:inp, subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total, savedAt:new Date().toISOString() };
       // 1) save to the card (compact)
       t.set('card','shared','calcData',calcData).then(function(){
@@ -457,7 +467,7 @@
           cardId:ctx.cardId, cardName:ctx.cardName, boardId:ctx.boardId,
           companyId:ctx.companyId, companyName:ctx.companyName, objectName:ctx.objectName, status:ctx.status,
           subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total, currency:'KZT',
-          lineItems:res.lineItems, inputs:inp
+          lineItems:res.lineItems, inputs:inp, stageCosts:stageCosts
         };
         return fetch(WORKER+'/calc-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
           .then(function(r){ return r.json(); });
