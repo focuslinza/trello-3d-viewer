@@ -59,7 +59,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v8 · загрузка…</div>
+    <div class="sub" id="meta">v9 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -339,7 +339,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v8   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
+        + '   ·   v9   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
@@ -430,7 +430,7 @@
     // ---- restore saved inputs ----
     function restore(){
       return t.get('card','shared','calcData',null).then(function(d){
-        if(!d || !d.inputs) { opLines.appendChild(makeOpRow()); return; }
+        if(!d || !d.inputs) { return; }
         var i=d.inputs;
         (i.operations||[]).forEach(function(o){ opLines.appendChild(makeOpRow(o)); });
         (i.materials||[]).forEach(function(m){ matLines.appendChild(makeCatRow(MATG,m,'м²/м')); });
@@ -440,8 +440,7 @@
         if(i.montazh) document.getElementById('montazh').checked=true;
         if(i.shleifRate!=null) document.getElementById('shleif').value=Math.round(i.shleifRate*100);
         if(i.taxRate!=null) document.getElementById('tax').value=Math.round(i.taxRate*100);
-        if(!opLines.children.length && !matLines.children.length && !cmpLines.children.length) opLines.appendChild(makeOpRow());
-      }).catch(function(){ opLines.appendChild(makeOpRow()); });
+      }).catch(function(){});
     }
 
     // ---- save ----
