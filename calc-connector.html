@@ -34,6 +34,29 @@
             });
           }
         }];
+      },
+      'card-buttons': function (t, options) {
+        // earnings report — visible only to the board admin (director)
+        return Promise.all([ t.member('id'), t.board('memberships') ]).then(function (res) {
+          var me = res[0] || {}, board = res[1] || {};
+          var ms = (board.memberships || []).filter(function (x) { return x.idMember === me.id; })[0];
+          var isAdmin = ms && ms.memberType === 'admin';
+          if (!isAdmin) return [];
+          return [{
+            icon: t.signUrl('./calc-icon.svg'),
+            text: 'Заработок по заказу',
+            callback: function (t) {
+              return t.card('id').then(function (c) {
+                return t.modal({
+                  url: t.signUrl('./earnings-modal.html') + '?t=' + Date.now(),
+                  fullscreen: true,
+                  title: 'Заработок по заказу',
+                  args: { cardId: c && c.id }
+                });
+              });
+            }
+          }];
+        }).catch(function () { return []; });
       }
     });
   </script>

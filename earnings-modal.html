@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Заработок по заказу</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc;
+      --accent:#4f8cff; --accent2:#2f6f4f; --warn:#d8a657; }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+      font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px}
+    #app{max-width:980px;margin:0 auto;padding:16px 16px 44px}
+    h2{margin:0 0 4px;font-size:18px}
+    .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+    .sec{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+    .sec h3{margin:0 0 10px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+    table{width:100%;border-collapse:collapse}
+    th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+    th{font-size:11px;color:var(--muted);text-transform:uppercase}
+    td.num,th.num{text-align:right;white-space:nowrap}
+    .earn{color:#a8d5b5;font-weight:600}
+    .eff{color:#9fc7e8}
+    .stages{color:var(--muted);font-size:12px;margin-top:3px}
+    .warnbox{border:1px solid #5a4a2a;background:#2a2418;border-radius:8px;padding:10px 12px;color:#e6cf9c;font-size:13px;margin-top:6px}
+    .muted{color:var(--muted)}
+    input,select{background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:14px}
+    input[type=text]{width:100%}
+    input[type=number]{width:130px;text-align:right}
+    .mrow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .mrow .nm{flex:1}
+    .chk{display:flex;align-items:center;gap:6px;font-size:13px}
+    .crew{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}
+    .btn{border:1px solid var(--line);background:var(--bg);color:var(--txt);border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px}
+    .btn:hover{border-color:var(--accent)}
+    .btn.save{background:var(--accent2);border-color:var(--accent2)}
+    .btn.add{border-style:dashed;color:var(--accent)}
+    .btn.x{color:#e9b3b3;border-color:#5a3a3a;padding:6px 9px}
+    .msg{font-size:12px;color:var(--muted);margin-top:8px;min-height:16px}
+    .totrow{display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)}
+    .big{font-size:20px;font-weight:700}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2 id="title">Заработок по заказу</h2>
+    <div class="sub" id="meta">v1 · загрузка…</div>
+    <div id="body"></div>
+  </div>
+
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.WORKER_URL || '').replace(/\/+$/,'');
+    var ctx = { cardId:null };
+    var WORKERS = [];
+    var STAGE_LBL = { eng:'Инженер', cut:'Резка', bend:'Гибка', weld:'Сварка', assembly:'Сборка', montazh:'Монтаж' };
+
+    function fmt(n){ return (Math.round(n||0)).toLocaleString('ru-RU'); }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function setMeta(s){ document.getElementById('meta').textContent = s; }
+    function denied(){
+      document.getElementById('body').innerHTML =
+        '<div class="sec"><h3>Доступ ограничен</h3><div class="muted">Отчёт по заработку доступен только директору (администратору доски). '+
+        'Свой личный заработок работник смотрит в разделе «Мой заработок».</div></div>';
+    }
+
+    function loadContext(){
+      ctx.cardId = t.arg('cardId') || null;
+      return Promise.resolve().then(function(){
+        if(ctx.cardId) return;
+        return t.card('id','name').then(function(c){ if(c&&c.id){ ctx.cardId=c.id; } }).catch(function(){});
+      });
+    }
+
+    function checkAdmin(){
+      return Promise.all([ t.member('id'), t.board('memberships') ]).then(function(res){
+        var me=res[0]||{}, board=res[1]||{};
+        var ms=(board.memberships||[]).filter(function(x){return x.idMember===me.id;})[0];
+        return !!(ms && ms.memberType==='admin');
+      }).catch(function(){ return false; });
+    }
+
+    function render(data){
+      var b=document.getElementById('body');
+      var html='';
+
+      // 1) earnings table
+      html+='<div class="sec"><h3>Заработок по этапам (с доски)</h3>';
+      if(!data.hasCalc){
+        html+='<div class="muted">Нет сохранённого расчёта для этой карточки. Откройте «Калькулятор стоимости», сделайте расчёт и нажмите «Сохранить».</div></div>';
+        b.innerHTML=html; return;
+      }
+      if(!data.perWorker.length){
+        html+='<div class="muted">Пока никто не закреплён за этапами этого заказа. Как только работник вытащит карточку из своей колонки (под своим аккаунтом, привязанным в «Зарплата / Работники»), здесь появится строка.</div>';
+      } else {
+        html+='<table><thead><tr><th>Работник</th><th class="num">Заработал</th><th class="num">Время</th><th class="num">Выработка</th></tr></thead><tbody>';
+        data.perWorker.forEach(function(r){
+          var stg=(r.stages||[]).map(function(s){ return (STAGE_LBL[s.stage]||s.stage)+' '+fmt(s.earned)+'₸'+(s.seconds?(' / '+(s.seconds/3600).toFixed(1)+'ч'):''); }).join(' · ');
+          html+='<tr><td>'+esc(r.name)+'<div class="stages">'+stg+'</div></td>'+
+                '<td class="num earn">'+fmt(r.earned)+' ₸</td>'+
+                '<td class="num">'+(r.hours? r.hours+' ч':'—')+'</td>'+
+                '<td class="num eff">'+(r.efficiency!=null? fmt(r.efficiency)+' ₸/ч':'—')+'</td></tr>';
+        });
+        html+='</tbody></table>';
+      }
+      // unattributed
+      if(data.unattributed && data.unattributed.length){
+        html+='<div class="warnbox"><b>На проверку (не засчитано):</b><br>'+
+          data.unattributed.map(function(u){ return (STAGE_LBL[u.stage]||u.stage)+' — '+fmt(u.earned)+' ₸ — '+esc(u.reason); }).join('<br>')+
+          '</div>';
+      }
+      html+='</div>';
+
+      // 2) montazh-by-fact editor
+      html+='<div class="sec"><h3>Монтаж по факту (заполняется после выезда)</h3>';
+      html+='<div class="muted" style="margin-bottom:10px">Внесите работы, выполненные на объекте (сварка, зачистка, сборка, краска, непредвиденное). Заработок бригады = объём × ⅓ × 1.5, делится поровну между отмеченными. Флажок «в счёт» — попадает ли работа в счёт клиенту.</div>';
+      html+='<div id="mitems"></div>';
+      html+='<button class="btn add" id="addItem" type="button">+ добавить работу</button>';
+      html+='<div style="margin-top:12px"><b>Кто ездил:</b><div class="crew" id="crew"></div></div>';
+      html+='<div id="msums"></div>';
+      html+='<div style="margin-top:10px"><button class="btn save" id="saveM" type="button">Сохранить монтаж</button> <span class="msg" id="mmsg" style="display:inline"></span></div>';
+      html+='</div>';
+
+      b.innerHTML=html;
+
+      // fill montazh editor from raw
+      var raw = data.montazhRaw || { crew:[], items:[] };
+      (raw.items&&raw.items.length? raw.items : []).forEach(addItemRow);
+      if(!document.querySelectorAll('#mitems .mrow').length) addItemRow();
+      renderCrew(raw.crew||[]);
+      document.getElementById('addItem').onclick=function(){ addItemRow(); recalcM(); };
+      document.getElementById('saveM').onclick=saveMontazh;
+      recalcM();
+    }
+
+    function addItemRow(it){
+      it=it||{name:'',value:'',inClient:true};
+      var wrap=document.getElementById('mitems');
+      var div=document.createElement('div'); div.className='mrow';
+      div.innerHTML=
+        '<input class="nm" type="text" placeholder="например, сварка на объекте" value="'+esc(it.name)+'">'+
+        '<input class="val" type="number" min="0" step="500" placeholder="объём, ₸" value="'+(it.value!=null?it.value:'')+'">'+
+        '<label class="chk"><input class="inc" type="checkbox"'+(it.inClient?' checked':'')+'> в счёт</label>'+
+        '<button class="btn x" type="button">✕</button>';
+      div.querySelector('.val').addEventListener('input', recalcM);
+      div.querySelector('.inc').addEventListener('change', recalcM);
+      div.querySelector('.x').addEventListener('click', function(){ div.remove(); recalcM(); });
+      wrap.appendChild(div);
+    }
+    function renderCrew(selected){
+      var c=document.getElementById('crew'); c.innerHTML='';
+      if(!WORKERS.length){ c.innerHTML='<span class="muted">Сначала добавьте работников в «Зарплата / Работники».</span>'; return; }
+      WORKERS.forEach(function(w){
+        var lab=document.createElement('label'); lab.className='chk';
+        lab.innerHTML='<input type="checkbox" class="cw" value="'+w.id+'"'+(selected.indexOf(w.id)>=0?' checked':'')+'> '+esc(w.name);
+        lab.querySelector('input').addEventListener('change', recalcM);
+        c.appendChild(lab);
+      });
+    }
+    function collectMontazh(){
+      var items=[].map.call(document.querySelectorAll('#mitems .mrow'), function(r){
+        return { name:r.querySelector('.nm').value.trim(), value:parseFloat(r.querySelector('.val').value)||0, inClient:r.querySelector('.inc').checked };
+      }).filter(function(it){ return it.value>0; });
+      var crew=[].map.call(document.querySelectorAll('#crew .cw:checked'), function(c){ return c.value; });
+      return { items:items, crew:crew };
+    }
+    function recalcM(){
+      var m=collectMontazh();
+      var work=m.items.reduce(function(s,it){return s+it.value;},0);
+      var client=m.items.reduce(function(s,it){return s+(it.inClient?it.value:0);},0);
+      var crewEarn=work*(1/3)*1.5;
+      var per=m.crew.length? crewEarn/m.crew.length:0;
+      document.getElementById('msums').innerHTML=
+        '<div class="totrow"><span>Объём работ на монтаже</span><b>'+fmt(work)+' ₸</b></div>'+
+        '<div class="totrow"><span>В счёт клиенту</span><b>'+fmt(client)+' ₸</b></div>'+
+        '<div class="totrow"><span>Заработок бригаде (× ⅓ × 1.5)</span><b class="earn">'+fmt(crewEarn)+' ₸</b></div>'+
+        '<div class="totrow"><span>На каждого из '+(m.crew.length||0)+'</span><b class="earn">'+fmt(per)+' ₸</b></div>';
+    }
+    function saveMontazh(){
+      var m=collectMontazh();
+      var mm=document.getElementById('mmsg'); mm.textContent='Сохранение…';
+      fetch(WORKER+'/montazh-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ cardId:ctx.cardId, montazh:m }) })
+        .then(function(r){return r.json();})
+        .then(function(d){ if(d&&d.ok){ mm.textContent='Монтаж сохранён. Обновляю отчёт…'; load(); } else mm.textContent='Ошибка: '+((d&&d.error)||'?'); })
+        .catch(function(e){ mm.textContent='Ошибка сети: '+(e&&e.message||e); });
+    }
+
+    function load(){
+      setMeta('v1 · загрузка отчёта…');
+      return fetch(WORKER+'/order-earnings?cardId='+encodeURIComponent(ctx.cardId)+'&cb='+Date.now())
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d.error){ document.getElementById('body').innerHTML='<div class="sec"><div class="muted">Ошибка: '+esc(d.error)+'</div></div>'; return; }
+          if(d.cardName) document.getElementById('title').textContent='Заработок: '+d.cardName;
+          setMeta('v1 · card …'+String(ctx.cardId||'?').slice(-6));
+          render(d);
+        })
+        .catch(function(e){ document.getElementById('body').innerHTML='<div class="sec"><div class="muted">Сеть недоступна: '+esc(e&&e.message||e)+'</div></div>'; });
+    }
+
+    // boot: context -> admin gate -> workers -> report
+    loadContext().then(function(){
+      if(!ctx.cardId){ document.getElementById('body').innerHTML='<div class="sec"><div class="muted">Не удалось определить карточку.</div></div>'; return; }
+      return checkAdmin().then(function(isAdmin){
+        if(!isAdmin){ denied(); return; }
+        return fetch(WORKER+'/workers-list?cb='+Date.now()).then(function(r){return r.json();})
+          .then(function(d){ WORKERS=(d&&d.workers)||[]; })
+          .catch(function(){ WORKERS=[]; })
+          .then(load);
+      });
+    });
+  </script>
+</body>
+</html>
