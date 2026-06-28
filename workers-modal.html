@@ -46,7 +46,7 @@
 <body>
   <div id="app">
     <h2>Зарплата и работники</h2>
-    <div class="sub" id="meta">v1 · загрузка…</div>
+    <div class="sub" id="meta">v2 · загрузка…</div>
 
     <div class="sec">
       <h3>Рабочие дни месяца</h3>
@@ -68,7 +68,7 @@
       <h3>Работники</h3>
       <table id="tbl">
         <thead>
-          <tr><th>Имя</th><th>Оклад, ₸/мес</th><th>Ставка/день</th><th></th></tr>
+          <tr><th>Имя</th><th>Оклад, ₸/мес</th><th>Ставка/день</th><th>Trello-аккаунт</th><th></th></tr>
         </thead>
         <tbody id="rows"></tbody>
       </table>
@@ -83,6 +83,29 @@
     var WORKER = (window.WORKER_URL || '').replace(/\/+$/,'');
     var rowsEl = document.getElementById('rows');
     var msgEl = document.getElementById('msg');
+    var BOARD_MEMBERS = [];
+
+    function memberOptionsHtml(selectedId){
+      var h = '<option value="">— не привязан —</option>';
+      BOARD_MEMBERS.forEach(function(m){
+        var nm = m.fullName || m.username || m.id;
+        h += '<option value="'+m.id+'"'+(m.id===selectedId?' selected':'')+'>'+String(nm).replace(/</g,'&lt;')+'</option>';
+      });
+      return h;
+    }
+    function updateCount(){
+      var n = rowsEl.querySelectorAll('tr[data-id]:not([data-id=""])').length;
+      // count rows whose data-id is non-empty
+      n = [].filter.call(rowsEl.querySelectorAll('tr'), function(tr){ return (tr.getAttribute('data-id')||'')!==''; }).length;
+      document.getElementById('meta').textContent = 'v2 · работников: '+n;
+    }
+    function showDenied(){
+      document.getElementById('app').innerHTML =
+        '<h2>Зарплата и работники</h2>'+
+        '<div class="sec"><h3>Доступ ограничен</h3>'+
+        '<div class="hint">Этот раздел с окладами доступен только администратору доски (директору). '+
+        'Если вам нужен доступ к собственному заработку — он появится в отдельном разделе «Мой заработок».</div></div>';
+    }
 
     function fmt(n){ return (Math.round(n||0)).toLocaleString('ru-RU'); }
     function workdaysInMonth(y, m){ // m: 1-12
@@ -110,6 +133,7 @@
         '<td><input class="nm" type="text" placeholder="Имя работника" value="'+(w.name?String(w.name).replace(/"/g,'&quot;'):'')+'"></td>'+
         '<td><input class="sal" type="number" min="0" step="1000" placeholder="например, 400000" value="'+(w.salary!=null?w.salary:'')+'"></td>'+
         '<td class="wage">—</td>'+
+        '<td><select class="mem">'+memberOptionsHtml(w.trello_member_id||'')+'</select></td>'+
         '<td><div class="actions">'+
           '<button class="btn save" type="button">Сохранить</button>'+
           '<button class="btn del" type="button">Удалить</button>'+
@@ -133,8 +157,7 @@
           ws.forEach(function(w){ rowsEl.appendChild(makeRow(w)); });
           document.getElementById('emptyHint').style.display = ws.length? 'none':'block';
           recalcWages();
-          setMsg(ws.length? '' : '');
-          document.getElementById('meta').textContent = 'v1 · работников: '+ws.length;
+          updateCount();
         })
         .catch(function(e){ setMsg('Ошибка загрузки: '+(e&&e.message||e)); });
     }
@@ -142,16 +165,17 @@
     function saveRow(tr){
       var name=tr.querySelector('.nm').value.trim();
       var salary=parseFloat(tr.querySelector('.sal').value)||0;
+      var memberId=tr.querySelector('.mem').value||'';
       if(!name){ setMsg('Введите имя.'); return; }
       if(!salary){ setMsg('Введите оклад.'); return; }
       var id=tr.getAttribute('data-id')||'';
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, trelloMemberId:memberId||undefined })
       }).then(function(r){ return r.json(); })
         .then(function(d){
-          if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; }
+          if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; updateCount(); }
           else setMsg('Не удалось сохранить: '+(d&&d.error||'?'));
         }).catch(function(e){ setMsg('Ошибка: '+(e&&e.message||e)); });
     }
@@ -159,7 +183,7 @@
     function delRow(tr){
       var id=tr.getAttribute('data-id')||'';
       var name=tr.querySelector('.nm').value.trim()||'работника';
-      if(!id){ tr.remove(); return; } // unsaved row — just drop
+      if(!id){ tr.remove(); updateCount(); return; } // unsaved row — just drop
       if(!confirm('Удалить '+name+'? (записи в заказах сохранятся)')) return;
       setMsg('Удаление…');
       fetch(WORKER+'/workers-delete', {
@@ -167,7 +191,7 @@
         body: JSON.stringify({ id:id })
       }).then(function(r){ return r.json(); })
         .then(function(d){
-          if(d&&d.ok){ tr.remove(); setMsg('Удалён: '+name); if(!rowsEl.children.length) document.getElementById('emptyHint').style.display='block'; }
+          if(d&&d.ok){ tr.remove(); setMsg('Удалён: '+name); updateCount(); if(!rowsEl.children.length) document.getElementById('emptyHint').style.display='block'; }
           else setMsg('Не удалось удалить: '+(d&&d.error||'?'));
         }).catch(function(e){ setMsg('Ошибка: '+(e&&e.message||e)); });
     }
@@ -194,7 +218,21 @@
       tr.querySelector('.nm').focus();
     });
 
-    loadWorkers();
+    // access control: only a board admin (director) may view/edit salaries
+    Promise.all([
+      t.member('id','fullName','username'),
+      t.board('memberships','members')
+    ]).then(function(res){
+      var me=res[0]||{}, board=res[1]||{};
+      BOARD_MEMBERS = board.members || [];
+      var ms = (board.memberships||[]).filter(function(x){ return x.idMember===me.id; })[0];
+      var isAdmin = ms && ms.memberType==='admin';
+      if(!isAdmin){ showDenied(); return; }
+      loadWorkers();
+    }).catch(function(e){
+      // if we cannot verify membership, fail safe → deny
+      showDenied();
+    });
   </script>
 </body>
 </html>
