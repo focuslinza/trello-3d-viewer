@@ -218,19 +218,21 @@
       tr.querySelector('.nm').focus();
     });
 
-    // access control: only a board admin (director) may view/edit salaries
+    // access control: only a director (admin of the board OR the workspace) may view/edit salaries
     Promise.all([
       t.member('id','fullName','username'),
-      t.board('memberships','members')
+      t.board('memberships','members'),
+      t.organization('memberships').catch(function(){ return null; })
     ]).then(function(res){
-      var me=res[0]||{}, board=res[1]||{};
+      var me=res[0]||{}, board=res[1]||{}, org=res[2]||{};
       BOARD_MEMBERS = board.members || [];
-      var ms = (board.memberships||[]).filter(function(x){ return x.idMember===me.id; })[0];
-      var isAdmin = ms && ms.memberType==='admin';
-      if(!isAdmin){ showDenied(); return; }
+      function adminIn(o){
+        var ms=((o&&o.memberships)||[]).filter(function(x){ return x.idMember===me.id; })[0];
+        return !!(ms && ms.memberType==='admin');
+      }
+      if(!(adminIn(board) || adminIn(org))){ showDenied(); return; }
       loadWorkers();
     }).catch(function(e){
-      // if we cannot verify membership, fail safe → deny
       showDenied();
     });
   </script>

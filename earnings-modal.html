@@ -75,10 +75,17 @@
     }
 
     function checkAdmin(){
-      return Promise.all([ t.member('id'), t.board('memberships') ]).then(function(res){
-        var me=res[0]||{}, board=res[1]||{};
-        var ms=(board.memberships||[]).filter(function(x){return x.idMember===me.id;})[0];
-        return !!(ms && ms.memberType==='admin');
+      return Promise.all([
+        t.member('id'),
+        t.board('memberships'),
+        t.organization('memberships').catch(function(){ return null; })
+      ]).then(function(res){
+        var me=res[0]||{}, board=res[1]||{}, org=res[2]||{};
+        function adminIn(o){
+          var ms=((o&&o.memberships)||[]).filter(function(x){return x.idMember===me.id;})[0];
+          return !!(ms && ms.memberType==='admin');
+        }
+        return adminIn(board) || adminIn(org);
       }).catch(function(){ return false; });
     }
 

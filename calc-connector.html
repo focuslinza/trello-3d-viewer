@@ -36,12 +36,18 @@
         }];
       },
       'card-buttons': function (t, options) {
-        // earnings report — visible only to the board admin (director)
-        return Promise.all([ t.member('id'), t.board('memberships') ]).then(function (res) {
-          var me = res[0] || {}, board = res[1] || {};
-          var ms = (board.memberships || []).filter(function (x) { return x.idMember === me.id; })[0];
-          var isAdmin = ms && ms.memberType === 'admin';
-          if (!isAdmin) return [];
+        // earnings report — visible only to the director (admin of the board OR the workspace)
+        return Promise.all([
+          t.member('id'),
+          t.board('memberships'),
+          t.organization('memberships').catch(function () { return null; })
+        ]).then(function (res) {
+          var me = res[0] || {}, board = res[1] || {}, org = res[2] || {};
+          function adminIn(o) {
+            var ms = ((o && o.memberships) || []).filter(function (x) { return x.idMember === me.id; })[0];
+            return !!(ms && ms.memberType === 'admin');
+          }
+          if (!(adminIn(board) || adminIn(org))) return [];
           return [{
             icon: t.signUrl('./calc-icon.svg'),
             text: 'Заработок по заказу',
