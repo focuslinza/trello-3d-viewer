@@ -35,6 +35,26 @@
         args: { cardId: CARD.id, boardId: CARD.board, cardName: CARD.name, status: CARD.status }
       });
     }
+    function openEarnings(){
+      return t.modal({
+        title: 'Заработок по заказу',
+        url: './earnings-modal.html?t=' + Date.now(),
+        fullscreen: true,
+        accentColor: '#0c66e4',
+        args: { cardId: CARD.id }
+      });
+    }
+    function isDirector(){
+      return Promise.all([
+        t.member('id'),
+        t.board('memberships'),
+        t.organization('memberships').catch(function(){ return null; })
+      ]).then(function(res){
+        var me=res[0]||{};
+        function adminIn(o){ var ms=((o&&o.memberships)||[]).filter(function(x){return x.idMember===me.id;})[0]; return !!(ms&&ms.memberType==='admin'); }
+        return adminIn(res[1]) || adminIn(res[2]);
+      }).catch(function(){ return false; });
+    }
 
     t.render(function(){
       // capture card id/name with the minimal field set (matches the working DXF section)
@@ -63,7 +83,18 @@
         btn.textContent = (d && d.total!=null) ? 'Открыть расчёт' : 'Открыть калькулятор';
         btn.addEventListener('click', openCalc);
         row.appendChild(left); row.appendChild(btn); el.appendChild(row);
-        return t.sizeTo('#wrap');
+        // director-only: earnings report button (second row)
+        return isDirector().then(function(admin){
+          if(admin){
+            var row2=document.createElement('div'); row2.className='row'; row2.style.marginTop='8px';
+            var lbl=document.createElement('div'); lbl.className='muted'; lbl.textContent='Заработок и эффективность по этому заказу';
+            var eb=document.createElement('button'); eb.className='btn'; eb.type='button'; eb.style.background='#5a4a8a';
+            eb.textContent='Заработок по заказу';
+            eb.addEventListener('click', openEarnings);
+            row2.appendChild(lbl); row2.appendChild(eb); el.appendChild(row2);
+          }
+          return t.sizeTo('#wrap');
+        });
       });
     });
   </script>
