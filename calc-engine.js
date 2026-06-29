@@ -144,12 +144,17 @@
     });
 
     // components AZ..BN : material (row7) + labor (row7 × multiplier)
+    // КРАСКА: flat per-m² price, no labor (×mult). Остатки только если красим в цеху;
+    //         расходники (перевозка) остаются в любом случае.
+    var paintInShop = !!inp.paintInShop;
     var compMat=0, compLabor=0;
     components.forEach(function(c){
       var Cn=CMP[c.code], q=+c.qty||0; if(!Cn||q<=0)return;
-      var b=Cn.u*q, r7c=b*(1+Cn.ost)*(1+Cn.rah), r4c=r7c*Cn.m;
+      var isPaint = Cn.sec==='КРАСКА';
+      var ostF = (isPaint && !paintInShop) ? 0 : Cn.ost;   // на стороне — без остатков
+      var b=Cn.u*q, r7c=b*(1+ostF)*(1+Cn.rah), r4c=isPaint?0:r7c*Cn.m;
       compMat+=r7c; compLabor+=r4c;
-      line.push({group:'component',code:c.code,section:Cn.sec,name:Cn.lbl,qty:q,unit:Cn.u,base:b,ostatki:Cn.ost,rashod:Cn.rah,material:r7c,laborMult:Cn.m,labor:r4c,lineTotal:r7c+r4c,worker:null});
+      line.push({group:'component',code:c.code,section:Cn.sec,name:Cn.lbl,qty:q,unit:Cn.u,base:b,ostatki:ostF,rashod:Cn.rah,material:r7c,laborMult:isPaint?0:Cn.m,labor:r4c,lineTotal:isPaint?r7c:(r7c+r4c),isPaint:isPaint,worker:null});
     });
 
     // монтаж = (weldSS + weldBlack + шлейф) × montazh

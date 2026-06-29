@@ -104,21 +104,25 @@
       }
       var stages = data.stages || [];
       if(!stages.length){
-        html+='<div class="muted">В этом заказе нет этапов с работами (резка/гибка/сварка/сборка/инженер).</div>';
+        html+='<div class="muted">В этом заказе нет этапов с работами.</div>';
       } else {
-        html+='<div class="muted" style="margin-bottom:8px">Выберите исполнителя по каждому этапу. «По умолчанию» — закрепить работника за этим этапом для будущих заказов. Источник: <b>авто</b> — определён по тому, кто двигал карточку; <b>умолч.</b> — из закрепления; <b>вручную</b> — выбрали вы.</div>';
-        html+='<table><thead><tr><th>Этап</th><th class="num">Стоимость</th><th>Исполнитель</th><th class="num">Заработок (⅓)</th><th class="num">Время / выработка</th></tr></thead><tbody>';
+        html+='<div class="muted" style="margin-bottom:8px">Выберите исполнителя по каждому этапу/работе. «По умолчанию» — закрепить работника для будущих заказов. Цех (Инженер/Резка/Гибка/Сварка) — доля ⅓; сборка (шлейфовка/краска/компоненты) — доля ½. Источник: <b>авто</b> (кто двигал карточку), <b>умолч.</b> (закрепление), <b>вручную</b> (выбрали вы).</div>';
+        html+='<table><thead><tr><th>Этап / работа</th><th class="num">Стоимость</th><th>Исполнитель</th><th class="num">Заработок</th><th class="num">Время / выработка</th></tr></thead><tbody>';
         stages.forEach(function(s){
           var srcLbl = s.source==='auto'?'<span class="src">авто</span>': s.source==='default'?'<span class="src">умолч.</span>': s.source==='manual'?'<span class="src man">вручную</span>':'<span class="src none">нет</span>';
           var opts='<option value="">— выбрать —</option>'+WORKERS.map(function(w){ return '<option value="'+w.id+'"'+(w.id===s.assigneeId?' selected':'')+'>'+esc(w.name)+'</option>'; }).join('');
-          var defChecked = (data.defaults && data.defaults[s.stage] && data.defaults[s.stage]===s.assigneeId) ? ' checked' : '';
+          var defChecked = (data.defaults && data.defaults[s.key] && data.defaults[s.key]===s.assigneeId) ? ' checked' : '';
+          var shareLbl = s.share>0.4 ? '½' : '⅓';
           var timeCell = s.hours!=null ? (s.hours+' ч'+(s.assigneeId&&s.earned&&s.hours? ' / '+fmt(s.earned/s.hours)+' ₸/ч':'')) : '<span class="muted">—</span>';
+          // paint row shows the mode (set in the calculator), read-only here
+          var paintToggle = s.paint ? ('<div class="stages">'+(data.paintInShop?'красили в цеху → ⅓ начисляется':'красили на стороне → не начисляется')+' · меняется в калькуляторе</div>') : '';
+          var earnCell = s.paintOutside ? '<span class="muted">на стороне</span>' : (s.assigneeId? fmt(s.earned)+' ₸':'<span class="muted">—</span>');
           html+='<tr>'+
-            '<td>'+(STAGE_LBL[s.stage]||s.stage)+'<div class="stages">'+srcLbl+(s.autoName?(' · двигал: '+esc(s.autoName)):'')+'</div></td>'+
+            '<td>'+esc(s.label||s.key)+'<div class="stages">'+srcLbl+' · доля '+shareLbl+(s.autoName?(' · двигал: '+esc(s.autoName)):'')+'</div>'+paintToggle+'</td>'+
             '<td class="num">'+fmt(s.cost)+' ₸</td>'+
-            '<td><select class="asg" data-stage="'+s.stage+'">'+opts+'</select>'+
-              '<label class="chk" style="margin-top:4px"><input type="checkbox" class="def" data-stage="'+s.stage+'"'+defChecked+'> по умолчанию</label></td>'+
-            '<td class="num earn">'+(s.assigneeId? fmt(s.earned)+' ₸':'<span class="muted">—</span>')+'</td>'+
+            '<td><select class="asg" data-stage="'+s.key+'">'+opts+'</select>'+
+              '<label class="chk" style="margin-top:4px"><input type="checkbox" class="def" data-stage="'+s.key+'"'+defChecked+'> по умолчанию</label></td>'+
+            '<td class="num earn">'+earnCell+'</td>'+
             '<td class="num eff">'+timeCell+'</td>'+
           '</tr>';
         });
@@ -127,7 +131,7 @@
       }
       if(data.unattributed && data.unattributed.length){
         html+='<div class="warnbox">Без исполнителя (не начислено): '+
-          data.unattributed.map(function(u){ return (STAGE_LBL[u.stage]||u.stage)+' — '+fmt(u.earned)+' ₸'; }).join(', ')+
+          data.unattributed.map(function(u){ return esc(u.label||u.stage)+' — '+fmt(u.earned)+' ₸'; }).join(', ')+
           '. Выберите исполнителя в списке выше.</div>';
       }
       html+='</div>';
@@ -155,7 +159,7 @@
 
       b.innerHTML=html;
 
-      // wire assignee dropdowns + default checkboxes
+      // wire assignee dropdowns + default checkboxes + paint toggle
       [].forEach.call(document.querySelectorAll('.asg'), function(sel){ sel.addEventListener('change', saveAssignees); });
       [].forEach.call(document.querySelectorAll('.def'), function(cb){ cb.addEventListener('change', saveDefaults); });
 
@@ -213,10 +217,10 @@
         '<div class="totrow"><span>На каждого из '+(m.crew.length||0)+'</span><b class="earn">'+fmt(per)+' ₸</b></div>';
     }
     function saveAssignees(){
-      var as={}; [].forEach.call(document.querySelectorAll('.asg'), function(sel){ if(sel.value) as[sel.getAttribute('data-stage')]=sel.value; });
+      var st={}; [].forEach.call(document.querySelectorAll('.asg'), function(sel){ if(sel.value) st[sel.getAttribute('data-stage')]=sel.value; });
       var m=document.getElementById('asgmsg'); if(m) m.textContent='Сохранение…';
       fetch(WORKER+'/order-assignees-save',{ method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ cardId:ctx.cardId, assignees:as }) })
+        body:JSON.stringify({ cardId:ctx.cardId, assignees:{ stages:st } }) })
         .then(function(r){return r.json();})
         .then(function(d){ if(d&&d.ok){ load(); } else if(m){ m.textContent='Ошибка: '+((d&&d.error)||'?'); } })
         .catch(function(e){ if(m) m.textContent='Сеть: '+(e&&e.message||e); });

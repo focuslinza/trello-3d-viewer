@@ -5,7 +5,7 @@
   <title>Калькулятор стоимости</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./calc-engine.js?v=8"></script>
+  <script src="./calc-engine.js?v=14"></script>
   <style>
     html[data-color-mode="light"] { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
     html[data-color-mode="dark"]  { --bg:#1d2125; --txt:#c7d1db; --muted:#9fadbc; --chip:#22272b; --line:#3c4149; --card:#22272b; }
@@ -59,7 +59,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v10 · загрузка…</div>
+    <div class="sub" id="meta">v14 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -116,6 +116,13 @@
         <div class="fld">
           <label>&nbsp;</label>
           <label class="chk"><input type="checkbox" id="montazh" /> Монтаж</label>
+        </div>
+        <div class="fld">
+          <label>Краска</label>
+          <select id="paintMode">
+            <option value="outside">на стороне (без остатков)</option>
+            <option value="shop">в цеху у себя</option>
+          </select>
         </div>
       </div>
     </div>
@@ -238,7 +245,7 @@
     document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м')); recompute(); };
     document.getElementById('addCmp').onclick=function(){ cmpLines.appendChild(makeCatRow(CMPG,null,'шт')); recompute(); };
 
-    ['eng','urg','shleif','tax','montazh'].forEach(function(id){
+    ['eng','urg','shleif','tax','montazh','paintMode'].forEach(function(id){
       var e=document.getElementById(id); e.addEventListener('input',recompute); e.addEventListener('change',recompute);
     });
 
@@ -254,7 +261,8 @@
         engCoef:+document.getElementById('eng').value||0,
         montazh:document.getElementById('montazh').checked?1:0,
         shleifRate:(+document.getElementById('shleif').value||0)/100,
-        taxRate:(+document.getElementById('tax').value||0)/100
+        taxRate:(+document.getElementById('tax').value||0)/100,
+        paintInShop:document.getElementById('paintMode').value==='shop'
       };
     }
 
@@ -269,7 +277,7 @@
       var brk=document.getElementById('brk'); brk.innerHTML='';
       function r(label,val){ if(!val) return; var d=document.createElement('div'); d.className='r'; d.innerHTML='<span>'+label+'</span><b>'+fmt(val)+' ₸</b>'; brk.appendChild(d); }
       r('Работы', res.opsBase);
-      r('Шлейф', res.shleif);
+      r('Шлейф / сборка (' + Math.round((inp.shleifRate||0.5)*100) + '% от сварки, авто)', res.shleif);
       r('Материалы', res.materials);
       r('Компоненты (материал)', res.componentsMat);
       r('Компоненты (работа)', res.componentsLabor);
@@ -339,7 +347,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v10   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
+        + '   ·   v14   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
@@ -438,6 +446,7 @@
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
         if(i.engCoef!=null) document.getElementById('eng').value=i.engCoef;
         if(i.montazh) document.getElementById('montazh').checked=true;
+        if(i.paintInShop!=null) document.getElementById('paintMode').value = i.paintInShop ? 'shop' : 'outside';
         if(i.shleifRate!=null) document.getElementById('shleif').value=Math.round(i.shleifRate*100);
         if(i.taxRate!=null) document.getElementById('tax').value=Math.round(i.taxRate*100);
       }).catch(function(){});
@@ -449,15 +458,29 @@
       var btn=this; var msg=document.getElementById('msg');
       msg.className='msg'; msg.textContent='Сохранение…'; btn.disabled=true;
       var inp=lastResult.inputs, res=lastResult.result;
-      // per-stage costs for the earnings report (Резка/Гибка/Сварка/Сборка/Инженер)
+      // per-stage costs for the earnings report
       var byKind={}; (res.lineItems||[]).forEach(function(li){ if(li.kind) byKind[li.kind]=(byKind[li.kind]||0)+(li.lineTotal||0); });
       function sk(ks){ return ks.reduce(function(s,k){ return s+(byKind[k]||0); },0); }
+      // split component LABOR per component; Краска = flat sum (no multiplier)
+      var paintSum=0; var compMap={}; // key -> {label, value}
+      (res.lineItems||[]).forEach(function(li){
+        if(li.group!=='component') return;
+        if(li.isPaint || li.section==='КРАСКА'){ paintSum += (+li.material||0); return; }
+        var labor=+li.labor||0; if(labor<=0) return;
+        var key='comp:'+li.code;
+        if(!compMap[key]) compMap[key]={ key:key, label:(li.section?li.section+' / ':'')+(li.name||li.code), value:0 };
+        compMap[key].value+=labor;
+      });
+      var components=Object.keys(compMap).map(function(k){ return compMap[k]; });
       var stageCosts={
-        eng:(res.engineering||0)+(res.urgency||0),
-        cut:sk(['cut','cutTube']),
-        bend:sk(['bend','bendTube','bendRod']),
-        weld:sk(['weldSS','weldBlack']),
-        assembly:(res.shleif||0)+(res.componentsLabor||0)
+        eng:(res.engineering||0)+(res.urgency||0),   // ⅓
+        cut:sk(['cut','cutTube']),                    // ⅓
+        bend:sk(['bend','bendTube','bendRod']),       // ⅓
+        weld:sk(['weldSS','weldBlack']),              // ⅓
+        shleif:(res.shleif||0),                       // ½
+        paint:paintSum,                               // ⅓ (в цеху) / 0 (на стороне)
+        paintInShop:!!inp.paintInShop,
+        components:components                         // ½ каждая
       };
       var calcData={ inputs:inp, subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total, savedAt:new Date().toISOString() };
       // 1) save to the card (compact)
