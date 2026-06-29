@@ -34,35 +34,6 @@
             });
           }
         }];
-      },
-      'card-buttons': function (t, options) {
-        // earnings report — visible only to the director (admin of the board OR the workspace)
-        return Promise.all([
-          t.member('id'),
-          t.board('memberships'),
-          t.organization('memberships').catch(function () { return null; })
-        ]).then(function (res) {
-          var me = res[0] || {}, board = res[1] || {}, org = res[2] || {};
-          function adminIn(o) {
-            var ms = ((o && o.memberships) || []).filter(function (x) { return x.idMember === me.id; })[0];
-            return !!(ms && ms.memberType === 'admin');
-          }
-          if (!(adminIn(board) || adminIn(org))) return [];
-          return [{
-            icon: t.signUrl('./calc-icon.svg'),
-            text: 'Заработок по заказу',
-            callback: function (t) {
-              return t.card('id').then(function (c) {
-                return t.modal({
-                  url: t.signUrl('./earnings-modal.html') + '?t=' + Date.now(),
-                  fullscreen: true,
-                  title: 'Заработок по заказу',
-                  args: { cardId: c && c.id }
-                });
-              });
-            }
-          }];
-        }).catch(function () { return []; });
       }
     });
   </script>
