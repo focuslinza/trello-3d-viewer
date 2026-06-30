@@ -59,7 +59,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v14 · загрузка…</div>
+    <div class="sub" id="meta">v15 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -112,10 +112,6 @@
         <div class="fld">
           <label>Налог, % (вычитается из итога)</label>
           <input type="number" id="tax" value="16" min="0" step="1" style="width:140px" />
-        </div>
-        <div class="fld">
-          <label>&nbsp;</label>
-          <label class="chk"><input type="checkbox" id="montazh" /> Монтаж</label>
         </div>
         <div class="fld">
           <label>Краска</label>
@@ -245,7 +241,7 @@
     document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м')); recompute(); };
     document.getElementById('addCmp').onclick=function(){ cmpLines.appendChild(makeCatRow(CMPG,null,'шт')); recompute(); };
 
-    ['eng','urg','shleif','tax','montazh','paintMode'].forEach(function(id){
+    ['eng','urg','shleif','tax','paintMode'].forEach(function(id){
       var e=document.getElementById(id); e.addEventListener('input',recompute); e.addEventListener('change',recompute);
     });
 
@@ -259,7 +255,6 @@
         operations:operations, materials:materials, components:components,
         urgency:+document.getElementById('urg').value||0,
         engCoef:+document.getElementById('eng').value||0,
-        montazh:document.getElementById('montazh').checked?1:0,
         shleifRate:(+document.getElementById('shleif').value||0)/100,
         taxRate:(+document.getElementById('tax').value||0)/100,
         paintInShop:document.getElementById('paintMode').value==='shop'
@@ -281,7 +276,6 @@
       r('Материалы', res.materials);
       r('Компоненты (материал)', res.componentsMat);
       r('Компоненты (работа)', res.componentsLabor);
-      r('Монтаж', res.montazh);
       r('Срочность', res.urgency);
       r('Инженерные', res.engineering);
       r('Подытог', res.subtotal);
@@ -347,7 +341,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v14   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
+        + '   ·   v15   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
@@ -445,7 +439,6 @@
         (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
         if(i.engCoef!=null) document.getElementById('eng').value=i.engCoef;
-        if(i.montazh) document.getElementById('montazh').checked=true;
         if(i.paintInShop!=null) document.getElementById('paintMode').value = i.paintInShop ? 'shop' : 'outside';
         if(i.shleifRate!=null) document.getElementById('shleif').value=Math.round(i.shleifRate*100);
         if(i.taxRate!=null) document.getElementById('tax').value=Math.round(i.taxRate*100);
