@@ -127,7 +127,7 @@
   function loadAllOrders(){
     return fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
       ALL_ORDERS = ((j&&j.rows)||[]).map(function(row){
-        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', total:+row.total||0, company_id:row.company_id||null, qty:1, checked:false };
+        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, company_id:row.company_id||null, qty:1, checked:false };
       });
     }).catch(function(){ ALL_ORDERS=[]; });
   }
@@ -138,46 +138,25 @@
     }).catch(function(){});
   }
 
-  // fill missing card numbers (idShort) for displayed orders
+  // fill missing card numbers (idShort) + open-links for displayed orders
   function loadCardNumbers(){
-    var ids = ALL_ORDERS.filter(function(o){ return !o.number; }).map(function(o){ return o.cardId; });
+    var ids = ALL_ORDERS.filter(function(o){ return !o.number || !o.link; }).map(function(o){ return o.cardId; });
     if(!ids.length) return Promise.resolve();
     return fetch(WORKER+'/card-numbers',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ids:ids }) })
       .then(function(r){return r.json();}).then(function(j){
-        if(j&&j.ok&&j.numbers){ ALL_ORDERS.forEach(function(o){ if(!o.number && j.numbers[o.cardId]) o.number=j.numbers[o.cardId]; }); }
+        if(j&&j.ok){ ALL_ORDERS.forEach(function(o){
+          if(!o.number && j.numbers && j.numbers[o.cardId]) o.number=j.numbers[o.cardId];
+          if(!o.link && j.links && j.links[o.cardId]) o.link=j.links[o.cardId];
+        }); }
       }).catch(function(){});
   }
 
-  var OP_LABELS = { cut:'Резка листа', cutTube:'Резка трубы/профиля', bend:'Гибка листа', bendTube:'Гибка трубы', bendRod:'Гибка прута', weldSS:'Сварка нерж', weldBlack:'Сварка черн' };
-  function lineLabel(li){
-    if(li.group==='op'||li.kind) return (OP_LABELS[li.kind]||li.kind||'Работа')+(li.qty?(' · '+li.qty):'');
-    if(li.group==='shleif') return 'Шлейфовка / сборка';
-    if(li.group==='component') return (li.section?li.section+' / ':'')+(li.name||li.code||'компонент')+(li.qty?(' · '+li.qty):'');
-    if(li.group==='montazh') return 'Монтаж';
-    if(li.group==='urgency') return 'Срочность';
-    if(li.group==='engineering') return 'Инженерные';
-    return li.name||li.kind||li.code||'позиция';
-  }
-
-  // review popup: show what's inside an order so the user can decide
-  function openReview(cardId){
+  // open the Trello card itself in a separate window (drawings, docs, etc.).
+  // a separate window keeps THIS invoice modal open underneath.
+  function openCard(cardId){
     var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]||{};
-    var ovl=document.createElement('div'); ovl.className='ovl';
-    ovl.innerHTML='<div class="pop"><h2>'+esc(o.name||'Заказ')+'</h2><div class="meta">№ карт. '+esc(o.number||'—')+' · сумма '+money(o.total)+' ₸</div><div id="popbody" class="muted">Загрузка содержимого…</div><div class="popbar"><button class="btn ghost" id="popCard" type="button">Открыть карточку в Trello</button><button class="btn ghost" id="popClose" type="button">Закрыть</button></div></div>';
-    document.body.appendChild(ovl);
-    ovl.addEventListener('click', function(e){ if(e.target===ovl) document.body.removeChild(ovl); });
-    ovl.querySelector('#popClose').onclick=function(){ document.body.removeChild(ovl); };
-    ovl.querySelector('#popCard').onclick=function(){ if(t.showCard) t.showCard(cardId).catch(function(){}); };
-    fetch(WORKER+'/calc-get?id='+encodeURIComponent(cardId)).then(function(r){return r.json();}).then(function(j){
-      var body=ovl.querySelector('#popbody');
-      var row=(j&&(j.row||j.calc))||j||{};
-      var items=[]; try{ items = typeof row.line_items==='string'? JSON.parse(row.line_items) : (row.line_items||[]); }catch(e){ items=[]; }
-      if(!items.length){ body.innerHTML='<div class="muted">Нет сохранённой разбивки по этому заказу. Можно открыть карточку в Trello для подробностей.</div>'; return; }
-      var h='<table><thead><tr><th>Позиция</th><th class="num">Сумма</th></tr></thead><tbody>';
-      items.forEach(function(li){ var lt=+li.lineTotal||((+li.material||0)+(+li.labor||0)); h+='<tr><td>'+esc(lineLabel(li))+'</td><td class="num">'+money(lt)+' ₸</td></tr>'; });
-      h+='</tbody></table><div style="text-align:right;margin-top:8px"><b>Итого: '+money(+row.total||o.total||0)+' ₸</b></div>';
-      body.innerHTML=h;
-    }).catch(function(){ ovl.querySelector('#popbody').innerHTML='<div class="muted">Не удалось загрузить содержимое заказа.</div>'; });
+    var url=o.link || ('https://trello.com/c/'+cardId);
+    window.open(url, '_blank', 'noopener,width=1100,height=850');
   }
 
   var validIds = {};
@@ -229,8 +208,8 @@
       co.forEach(function(o){
         html+='<tr>'+
           '<td><input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'></td>'+
-          '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'">'+esc(o.number||'—')+'</span></td>'+
-          '<td><span class="lnk rev" data-id="'+esc(o.cardId)+'">'+esc(o.name)+'</span></td>'+
+          '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
+          '<td>'+esc(o.name)+'</td>'+
           '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'"></td>'+
           '<td class="num">'+money(o.total)+' ₸</td>'+
         '</tr>';
@@ -248,8 +227,8 @@
       html+='<table><thead><tr><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Сумма</th><th></th></tr></thead><tbody>';
       orph.forEach(function(o){
         html+='<tr>'+
-          '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'">'+esc(o.number||'—')+'</span></td>'+
-          '<td><span class="lnk rev" data-id="'+esc(o.cardId)+'">'+esc(o.name)+'</span></td>'+
+          '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
+          '<td>'+esc(o.name)+'</td>'+
           '<td class="num">'+money(o.total)+' ₸</td>'+
           '<td><button class="btn ghost relink" data-id="'+esc(o.cardId)+'" type="button">привязать</button></td>'+
         '</tr>';
@@ -273,7 +252,7 @@
     [].forEach.call(document.querySelectorAll('.ck'), function(c){ c.addEventListener('change', function(){ var id=this.getAttribute('data-id'), chk=this.checked; var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.checked=chk; updateGrand(); }); });
     [].forEach.call(document.querySelectorAll('.qn'), function(q){ q.addEventListener('input', function(){ var id=this.getAttribute('data-id'), v=Math.max(1,+this.value||1); var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.qty=v; }); });
     [].forEach.call(document.querySelectorAll('.relink'), function(b){ b.addEventListener('click', function(){ relink(this.getAttribute('data-id')); }); });
-    [].forEach.call(document.querySelectorAll('.rev'), function(s){ s.addEventListener('click', function(){ openReview(this.getAttribute('data-id')); }); });
+    [].forEach.call(document.querySelectorAll('.rev'), function(s){ s.addEventListener('click', function(){ openCard(this.getAttribute('data-id')); }); });
     updateGrand();
   }
 
