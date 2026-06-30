@@ -42,7 +42,6 @@
   </style>
 </head>
 <body>
-  <div class="hd">Счёт на оплату</div>
   <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
   <div class="bar">
     <div class="tot" id="grand">—</div>
@@ -97,7 +96,10 @@
   // pull buyer company (from CRM) + this card's company via the worker bridge
   function loadBuyer(){
     var u = WORKER+'/plugindata?cardId='+encodeURIComponent(ctx.cardId)+(ctx.boardId?'&boardId='+encodeURIComponent(ctx.boardId):'');
-    return fetch(u).then(function(r){ return r.json(); }).then(function(j){
+    return fetch(u).then(function(r){ ctx._http=r.status; return r.json(); }).then(function(j){
+      ctx._diag = { http:ctx._http, ok:!!(j&&j.ok), companyId:(j&&j.cardData&&j.cardData.companyId)||null,
+                    companies:(j&&j.boardData&&Array.isArray(j.boardData.companies))?j.boardData.companies.length:0,
+                    boardId:ctx.boardId||'(нет)', err:(j&&j.error)||null };
       if(!j || !j.ok) return;
       var cd=j.cardData||{}, bd=j.boardData||{};
       var cid=cd.companyId;
@@ -105,7 +107,7 @@
         var co=bd.companies.filter(function(x){return x.id===cid;})[0];
         if(co){ ctx.companyId=cid; ctx.buyer={ name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'' }; }
       }
-    }).catch(function(){});
+    }).catch(function(e){ ctx._diag={ http:ctx._http||0, net:(e&&e.message||'сеть') }; });
   }
 
   // list this client's orders (saved calculations) for combining into one invoice
@@ -150,7 +152,11 @@
             (ctx.buyer.addr?esc(ctx.buyer.addr)+'<br>':'')+
             (ctx.buyer.phone?'тел. '+esc(ctx.buyer.phone):'')+'</div>';
     } else {
-      html+='<div class="warnbox">У этой карточки не выбрана компания в блоке «Компания и контакты». Привяжите клиента к карточке, затем откройте счёт снова.</div>';
+      html+='<div class="warnbox">У этой карточки не выбрана компания в блоке «Компания и контакты», либо данные не подгрузились. Привяжите клиента к карточке и сохраните расчёт, затем откройте счёт снова.</div>';
+      if(ctx._diag){
+        var dg=ctx._diag;
+        html+='<div class="small muted" style="margin-top:8px">Диагностика моста: HTTP '+esc(dg.http)+' · ok='+esc(dg.ok)+' · companyId='+esc(dg.companyId||'нет')+' · компаний на доске='+esc(dg.companies)+' · board='+esc(dg.boardId)+(dg.err?(' · ошибка: '+esc(dg.err)):'')+(dg.net?(' · сеть: '+esc(dg.net)):'')+'</div>';
+      }
     }
     html+='</div>';
 
