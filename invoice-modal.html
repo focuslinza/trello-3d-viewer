@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Счёт на оплату</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
+  <script src="./dejavu-vfs.js"></script>
+  <script src="./invoice-doc.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc;
+           --accent:#4f7cff; --green:#3aa657; --warn:#5a4636; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+    .hd{position:sticky;top:0;background:var(--accent);color:#fff;text-align:center;font-weight:700;padding:12px;font-size:15px;z-index:5}
+    .wrap{padding:16px;max-width:900px;margin:0 auto}
+    .sec{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+    h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+    .muted{color:var(--muted)}
+    .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+    label.opt{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+    label.opt input{accent-color:var(--accent)}
+    input[type=text],input[type=number],input[type=date]{background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:14px}
+    .fld{display:flex;flex-direction:column;gap:4px}
+    .fld label{font-size:12px;color:var(--muted)}
+    table{width:100%;border-collapse:collapse;margin-top:6px}
+    th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+    th{font-size:12px;color:var(--muted);font-weight:600}
+    td.num,th.num{text-align:right}
+    .tot{font-size:16px;font-weight:700}
+    .btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
+    .btn.green{background:var(--green)}
+    .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .warnbox{background:var(--warn);border:1px solid #7a5a32;border-radius:8px;padding:10px 12px;color:#f0d9b5;margin-top:8px}
+    .qty{width:70px}
+    .small{font-size:12px}
+    .pill{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="hd">Счёт на оплату</div>
+  <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
+  <div class="bar">
+    <div class="tot" id="grand">—</div>
+    <div style="display:flex;gap:10px">
+      <button class="btn ghost" id="close" type="button">Закрыть</button>
+      <button class="btn green" id="gen" type="button" disabled>Скачать PDF</button>
+    </div>
+  </div>
+
+<script>
+  var t = window.TrelloPowerUp.iframe();
+  var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+
+  // ----- our two companies (Поставщик) -----
+  var SUPPLIERS = {
+    ip: { key:'ip', label:'ИП «MetalShop»',
+      name:'Индивидуальный предприниматель "MetalShop"', bin:'820620350761',
+      addr:'Республика Казахстан, 010000, г.Астана, район Сарыарка, улица Карталы, д1/1',
+      bank:'АО "Банк ЦентрКредит"', iban:'KZ828562204151669993', bik:'KCJBKZKX', kbe:'19', paycode:'859',
+      executor:'Жанбосинов А.Ж.' },
+    too:{ key:'too', label:'ТОО «TTMS»',
+      name:'Товарищество с ограниченной ответственностью "TTMS"', bin:'230940037731',
+      addr:'Республика Казахстан, г. Астана, ул. Конаева 14',
+      bank:'АО "Банк ЦентрКредит"', iban:'KZ318562203133118240', bik:'KCJBKZKX', kbe:'17', paycode:'859',
+      executor:'Жанбосинов А.Ж.' }
+  };
+
+  var MONTHS=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  function ruDate(d){ return d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear()+' г.'; }
+  function isoDate(d){ var m=(d.getMonth()+1),day=d.getDate(); return d.getFullYear()+'-'+(m<10?'0'+m:m)+'-'+(day<10?'0'+day:day); }
+  function fromIso(s){ var p=(s||'').split('-'); return p.length===3? new Date(+p[0],+p[1]-1,+p[2]) : new Date(); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function money(v){ return window.INVOICE.money(v); }
+
+  var ctx = { cardId:null, boardId:'', companyId:null, buyer:null };
+  var ORDERS = [];      // [{cardId, name, number, total, qty, checked}]
+  var supplierKey = 'ip';
+  var invNumber = null;
+
+  function boot(msg){ var b=document.getElementById('boot'); if(b) b.textContent=msg; }
+
+  function loadContext(){
+    ctx.cardId = t.arg('cardId') || null;
+    ctx.boardId = t.arg('boardId') || '';
+    return Promise.resolve().then(function(){
+      if(ctx.cardId && ctx.boardId) return;
+      return t.card('id').then(function(c){ if(c&&c.id) ctx.cardId=ctx.cardId||c.id; }).catch(function(){})
+        .then(function(){ return t.board('id').then(function(b){ ctx.boardId=ctx.boardId||(b&&b.id)||''; }).catch(function(){}); });
+    });
+  }
+
+  // pull buyer company (from CRM) + this card's company via the worker bridge
+  function loadBuyer(){
+    var u = WORKER+'/plugindata?cardId='+encodeURIComponent(ctx.cardId)+(ctx.boardId?'&boardId='+encodeURIComponent(ctx.boardId):'');
+    return fetch(u).then(function(r){ return r.json(); }).then(function(j){
+      if(!j || !j.ok) return;
+      var cd=j.cardData||{}, bd=j.boardData||{};
+      var cid=cd.companyId;
+      if(cid && Array.isArray(bd.companies)){
+        var co=bd.companies.filter(function(x){return x.id===cid;})[0];
+        if(co){ ctx.companyId=cid; ctx.buyer={ name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'' }; }
+      }
+    }).catch(function(){});
+  }
+
+  // list this client's orders (saved calculations) for combining into one invoice
+  function loadOrders(){
+    if(!ctx.companyId){ ORDERS=[]; return Promise.resolve(); }
+    var u = WORKER+'/calc-list?companyId='+encodeURIComponent(ctx.companyId)+'&limit=200';
+    return fetch(u).then(function(r){ return r.json(); }).then(function(j){
+      ORDERS = ((j&&j.rows)||[]).map(function(row){
+        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', total:+row.total||0, qty:1, checked:(row.id===ctx.cardId) };
+      });
+      // ensure current card is checked even if it sorted lower
+      if(!ORDERS.some(function(o){return o.checked;}) && ORDERS.length) ORDERS[0].checked=true;
+    }).catch(function(){ ORDERS=[]; });
+  }
+
+  function loadNumber(){
+    return fetch(WORKER+'/invoice-peek').then(function(r){return r.json();}).then(function(j){
+      if(j&&j.ok) invNumber=j.next;
+    }).catch(function(){});
+  }
+
+  function selectedOrders(){ return ORDERS.filter(function(o){return o.checked;}); }
+  function grandTotal(){ return selectedOrders().reduce(function(s,o){return s+o.total;},0); }
+
+  function render(){
+    var sup = SUPPLIERS[supplierKey];
+    var html='';
+
+    // supplier
+    html+='<div class="sec"><h3>Поставщик (наша компания)</h3><div class="row">';
+    Object.keys(SUPPLIERS).forEach(function(k){
+      html+='<label class="opt"><input type="radio" name="sup" value="'+k+'"'+(k===supplierKey?' checked':'')+'> '+esc(SUPPLIERS[k].label)+'</label>';
+    });
+    html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+'</div></div>';
+
+    // buyer
+    html+='<div class="sec"><h3>Покупатель (из «Компания и контакты»)</h3>';
+    if(ctx.buyer){
+      html+='<div><b>'+esc(ctx.buyer.name)+'</b></div>'+
+            '<div class="small muted" style="margin-top:4px">'+
+            (ctx.buyer.bin?'БИН/ИИН '+esc(ctx.buyer.bin)+'<br>':'')+
+            (ctx.buyer.addr?esc(ctx.buyer.addr)+'<br>':'')+
+            (ctx.buyer.phone?'тел. '+esc(ctx.buyer.phone):'')+'</div>';
+    } else {
+      html+='<div class="warnbox">У этой карточки не выбрана компания в блоке «Компания и контакты». Привяжите клиента к карточке, затем откройте счёт снова.</div>';
+    }
+    html+='</div>';
+
+    // orders of this client
+    html+='<div class="sec"><h3>Заказы клиента — что включить в счёт</h3>';
+    if(!ORDERS.length){
+      html+='<div class="muted">Нет сохранённых расчётов по этому клиенту. Сохраните расчёт в калькуляторе (он привяжется к клиенту), затем вернитесь сюда.</div>';
+    } else {
+      html+='<div class="small muted" style="margin-bottom:6px">Отметьте заказы этого клиента — каждый станет строкой счёта. «Кол-во» — сколько это продуктов; цена за единицу считается как сумма заказа ÷ кол-во.</div>';
+      html+='<table><thead><tr><th></th><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Кол-во</th><th class="num">Сумма заказа</th></tr></thead><tbody>';
+      ORDERS.forEach(function(o,i){
+        html+='<tr>'+
+          '<td><input type="checkbox" class="ck" data-i="'+i+'"'+(o.checked?' checked':'')+'></td>'+
+          '<td class="small">'+esc(o.number||'—')+'</td>'+
+          '<td>'+esc(o.name)+'</td>'+
+          '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-i="'+i+'" value="'+(o.qty||1)+'"></td>'+
+          '<td class="num">'+money(o.total)+' ₸</td>'+
+        '</tr>';
+      });
+      html+='</tbody></table>';
+    }
+    html+='</div>';
+
+    // invoice meta
+    html+='<div class="sec"><h3>Реквизиты счёта</h3><div class="row">'+
+      '<div class="fld"><label>Номер счёта</label><input type="text" id="inum" value="'+esc(invNumber!=null?invNumber:'')+'" style="width:120px"></div>'+
+      '<div class="fld"><label>Дата</label><input type="date" id="idate" value="'+isoDate(new Date())+'"></div>'+
+      '<div class="fld" style="flex:1;min-width:220px"><label>Договор</label><input type="text" id="icontract" value="Без договора"></div>'+
+      '</div><div class="small muted" style="margin-top:8px">Номер предлагается автоматически (следующий по счёту). Можно изменить вручную.</div></div>';
+
+    document.getElementById('app').innerHTML=html;
+
+    // wire
+    [].forEach.call(document.querySelectorAll('input[name=sup]'), function(r){ r.addEventListener('change', function(){ supplierKey=this.value; render(); }); });
+    [].forEach.call(document.querySelectorAll('.ck'), function(c){ c.addEventListener('change', function(){ ORDERS[+this.getAttribute('data-i')].checked=this.checked; updateGrand(); }); });
+    [].forEach.call(document.querySelectorAll('.qn'), function(q){ q.addEventListener('input', function(){ ORDERS[+this.getAttribute('data-i')].qty=Math.max(1,+this.value||1); }); });
+    updateGrand();
+  }
+
+  function updateGrand(){
+    var g=grandTotal();
+    document.getElementById('grand').textContent='Итого по счёту: '+money(g)+' ₸';
+    var ok = !!ctx.buyer && selectedOrders().length>0;
+    document.getElementById('gen').disabled=!ok;
+  }
+
+  function buildData(){
+    var sup=SUPPLIERS[supplierKey];
+    var numEl=document.getElementById('inum'), dEl=document.getElementById('idate'), cEl=document.getElementById('icontract');
+    var items = selectedOrders().map(function(o){
+      var qty=Math.max(1,o.qty||1);
+      return { code:o.number||'', name:o.name, qty:qty, unit:'Услуга', price:(o.total/qty) };
+    });
+    return {
+      supplier:sup, buyer:ctx.buyer,
+      number:(numEl.value||'').trim(), date:ruDate(fromIso(dEl.value)), contract:(cEl.value||'Без договора').trim(),
+      items:items, nds:null
+    };
+  }
+
+  function setupFonts(){
+    if(!window.pdfMake){ return false; }
+    pdfMake.vfs = window.DEJAVU_VFS;
+    pdfMake.fonts = { DejaVu: { normal:'DejaVuSans.ttf', bold:'DejaVuSans-Bold.ttf', italics:'DejaVuSans.ttf', bolditalics:'DejaVuSans-Bold.ttf' } };
+    return true;
+  }
+
+  function generate(){
+    if(!setupFonts()){ alert('Не удалось загрузить генератор PDF (pdfMake). Проверьте интернет.'); return; }
+    var gen=document.getElementById('gen'); gen.disabled=true; gen.textContent='Готовлю…';
+    // commit the invoice number (locks it so the next one is +1)
+    fetch(WORKER+'/invoice-commit').then(function(r){return r.json();}).then(function(j){
+      var data=buildData();
+      if(j&&j.ok && (!document.getElementById('inum').value || +document.getElementById('inum').value===invNumber)){
+        data.number=String(j.number); // use committed number unless user typed a custom one
+      }
+      var dd=window.INVOICE.buildInvoiceDoc(data);
+      var fname='Счет_'+data.number+'_'+(ctx.buyer&&ctx.buyer.name?ctx.buyer.name.replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30):'клиент')+'.pdf';
+      pdfMake.createPdf(dd).download(fname, function(){
+        gen.textContent='Скачать PDF'; gen.disabled=false;
+      });
+    }).catch(function(e){
+      gen.textContent='Скачать PDF'; gen.disabled=false;
+      alert('Ошибка: '+(e&&e.message||e));
+    });
+  }
+
+  document.getElementById('close').onclick=function(){ t.closeModal(); };
+  document.getElementById('gen').onclick=generate;
+
+  loadContext()
+    .then(function(){ if(!ctx.cardId){ boot('Не удалось определить карточку.'); return Promise.reject('no card'); } })
+    .then(loadBuyer).then(loadOrders).then(loadNumber)
+    .then(render)
+    .catch(function(e){ boot('Ошибка загрузки: '+(e&&e.message||e)); });
+</script>
+</body>
+</html>
