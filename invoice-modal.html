@@ -76,8 +76,9 @@
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function money(v){ return window.INVOICE.money(v); }
 
-  var ctx = { cardId:null, boardId:'', companyId:null, buyer:null };
-  var ORDERS = [];      // [{cardId, name, number, total, qty, checked}]
+  var ctx = { cardId:null, boardId:'', cardCompanyId:null, allCompanies:[], buyer:null };
+  var selectedCompanyId = null;
+  var ALL_ORDERS = [];   // every saved calc: {cardId, name, number, total, company_id, qty, checked}
   var supplierKey = 'ip';
   var invNumber = null;
 
@@ -93,35 +94,33 @@
     });
   }
 
-  // pull buyer company (from CRM) + this card's company via the worker bridge
-  function loadBuyer(){
+  // pull the full company directory + this card's linked company via the worker bridge
+  function loadDirectory(){
     var u = WORKER+'/plugindata?cardId='+encodeURIComponent(ctx.cardId)+(ctx.boardId?'&boardId='+encodeURIComponent(ctx.boardId):'');
     return fetch(u).then(function(r){ ctx._http=r.status; return r.json(); }).then(function(j){
       var cd=(j&&j.cardData)||{}, bd=(j&&j.boardData)||{};
-      var cid=cd.companyId||null;
-      var list = Array.isArray(bd.companies)?bd.companies:[];
-      ctx._diag = { http:ctx._http, ok:!!(j&&j.ok), companyId:cid,
-                    companies:list.length, boardId:ctx.boardId||'(нет)', err:(j&&j.error)||null,
-                    list:list.map(function(x){return {id:x.id, name:x.name};}) };
-      if(!j || !j.ok) return;
-      if(cid && list.length){
-        var co=list.filter(function(x){return x.id===cid;})[0];
-        if(co){ ctx.companyId=cid; ctx.buyer={ name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'' }; }
-      }
+      ctx.cardCompanyId = cd.companyId||null;
+      ctx.allCompanies = (Array.isArray(bd.companies)?bd.companies:[]).slice().sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||'')); });
+      ctx._diag = { http:ctx._http, ok:!!(j&&j.ok), companyId:ctx.cardCompanyId, companies:ctx.allCompanies.length };
+      // default selected = card's company if it exists in the directory
+      if(ctx.cardCompanyId && ctx.allCompanies.some(function(c){return c.id===ctx.cardCompanyId;})) selectedCompanyId=ctx.cardCompanyId;
+      else if(ctx.allCompanies.length) selectedCompanyId=ctx.allCompanies[0].id;
+      setBuyerFromSelected();
     }).catch(function(e){ ctx._diag={ http:ctx._http||0, net:(e&&e.message||'сеть') }; });
   }
+  function companyById(id){ return ctx.allCompanies.filter(function(c){return c.id===id;})[0]||null; }
+  function setBuyerFromSelected(){
+    var co=companyById(selectedCompanyId);
+    ctx.buyer = co ? { name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'' } : null;
+  }
 
-  // list this client's orders (saved calculations) for combining into one invoice
-  function loadOrders(){
-    if(!ctx.companyId){ ORDERS=[]; return Promise.resolve(); }
-    var u = WORKER+'/calc-list?companyId='+encodeURIComponent(ctx.companyId)+'&limit=200';
-    return fetch(u).then(function(r){ return r.json(); }).then(function(j){
-      ORDERS = ((j&&j.rows)||[]).map(function(row){
-        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', total:+row.total||0, qty:1, checked:(row.id===ctx.cardId) };
+  // load ALL saved calculations once; we split them into "this client" vs "unlinked"
+  function loadAllOrders(){
+    return fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
+      ALL_ORDERS = ((j&&j.rows)||[]).map(function(row){
+        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', total:+row.total||0, company_id:row.company_id||null, qty:1, checked:false };
       });
-      // ensure current card is checked even if it sorted lower
-      if(!ORDERS.some(function(o){return o.checked;}) && ORDERS.length) ORDERS[0].checked=true;
-    }).catch(function(){ ORDERS=[]; });
+    }).catch(function(){ ALL_ORDERS=[]; });
   }
 
   function loadNumber(){
@@ -130,7 +129,10 @@
     }).catch(function(){});
   }
 
-  function selectedOrders(){ return ORDERS.filter(function(o){return o.checked;}); }
+  var validIds = {};
+  function clientOrders(){ return ALL_ORDERS.filter(function(o){ return o.company_id===selectedCompanyId; }); }
+  function orphanOrders(){ return ALL_ORDERS.filter(function(o){ return !o.company_id || !validIds[o.company_id]; }); }
+  function selectedOrders(){ return clientOrders().filter(function(o){return o.checked;}); }
   function grandTotal(){ return selectedOrders().reduce(function(s,o){return s+o.total;},0); }
 
   function render(){
@@ -144,45 +146,65 @@
     });
     html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+'</div></div>';
 
-    // buyer
-    html+='<div class="sec"><h3>Покупатель (из «Компания и контакты»)</h3>';
-    if(ctx.buyer){
-      html+='<div><b>'+esc(ctx.buyer.name)+'</b></div>'+
-            '<div class="small muted" style="margin-top:4px">'+
-            (ctx.buyer.bin?'БИН/ИИН '+esc(ctx.buyer.bin)+'<br>':'')+
-            (ctx.buyer.addr?esc(ctx.buyer.addr)+'<br>':'')+
-            (ctx.buyer.phone?'тел. '+esc(ctx.buyer.phone):'')+'</div>';
-    } else {
-      html+='<div class="warnbox">У этой карточки не выбрана компания в блоке «Компания и контакты», либо данные не подгрузились. Привяжите клиента к карточке и сохраните расчёт, затем откройте счёт снова.</div>';
-      if(ctx._diag){
-        var dg=ctx._diag;
-        html+='<div class="small muted" style="margin-top:8px">Диагностика моста: HTTP '+esc(dg.http)+' · ok='+esc(dg.ok)+' · companyId='+esc(dg.companyId||'нет')+' · компаний на доске='+esc(dg.companies)+' · board='+esc(dg.boardId)+(dg.err?(' · ошибка: '+esc(dg.err)):'')+(dg.net?(' · сеть: '+esc(dg.net)):'')+'</div>';
-        if(dg.list && dg.list.length){
-          html+='<div class="small muted" style="margin-top:4px">Компании на доске: '+dg.list.map(function(c){ return esc(c.name||'(без имени)')+' [id='+esc(c.id)+']'; }).join(' · ')+'</div>';
-        }
+    // buyer — selectable from the directory (default = card's company)
+    html+='<div class="sec"><h3>Покупатель</h3>';
+    if(ctx.allCompanies.length){
+      html+='<div class="fld" style="max-width:520px"><label>Компания-плательщик (из «Компания и контакты»)</label>'+
+            '<select id="buyerSel">'+ctx.allCompanies.map(function(c){
+              return '<option value="'+esc(c.id)+'"'+(c.id===selectedCompanyId?' selected':'')+'>'+esc(c.name||'(без имени)')+'</option>';
+            }).join('')+'</select></div>';
+      if(ctx.buyer){
+        html+='<div class="small muted" style="margin-top:8px">'+
+              (ctx.buyer.bin?'БИН/ИИН '+esc(ctx.buyer.bin)+' · ':'')+
+              (ctx.buyer.addr?esc(ctx.buyer.addr)+' · ':'')+
+              (ctx.buyer.phone?'тел. '+esc(ctx.buyer.phone):'')+'</div>';
       }
+      if(selectedCompanyId!==ctx.cardCompanyId){
+        html+='<div class="small muted" style="margin-top:6px">Выбран клиент, отличный от привязанного к карточке.</div>';
+      }
+    } else {
+      html+='<div class="warnbox">Справочник компаний пуст или не подгрузился'+(ctx._diag&&ctx._diag.net?(' ('+esc(ctx._diag.net)+')'):'')+'. Добавьте компанию в «Компания и контакты».</div>';
     }
     html+='</div>';
 
-    // orders of this client
+    // orders of the selected client
+    var co = clientOrders();
     html+='<div class="sec"><h3>Заказы клиента — что включить в счёт</h3>';
-    if(!ORDERS.length){
-      html+='<div class="muted">Нет сохранённых расчётов по этому клиенту. Сохраните расчёт в калькуляторе (он привяжется к клиенту), затем вернитесь сюда.</div>';
+    if(!co.length){
+      html+='<div class="muted">У выбранного клиента нет привязанных заказов. Если заказ есть, но привязан к другому/пустому клиенту — найдите его ниже в «Заказы без клиента» и привяжите.</div>';
     } else {
-      html+='<div class="small muted" style="margin-bottom:6px">Отметьте заказы этого клиента — каждый станет строкой счёта. «Кол-во» — сколько это продуктов; цена за единицу считается как сумма заказа ÷ кол-во.</div>';
+      html+='<div class="small muted" style="margin-bottom:6px">Отметьте заказы — каждый станет строкой счёта. «Кол-во» — сколько это продуктов; цена за единицу = сумма заказа ÷ кол-во.</div>';
       html+='<table><thead><tr><th></th><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Кол-во</th><th class="num">Сумма заказа</th></tr></thead><tbody>';
-      ORDERS.forEach(function(o,i){
+      co.forEach(function(o){
         html+='<tr>'+
-          '<td><input type="checkbox" class="ck" data-i="'+i+'"'+(o.checked?' checked':'')+'></td>'+
+          '<td><input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'></td>'+
           '<td class="small">'+esc(o.number||'—')+'</td>'+
           '<td>'+esc(o.name)+'</td>'+
-          '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-i="'+i+'" value="'+(o.qty||1)+'"></td>'+
+          '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'"></td>'+
           '<td class="num">'+money(o.total)+' ₸</td>'+
         '</tr>';
       });
       html+='</tbody></table>';
     }
     html+='</div>';
+
+    // unlinked / orphaned orders — can be attached to the selected client
+    var orph = orphanOrders();
+    if(orph.length && selectedCompanyId){
+      var selName = (companyById(selectedCompanyId)||{}).name || 'клиента';
+      html+='<div class="sec"><h3>Заказы без клиента — привязать</h3>';
+      html+='<div class="small muted" style="margin-bottom:6px">Эти расчёты не привязаны к существующему клиенту (старые заказы). Нажмите «привязать», чтобы отнести заказ к «'+esc(selName)+'» — после этого он появится в списке выше.</div>';
+      html+='<table><thead><tr><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Сумма</th><th></th></tr></thead><tbody>';
+      orph.forEach(function(o){
+        html+='<tr>'+
+          '<td class="small">'+esc(o.number||'—')+'</td>'+
+          '<td>'+esc(o.name)+'</td>'+
+          '<td class="num">'+money(o.total)+' ₸</td>'+
+          '<td><button class="btn ghost relink" data-id="'+esc(o.cardId)+'" type="button">привязать</button></td>'+
+        '</tr>';
+      });
+      html+='</tbody></table></div>';
+    }
 
     // invoice meta
     html+='<div class="sec"><h3>Реквизиты счёта</h3><div class="row">'+
@@ -195,9 +217,23 @@
 
     // wire
     [].forEach.call(document.querySelectorAll('input[name=sup]'), function(r){ r.addEventListener('change', function(){ supplierKey=this.value; render(); }); });
-    [].forEach.call(document.querySelectorAll('.ck'), function(c){ c.addEventListener('change', function(){ ORDERS[+this.getAttribute('data-i')].checked=this.checked; updateGrand(); }); });
-    [].forEach.call(document.querySelectorAll('.qn'), function(q){ q.addEventListener('input', function(){ ORDERS[+this.getAttribute('data-i')].qty=Math.max(1,+this.value||1); }); });
+    var bs=document.getElementById('buyerSel');
+    if(bs) bs.addEventListener('change', function(){ selectedCompanyId=this.value; setBuyerFromSelected(); render(); });
+    [].forEach.call(document.querySelectorAll('.ck'), function(c){ c.addEventListener('change', function(){ var id=this.getAttribute('data-id'), chk=this.checked; var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.checked=chk; updateGrand(); }); });
+    [].forEach.call(document.querySelectorAll('.qn'), function(q){ q.addEventListener('input', function(){ var id=this.getAttribute('data-id'), v=Math.max(1,+this.value||1); var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.qty=v; }); });
+    [].forEach.call(document.querySelectorAll('.relink'), function(b){ b.addEventListener('click', function(){ relink(this.getAttribute('data-id')); }); });
     updateGrand();
+  }
+
+  function relink(cardId){
+    var co=companyById(selectedCompanyId); if(!co) return;
+    var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0];
+    fetch(WORKER+'/calc-relink',{ method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ cardId:cardId, companyId:co.id, companyName:co.name||'' }) })
+      .then(function(r){return r.json();}).then(function(j){
+        if(j&&j.ok && o){ o.company_id=co.id; o.checked=true; render(); }
+        else alert('Не удалось привязать: '+((j&&j.error)||'?'));
+      }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
   }
 
   function updateGrand(){
@@ -253,7 +289,13 @@
 
   loadContext()
     .then(function(){ if(!ctx.cardId){ boot('Не удалось определить карточку.'); return Promise.reject('no card'); } })
-    .then(loadBuyer).then(loadOrders).then(loadNumber)
+    .then(loadDirectory).then(loadAllOrders).then(loadNumber)
+    .then(function(){
+      validIds = {}; ctx.allCompanies.forEach(function(c){ validIds[c.id]=true; });
+      // pre-check the current card's order if it belongs to the selected client
+      var cur = ALL_ORDERS.filter(function(o){ return o.cardId===ctx.cardId; })[0];
+      if(cur && cur.company_id===selectedCompanyId) cur.checked=true;
+    })
     .then(render)
     .catch(function(e){ boot('Ошибка загрузки: '+(e&&e.message||e)); });
 </script>
