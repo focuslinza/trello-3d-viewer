@@ -97,14 +97,15 @@
   function loadBuyer(){
     var u = WORKER+'/plugindata?cardId='+encodeURIComponent(ctx.cardId)+(ctx.boardId?'&boardId='+encodeURIComponent(ctx.boardId):'');
     return fetch(u).then(function(r){ ctx._http=r.status; return r.json(); }).then(function(j){
-      ctx._diag = { http:ctx._http, ok:!!(j&&j.ok), companyId:(j&&j.cardData&&j.cardData.companyId)||null,
-                    companies:(j&&j.boardData&&Array.isArray(j.boardData.companies))?j.boardData.companies.length:0,
-                    boardId:ctx.boardId||'(нет)', err:(j&&j.error)||null };
+      var cd=(j&&j.cardData)||{}, bd=(j&&j.boardData)||{};
+      var cid=cd.companyId||null;
+      var list = Array.isArray(bd.companies)?bd.companies:[];
+      ctx._diag = { http:ctx._http, ok:!!(j&&j.ok), companyId:cid,
+                    companies:list.length, boardId:ctx.boardId||'(нет)', err:(j&&j.error)||null,
+                    list:list.map(function(x){return {id:x.id, name:x.name};}) };
       if(!j || !j.ok) return;
-      var cd=j.cardData||{}, bd=j.boardData||{};
-      var cid=cd.companyId;
-      if(cid && Array.isArray(bd.companies)){
-        var co=bd.companies.filter(function(x){return x.id===cid;})[0];
+      if(cid && list.length){
+        var co=list.filter(function(x){return x.id===cid;})[0];
         if(co){ ctx.companyId=cid; ctx.buyer={ name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'' }; }
       }
     }).catch(function(e){ ctx._diag={ http:ctx._http||0, net:(e&&e.message||'сеть') }; });
@@ -156,6 +157,9 @@
       if(ctx._diag){
         var dg=ctx._diag;
         html+='<div class="small muted" style="margin-top:8px">Диагностика моста: HTTP '+esc(dg.http)+' · ok='+esc(dg.ok)+' · companyId='+esc(dg.companyId||'нет')+' · компаний на доске='+esc(dg.companies)+' · board='+esc(dg.boardId)+(dg.err?(' · ошибка: '+esc(dg.err)):'')+(dg.net?(' · сеть: '+esc(dg.net)):'')+'</div>';
+        if(dg.list && dg.list.length){
+          html+='<div class="small muted" style="margin-top:4px">Компании на доске: '+dg.list.map(function(c){ return esc(c.name||'(без имени)')+' [id='+esc(c.id)+']'; }).join(' · ')+'</div>';
+        }
       }
     }
     html+='</div>';
