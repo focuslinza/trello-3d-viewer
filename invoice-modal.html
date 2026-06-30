@@ -151,36 +151,12 @@
       }).catch(function(){});
   }
 
-  function fmtBytes(b){ b=+b||0; if(b<1024) return b?b+' Б':''; if(b<1048576) return (b/1024).toFixed(0)+' КБ'; return (b/1048576).toFixed(1)+' МБ'; }
-
-  // compact card view inside the invoice modal (name, desc, attachments, comments).
-  // an in-page overlay — closing it keeps the invoice modal open underneath.
+  // open the full Trello card in a separate window (cover, photos, PDFs open directly).
+  // a separate window keeps THIS invoice modal open underneath.
   function openCard(cardId){
     var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]||{};
-    var ovl=document.createElement('div'); ovl.className='ovl';
-    ovl.innerHTML='<div class="pop"><h2>'+esc(o.name||'Заказ')+'</h2><div class="meta">№ карт. '+esc(o.number||'—')+' · сумма '+money(o.total)+' ₸</div><div id="popbody" class="muted">Загрузка карточки…</div><div class="popbar"><button class="btn ghost" id="popFull" type="button">Открыть полностью в Trello</button><button class="btn ghost" id="popClose" type="button">Закрыть</button></div></div>';
-    document.body.appendChild(ovl);
-    function close(){ if(ovl.parentNode) document.body.removeChild(ovl); }
-    ovl.addEventListener('click', function(e){ if(e.target===ovl) close(); });
-    ovl.querySelector('#popClose').onclick=close;
-    ovl.querySelector('#popFull').onclick=function(){ window.open(o.link||('https://trello.com/c/'+cardId),'_blank','noopener,width=1100,height=850'); };
-    fetch(WORKER+'/card-details?cardId='+encodeURIComponent(cardId)).then(function(r){return r.json();}).then(function(j){
-      var body=ovl.querySelector('#popbody');
-      if(!j||!j.ok){ body.innerHTML='<div class="muted">Не удалось загрузить карточку. Можно открыть её полностью в Trello.</div>'; return; }
-      var h='';
-      if(j.desc){ h+='<div class="gh">Описание</div><div style="white-space:pre-wrap;margin:4px 0 10px">'+esc(j.desc)+'</div>'; }
-      h+='<div class="gh">Вложения (чертежи и файлы)</div>';
-      if(j.attachments && j.attachments.length){
-        h+='<table><tbody>';
-        j.attachments.forEach(function(a){ h+='<tr><td><a class="lnk" href="'+esc(a.url)+'" target="_blank" rel="noopener">'+esc(a.name||'файл')+'</a></td><td class="num small">'+esc(fmtBytes(a.bytes))+'</td></tr>'; });
-        h+='</tbody></table>';
-      } else { h+='<div class="muted" style="margin-bottom:8px">Нет вложений.</div>'; }
-      if(j.comments && j.comments.length){
-        h+='<div class="gh">Комментарии</div>';
-        j.comments.forEach(function(c){ if(!c.text) return; h+='<div style="margin:6px 0"><span class="small muted">'+esc(c.author)+(c.date?(' · '+new Date(c.date).toLocaleDateString("ru-RU")):'')+'</span><br>'+esc(c.text)+'</div>'; });
-      }
-      body.innerHTML=h;
-    }).catch(function(){ ovl.querySelector('#popbody').innerHTML='<div class="muted">Сеть недоступна.</div>'; });
+    var url=o.link || ('https://trello.com/c/'+cardId);
+    window.open(url, '_blank', 'noopener,width=1100,height=850');
   }
 
   var validIds = {};
