@@ -41,12 +41,14 @@
     .actions{display:flex;gap:6px;justify-content:flex-end}
     .msg{font-size:12px;color:var(--muted);margin-top:8px;min-height:16px}
     .empty{color:var(--muted);padding:14px 0}
+    .stagewrap{display:flex;flex-wrap:wrap;gap:6px 12px;max-width:280px}
+    .chk.stg{font-size:12px;white-space:nowrap}
   </style>
 </head>
 <body>
   <div id="app">
     <h2>Зарплата и работники</h2>
-    <div class="sub" id="meta">v2 · загрузка…</div>
+    <div class="sub" id="meta">v4 · загрузка…</div>
 
     <div class="sec">
       <h3>Рабочие дни месяца</h3>
@@ -68,7 +70,7 @@
       <h3>Работники</h3>
       <table id="tbl">
         <thead>
-          <tr><th>Имя</th><th>Оклад, ₸/мес</th><th>Ставка/день</th><th>Trello-аккаунт</th><th></th></tr>
+          <tr><th>Имя</th><th>Оклад, ₸/мес</th><th>Ставка/день</th><th>Этапы (что делает)</th><th>Счета</th><th>Trello-аккаунт</th><th></th></tr>
         </thead>
         <tbody id="rows"></tbody>
       </table>
@@ -97,7 +99,7 @@
       var n = rowsEl.querySelectorAll('tr[data-id]:not([data-id=""])').length;
       // count rows whose data-id is non-empty
       n = [].filter.call(rowsEl.querySelectorAll('tr'), function(tr){ return (tr.getAttribute('data-id')||'')!==''; }).length;
-      document.getElementById('meta').textContent = 'v2 · работников: '+n;
+      document.getElementById('meta').textContent = 'v4 · работников: '+n;
     }
     function showDenied(){
       document.getElementById('app').innerHTML =
@@ -125,14 +127,26 @@
       });
     }
 
+    var STAGE_GROUPS = [
+      {key:'eng',label:'Инж'},{key:'cut',label:'Резка'},{key:'bend',label:'Гибка'},
+      {key:'weld',label:'Сварка'},{key:'assembly',label:'Сборка'},{key:'montazh',label:'Монтаж'}
+    ];
+    function stagesHtml(sel){
+      sel = sel || [];
+      return STAGE_GROUPS.map(function(g){
+        return '<label class="chk stg"><input type="checkbox" class="stgcb" value="'+g.key+'"'+(sel.indexOf(g.key)>=0?' checked':'')+'> '+g.label+'</label>';
+      }).join('');
+    }
     function makeRow(w){
-      w = w || { id:'', name:'', salary:'' };
+      w = w || { id:'', name:'', salary:'', stages:[] };
       var tr=document.createElement('tr');
       tr.setAttribute('data-id', w.id||'');
       tr.innerHTML =
         '<td><input class="nm" type="text" placeholder="Имя работника" value="'+(w.name?String(w.name).replace(/"/g,'&quot;'):'')+'"></td>'+
         '<td><input class="sal" type="number" min="0" step="1000" placeholder="например, 400000" value="'+(w.salary!=null?w.salary:'')+'"></td>'+
         '<td class="wage">—</td>'+
+        '<td><div class="stagewrap">'+stagesHtml(w.stages||[])+'</div></td>'+
+        '<td style="text-align:center"><input type="checkbox" class="caninv"'+((w.can_invoice==1||w.can_invoice===true)?' checked':'')+' title="Может выставлять счёт на оплату"></td>'+
         '<td><select class="mem">'+memberOptionsHtml(w.trello_member_id||'')+'</select></td>'+
         '<td><div class="actions">'+
           '<button class="btn save" type="button">Сохранить</button>'+
@@ -166,13 +180,15 @@
       var name=tr.querySelector('.nm').value.trim();
       var salary=parseFloat(tr.querySelector('.sal').value)||0;
       var memberId=tr.querySelector('.mem').value||'';
+      var stages=[].map.call(tr.querySelectorAll('.stgcb:checked'), function(c){ return c.value; });
+      var canInvoice=tr.querySelector('.caninv')?tr.querySelector('.caninv').checked:false;
       if(!name){ setMsg('Введите имя.'); return; }
       if(!salary){ setMsg('Введите оклад.'); return; }
       var id=tr.getAttribute('data-id')||'';
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, trelloMemberId:memberId||undefined })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; updateCount(); }

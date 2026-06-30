@@ -59,7 +59,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v15 · загрузка…</div>
+    <div class="sub" id="meta">v17 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -307,20 +307,22 @@
     }
 
     // ---- context (card / company / object / dxf) ----
-    var ctx={ cardId:null, cardName:'', boardId:'', status:'', companyId:null, companyName:'', objectName:'' };
+    var ctx={ cardId:null, cardName:'', cardNumber:'', boardId:'', status:'', companyId:null, companyName:'', objectName:'' };
     var dxfMetrics={};
 
     function loadContext(){
       ctx.cardId  = t.arg('cardId')  || null;
       ctx.boardId = t.arg('boardId') || '';
       ctx.cardName= t.arg('cardName')|| '';
+      ctx.cardNumber = t.arg('cardNumber') || '';
       ctx.status  = t.arg('status')  || '';
       ctx._src = ctx.cardId ? 'arg' : '';
       return Promise.resolve().then(function(){
-        if(ctx.cardId) return;
-        // fallback: ask the card directly from inside the modal
-        return t.card('id','name').then(function(c){
-          if(c&&c.id){ ctx.cardId=c.id; ctx.cardName=ctx.cardName||c.name||''; ctx._src='card'; }
+        if(ctx.cardId && ctx.cardNumber) return;
+        // fallback: ask the card directly from inside the modal (incl. its number)
+        return t.card('id','name','idShort').then(function(c){
+          if(c&&c.id){ ctx.cardId=ctx.cardId||c.id; ctx.cardName=ctx.cardName||c.name||''; ctx._src=ctx._src||'card'; }
+          if(c&&c.idShort!=null && !ctx.cardNumber) ctx.cardNumber=String(c.idShort);
         }).catch(function(){});
       }).then(function(){
         if(ctx.cardId && !ctx.boardId){
@@ -341,7 +343,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v15   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
+        + '   ·   v17   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
@@ -359,6 +361,7 @@
       ctx._diag=null;
       if(res.j && res.j.ok){
         var cd=res.j.cardData||{}, bd=res.j.boardData||{};
+        if(res.j.cardNumber) ctx.cardNumber = res.j.cardNumber;  // from "Card Number" field
         dxfMetrics = cd.dxfMetrics || {};
         var cid=cd.companyId;
         if(cid && Array.isArray(bd.companies)){
@@ -480,7 +483,7 @@
       t.set('card','shared','calcData',calcData).then(function(){
         // 2) log to central D1 via Worker
         var payload={
-          cardId:ctx.cardId, cardName:ctx.cardName, boardId:ctx.boardId,
+          cardId:ctx.cardId, cardName:ctx.cardName, cardNumber:ctx.cardNumber, boardId:ctx.boardId,
           companyId:ctx.companyId, companyName:ctx.companyName, objectName:ctx.objectName, status:ctx.status,
           subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total, currency:'KZT',
           lineItems:res.lineItems, inputs:inp, stageCosts:stageCosts

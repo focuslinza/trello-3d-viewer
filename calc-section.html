@@ -44,6 +44,15 @@
         args: { cardId: CARD.id }
       });
     }
+    function openInvoice(){
+      return t.modal({
+        title: 'Счёт на оплату',
+        url: './invoice-modal.html?t=' + Date.now(),
+        fullscreen: true,
+        accentColor: '#0c66e4',
+        args: { cardId: CARD.id, boardId: CARD.board }
+      });
+    }
     function isDirector(){
       return Promise.all([
         t.member('id'),
@@ -83,8 +92,17 @@
         btn.textContent = (d && d.total!=null) ? 'Открыть расчёт' : 'Открыть калькулятор';
         btn.addEventListener('click', openCalc);
         row.appendChild(left); row.appendChild(btn); el.appendChild(row);
-        // director-only: earnings report button (second row)
-        return isDirector().then(function(admin){
+        // director: earnings; director OR allowed worker: invoice
+        function addInvoiceBtn(){
+          var row3=document.createElement('div'); row3.className='row'; row3.style.marginTop='8px';
+          var lbl3=document.createElement('div'); lbl3.className='muted'; lbl3.textContent='Счёт на оплату (можно объединить несколько заказов клиента)';
+          var ib=document.createElement('button'); ib.className='btn'; ib.type='button'; ib.style.background='#1f845a';
+          ib.textContent='Счёт на оплату';
+          ib.addEventListener('click', openInvoice);
+          row3.appendChild(lbl3); row3.appendChild(ib); el.appendChild(row3);
+        }
+        return Promise.all([ isDirector(), t.member('id').catch(function(){return {};}) ]).then(function(r){
+          var admin=r[0], me=r[1]||{};
           if(admin){
             var row2=document.createElement('div'); row2.className='row'; row2.style.marginTop='8px';
             var lbl=document.createElement('div'); lbl.className='muted'; lbl.textContent='Заработок и эффективность по этому заказу';
@@ -93,7 +111,12 @@
             eb.addEventListener('click', openEarnings);
             row2.appendChild(lbl); row2.appendChild(eb); el.appendChild(row2);
           }
-          return t.sizeTo('#wrap');
+          if(admin){ addInvoiceBtn(); return t.sizeTo('#wrap'); }
+          // not admin: show invoice only if my Trello account is an allowed worker
+          return fetch(WORKER+'/workers-list').then(function(x){return x.json();}).then(function(j){
+            var allowed=((j&&j.workers)||[]).some(function(w){ return w.trello_member_id===me.id && (w.can_invoice==1||w.can_invoice===true); });
+            if(allowed) addInvoiceBtn();
+          }).catch(function(){}).then(function(){ return t.sizeTo('#wrap'); });
         });
       });
     });
