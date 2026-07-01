@@ -36,7 +36,8 @@
     // parties
     function party(lbl,txt){ return { columns:[ {width:78,text:lbl,bold:true,fontSize:9.5}, {width:'*',text:txt,fontSize:9.5} ], margin:[0,0,0,3] }; }
     body.push(party('Поставщик:', 'БИН / ИИН '+sup.bin+', '+sup.name+', '+sup.addr));
-    var bt='БИН / ИИН '+buy.bin+', '+buy.name+', '+buy.addr; if(buy.phone)bt+=', тел. '+buy.phone;
+    var isPerson = buy.kind==='person';
+    var bt=(isPerson?'ИИН ':'БИН / ИИН ')+(buy.bin||'')+', '+buy.name+(buy.addr?', '+buy.addr:''); if(buy.phone)bt+=', тел. '+buy.phone;
     body.push(party('Покупатель:', bt));
     body.push(party('Договор:', d.contract||'Без договора'));
     body.push({text:'',margin:[0,0,0,7]});

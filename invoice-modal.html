@@ -123,7 +123,7 @@
   function companyById(id){ return ctx.allCompanies.filter(function(c){return c.id===id;})[0]||null; }
   function setBuyerFromSelected(){
     var co=companyById(selectedCompanyId);
-    ctx.buyer = co ? { name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'' } : null;
+    ctx.buyer = co ? { name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'', kind:co.kind||'company' } : null;
   }
 
   // load ALL saved calculations once; we split them into "this client" vs "unlinked"
@@ -184,13 +184,15 @@
     // buyer — selectable from the directory (default = card's company)
     html+='<div class="sec"><h3>Покупатель</h3>';
     if(ctx.allCompanies.length){
-      html+='<div class="fld" style="max-width:520px"><label>Компания-плательщик (из «Компания и контакты»)</label>'+
+      html+='<div class="fld" style="max-width:520px"><label>Клиент-плательщик (из «Компания и контакты»)</label>'+
             '<select id="buyerSel">'+ctx.allCompanies.map(function(c){
-              return '<option value="'+esc(c.id)+'"'+(c.id===selectedCompanyId?' selected':'')+'>'+esc(c.name||'(без имени)')+'</option>';
+              return '<option value="'+esc(c.id)+'"'+(c.id===selectedCompanyId?' selected':'')+'>'+esc(c.name||'(без имени)')+(c.kind==='person'?' — физлицо':'')+'</option>';
             }).join('')+'</select></div>';
       if(ctx.buyer){
+        var isP = ctx.buyer.kind==='person';
         html+='<div class="small muted" style="margin-top:8px">'+
-              (ctx.buyer.bin?'БИН/ИИН '+esc(ctx.buyer.bin)+' · ':'')+
+              (isP?'Физлицо · ':'')+
+              (ctx.buyer.bin?(isP?'ИИН ':'БИН/ИИН ')+esc(ctx.buyer.bin)+' · ':'')+
               (ctx.buyer.addr?esc(ctx.buyer.addr)+' · ':'')+
               (ctx.buyer.phone?'тел. '+esc(ctx.buyer.phone):'')+'</div>';
       }
