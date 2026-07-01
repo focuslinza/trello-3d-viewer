@@ -113,9 +113,8 @@
           }
           if(admin){ addInvoiceBtn(); return t.sizeTo('#wrap'); }
           // not admin: show invoice only if my Trello account is an allowed worker
-          return fetch(WORKER+'/workers-list').then(function(x){return x.json();}).then(function(j){
-            var allowed=((j&&j.workers)||[]).some(function(w){ return w.trello_member_id===me.id && (w.can_invoice==1||w.can_invoice===true); });
-            if(allowed) addInvoiceBtn();
+          return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||'')).then(function(x){return x.json();}).then(function(j){
+            if(j&&j.canInvoice) addInvoiceBtn();
           }).catch(function(){}).then(function(){ return t.sizeTo('#wrap'); });
         });
       });

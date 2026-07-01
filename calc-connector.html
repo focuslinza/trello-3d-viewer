@@ -33,6 +33,16 @@
               title: 'Зарплата и работники'
             });
           }
+        }, {
+          icon: { dark: t.signUrl('./calc-icon.svg'), light: t.signUrl('./calc-icon.svg') },
+          text: 'Мой заработок',
+          callback: function (t) {
+            return t.modal({
+              url: t.signUrl('./my-earnings-modal.html') + '?t=' + Date.now(),
+              fullscreen: true,
+              title: 'Мой заработок'
+            });
+          }
         }];
       }
     });
