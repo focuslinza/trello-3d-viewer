@@ -62,7 +62,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v18 · загрузка…</div>
+    <div class="sub" id="meta">v19 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -347,7 +347,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v18   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
+        + '   ·   v19   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
@@ -413,8 +413,12 @@
       var added=0, missingTh=0;
       keys.forEach(function(k){
         var m=dxfMetrics[k]||{}; var q=+m.quantity||1; var th=+m.thicknessMm||0;
-        if(m.cutLenM>0){ if(th>0){ opLines.appendChild(makeOpRow({kind:'cut', thickness:nearestTh(th), qty:round3(m.cutLenM*q)})); added++; } else missingTh++; }
-        if(m.bendCount>0){ if(th>0){ opLines.appendChild(makeOpRow({kind:'bend', thickness:nearestTh(th), qty:Math.round(m.bendCount*q)})); added++; } else missingTh++; }
+        if(m.cutLenM>0){
+          if(m.tube){ opLines.appendChild(makeOpRow({kind:'cutTube', thickness:(nearestTh(th)||th||1.5), qty:round3(m.cutLenM*q)})); added++; }
+          else if(th>0){ opLines.appendChild(makeOpRow({kind:'cut', thickness:nearestTh(th), qty:round3(m.cutLenM*q)})); added++; }
+          else missingTh++;
+        }
+        if(m.bendCount>0){ if(th>0){ opLines.appendChild(makeOpRow({kind:(m.tube?'bendTube':'bend'), thickness:nearestTh(th), qty:Math.round(m.bendCount*q)})); added++; } else missingTh++; }
         if(m.partAreaM2>0){
           var code = m.materialCode || guessSheetCode(m.material, nearestTh(th));
           matLines.appendChild(makeCatRow(MATG, {code:code||'', qty:round3(m.partAreaM2*q)}, 'м²')); added++;

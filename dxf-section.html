@@ -37,11 +37,12 @@
         fullscreen: true
       });
     }
-    function openZzx(cardId){
+    function openZzx(att, cardId){
+      var fileName = att.fileName || att.name;
       return t.modal({
-        title: 'Просмотр .zzx',
+        title: att.name || fileName,
         url: './zzx-modal.html?t=' + Date.now(),
-        args: { cardId: cardId },
+        args: { cardId: cardId, attachmentId: att.id, fileName: fileName, url: att.url },
         accentColor: '#8a5a2b',
         fullscreen: true
       });
@@ -72,7 +73,7 @@
           var txt=document.createElement('span'); txt.textContent=att.name||fileName;
           nm.appendChild(ext); nm.appendChild(txt);
           var btn=document.createElement('button'); btn.className='btn'; btn.type='button'; btn.style.background='#8a5a2b'; btn.textContent='Просмотр';
-          btn.addEventListener('click', function(){ openZzx(card.id); });
+          btn.addEventListener('click', function(){ openZzx(att, card.id); });
           row.appendChild(nm); row.appendChild(btn); el.appendChild(row);
         });
         return t.sizeTo('#list');
