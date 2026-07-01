@@ -44,6 +44,9 @@
     .totals .big { font-size:20px; font-weight:700; color:var(--txt); }
     .totals .big span { font-size:13px; font-weight:600; color:var(--muted); }
     .actions { display:flex; gap:8px; }
+    /* cost hidden for workers without permission */
+    body.nocost .lt, body.nocost #brkSec, body.nocost #taxFld, body.nocost #totalBig { display:none !important; }
+    .nocostNote { color:var(--muted) !important; font-weight:600; }
     .actions button { height:36px; border-radius:4px; font-size:13px; font-weight:600; cursor:pointer; padding:0 16px; border:none; }
     .save { background:#1f845a; color:#fff; }
     .save:hover { background:#1a6f4c; }
@@ -59,7 +62,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v17 · загрузка…</div>
+    <div class="sub" id="meta">v18 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -109,7 +112,7 @@
           <label>Шлейф, % от сварки</label>
           <input type="number" id="shleif" value="50" min="0" step="5" style="width:120px" />
         </div>
-        <div class="fld">
+        <div class="fld" id="taxFld">
           <label>Налог, % (вычитается из итога)</label>
           <input type="number" id="tax" value="16" min="0" step="1" style="width:140px" />
         </div>
@@ -123,7 +126,7 @@
       </div>
     </div>
 
-    <div class="sec">
+    <div class="sec" id="brkSec">
       <h3>Разбивка</h3>
       <div class="brk" id="brk"></div>
     </div>
@@ -133,6 +136,7 @@
     <div class="inner">
       <div class="totals">
         <div class="big" id="totalBig">0 <span>₸</span></div>
+        <div class="big nocostNote" id="nocostNote" style="display:none">Стоимость скрыта</div>
         <div class="msg" id="msg"></div>
       </div>
       <div class="actions">
@@ -343,7 +347,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v17   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
+        + '   ·   v18   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
@@ -501,7 +505,36 @@
       });
     };
 
+    // ---- cost visibility: director (board/org admin) OR worker with can_see_cost ----
+    function isDirector(){
+      return Promise.all([
+        t.member('id'),
+        t.board('memberships'),
+        t.organization('memberships').catch(function(){ return null; })
+      ]).then(function(res){
+        var me=res[0]||{};
+        function adminIn(o){ var ms=((o&&o.memberships)||[]).filter(function(x){return x.idMember===me.id;})[0]; return !!(ms&&ms.memberType==='admin'); }
+        return adminIn(res[1]) || adminIn(res[2]);
+      }).catch(function(){ return false; });
+    }
+    function applyCostPermission(){
+      return isDirector().then(function(admin){
+        if(admin) return true;
+        return t.member('id').then(function(m){
+          return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((m&&m.id)||'')).then(function(r){return r.json();})
+            .then(function(j){ return !!(j&&j.canSeeCost); }).catch(function(){ return false; });
+        });
+      }).then(function(canSee){
+        if(!canSee){
+          document.body.classList.add('nocost');
+          var n=document.getElementById('nocostNote'); if(n) n.style.display='';
+        }
+        return canSee;
+      });
+    }
+
     // ---- init ----
+    applyCostPermission();
     loadContext().then(restore).then(function(){ recompute(); });
   })();
   </script>
