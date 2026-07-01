@@ -24,6 +24,7 @@
     var t = window.TrelloPowerUp.iframe();
     function getExt(n){ var m=/\.[^.]+$/.exec((n||'').toLowerCase()); return m?m[0]:''; }
     function isDxf(a){ return getExt(a.fileName||a.name||a.url||'')==='.dxf'; }
+    function isZzx(a){ return getExt(a.fileName||a.name||a.url||'')==='.zzx'; }
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
     function openViewer(att, cardId){
@@ -36,13 +37,23 @@
         fullscreen: true
       });
     }
+    function openZzx(cardId){
+      return t.modal({
+        title: 'Просмотр .zzx',
+        url: './zzx-modal.html?t=' + Date.now(),
+        args: { cardId: cardId },
+        accentColor: '#8a5a2b',
+        fullscreen: true
+      });
+    }
 
     t.render(function(){
       return t.card('id','attachments').then(function(card){
-        var atts=(card.attachments||[]).filter(isDxf);
+        var all=(card.attachments||[]);
+        var dxfs=all.filter(isDxf), zzxs=all.filter(isZzx);
         var el=document.getElementById('list'); el.innerHTML='';
-        if (atts.length===0){ el.innerHTML='<div class="empty">Нет DXF-файлов на карточке.</div>'; return t.sizeTo('#list'); }
-        atts.forEach(function(att){
+        if (dxfs.length===0 && zzxs.length===0){ el.innerHTML='<div class="empty">Нет файлов DXF или .zzx на карточке.</div>'; return t.sizeTo('#list'); }
+        dxfs.forEach(function(att){
           var fileName=att.fileName||att.name||'';
           var row=document.createElement('div'); row.className='row';
           var nm=document.createElement('span'); nm.className='name';
@@ -51,6 +62,17 @@
           nm.appendChild(ext); nm.appendChild(txt);
           var btn=document.createElement('button'); btn.className='btn'; btn.type='button'; btn.textContent='Открыть / Расчёт';
           btn.addEventListener('click', function(){ openViewer(att, card.id); });
+          row.appendChild(nm); row.appendChild(btn); el.appendChild(row);
+        });
+        zzxs.forEach(function(att){
+          var fileName=att.fileName||att.name||'';
+          var row=document.createElement('div'); row.className='row';
+          var nm=document.createElement('span'); nm.className='name';
+          var ext=document.createElement('span'); ext.className='ext'; ext.textContent='ZZX';
+          var txt=document.createElement('span'); txt.textContent=att.name||fileName;
+          nm.appendChild(ext); nm.appendChild(txt);
+          var btn=document.createElement('button'); btn.className='btn'; btn.type='button'; btn.style.background='#8a5a2b'; btn.textContent='Просмотр';
+          btn.addEventListener('click', function(){ openZzx(card.id); });
           row.appendChild(nm); row.appendChild(btn); el.appendChild(row);
         });
         return t.sizeTo('#list');

@@ -53,15 +53,6 @@
         args: { cardId: CARD.id, boardId: CARD.board }
       });
     }
-    function openZzx(){
-      return t.modal({
-        title: 'Просмотр .zzx',
-        url: './zzx-modal.html?t=' + Date.now(),
-        fullscreen: true,
-        accentColor: '#0c66e4',
-        args: { cardId: CARD.id }
-      });
-    }
     function isDirector(){
       return Promise.all([
         t.member('id'),
@@ -76,10 +67,9 @@
 
     t.render(function(){
       // capture card id/name with the minimal field set (matches the working DXF section)
-      return t.card('id','name','attachments').then(function(card){
+      return t.card('id','name').then(function(card){
         CARD.id = card && card.id || null;
         CARD.name = card && card.name || '';
-        CARD.attachments = (card && card.attachments) || [];
       }).catch(function(){}).then(function(){
         return t.board('id').then(function(b){ CARD.board=(b&&b.id)||''; }).catch(function(){});
       }).then(function(){
@@ -102,16 +92,6 @@
         btn.textContent = (d && d.total!=null) ? 'Открыть расчёт' : 'Открыть калькулятор';
         btn.addEventListener('click', openCalc);
         row.appendChild(left); row.appendChild(btn); el.appendChild(row);
-        // .zzx drawing viewer — shown only if the card has a .zzx attachment
-        var hasZzx=((CARD.attachments)||[]).some(function(a){ return /\.zzx$/i.test((a&&a.name)||''); });
-        if(hasZzx){
-          var rowz=document.createElement('div'); rowz.className='row'; rowz.style.marginTop='8px';
-          var lblz=document.createElement('div'); lblz.className='muted'; lblz.textContent='Чертёж трубы (.zzx) — предпросмотр детали';
-          var zb=document.createElement('button'); zb.className='btn'; zb.type='button'; zb.style.background='#8a5a2b';
-          zb.textContent='Открыть чертёж .zzx';
-          zb.addEventListener('click', openZzx);
-          rowz.appendChild(lblz); rowz.appendChild(zb); el.appendChild(rowz);
-        }
         // director: earnings; director OR allowed worker: invoice
         function addInvoiceBtn(){
           var row3=document.createElement('div'); row3.className='row'; row3.style.marginTop='8px';
