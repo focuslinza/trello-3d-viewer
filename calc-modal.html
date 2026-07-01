@@ -62,7 +62,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v19 · загрузка…</div>
+    <div class="sub" id="meta">v20 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -347,7 +347,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v19   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
+        + '   ·   v20   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
@@ -410,18 +410,28 @@
     function doPullFromMetrics(){
       var keys=Object.keys(dxfMetrics);
       if(!keys.length){ renderDxfHint(); return; }
+      // remove rows previously added by an earlier "Загрузить из DXF" click (avoid duplication)
+      [].slice.call(opLines.querySelectorAll('[data-dxf]')).forEach(function(r){ r.remove(); });
+      [].slice.call(matLines.querySelectorAll('[data-dxf]')).forEach(function(r){ r.remove(); });
+      // signatures of rows already present (manual or restored) — skip identical ones
+      var seen={};
+      [].forEach.call(opLines.children, function(r){ var d=r._read&&r._read(); if(d) seen['op|'+d.kind+'|'+d.thickness+'|'+round3(d.qty)]=1; });
+      [].forEach.call(matLines.children, function(r){ var d=r._read&&r._read(); if(d) seen['mat|'+d.code+'|'+round3(d.qty)]=1; });
+      function addOp(o){ var sig='op|'+o.kind+'|'+o.thickness+'|'+round3(o.qty); if(seen[sig]) return false; seen[sig]=1; var row=makeOpRow(o); row.setAttribute('data-dxf','1'); opLines.appendChild(row); return true; }
+      function addMat(code,qty){ var sig='mat|'+code+'|'+round3(qty); if(seen[sig]) return false; seen[sig]=1; var row=makeCatRow(MATG,{code:code||'',qty:qty},'м²'); row.setAttribute('data-dxf','1'); matLines.appendChild(row); return true; }
+
       var added=0, missingTh=0;
       keys.forEach(function(k){
         var m=dxfMetrics[k]||{}; var q=+m.quantity||1; var th=+m.thicknessMm||0;
         if(m.cutLenM>0){
-          if(m.tube){ opLines.appendChild(makeOpRow({kind:'cutTube', thickness:(nearestTh(th)||th||1.5), qty:round3(m.cutLenM*q)})); added++; }
-          else if(th>0){ opLines.appendChild(makeOpRow({kind:'cut', thickness:nearestTh(th), qty:round3(m.cutLenM*q)})); added++; }
+          if(m.tube){ if(addOp({kind:'cutTube', thickness:(nearestTh(th)||th||1.5), qty:round3(m.cutLenM*q)})) added++; }
+          else if(th>0){ if(addOp({kind:'cut', thickness:nearestTh(th), qty:round3(m.cutLenM*q)})) added++; }
           else missingTh++;
         }
-        if(m.bendCount>0){ if(th>0){ opLines.appendChild(makeOpRow({kind:(m.tube?'bendTube':'bend'), thickness:nearestTh(th), qty:Math.round(m.bendCount*q)})); added++; } else missingTh++; }
+        if(m.bendCount>0){ if(th>0){ if(addOp({kind:(m.tube?'bendTube':'bend'), thickness:nearestTh(th), qty:Math.round(m.bendCount*q)})) added++; } else missingTh++; }
         if(m.partAreaM2>0){
           var code = m.materialCode || guessSheetCode(m.material, nearestTh(th));
-          matLines.appendChild(makeCatRow(MATG, {code:code||'', qty:round3(m.partAreaM2*q)}, 'м²')); added++;
+          if(addMat(code, round3(m.partAreaM2*q))) added++;
         }
       });
       var h=document.getElementById('dxfHint');
