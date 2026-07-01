@@ -92,6 +92,7 @@
   var invNumber = null;
   var showOrphans = false;
   var showPaid = false;
+  var showHidden = false;
 
   function boot(msg){ var b=document.getElementById('boot'); if(b) b.textContent=msg; }
 
@@ -129,7 +130,7 @@
   function loadAllOrders(){
     return fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
       ALL_ORDERS = ((j&&j.rows)||[]).map(function(row){
-        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, qty:1, checked:false };
+        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false };
       });
     }).catch(function(){ ALL_ORDERS=[]; });
   }
@@ -162,9 +163,10 @@
   }
 
   var validIds = {};
-  function clientOrders(){ return ALL_ORDERS.filter(function(o){ return o.company_id===selectedCompanyId && !o.paid; }); }
-  function clientPaid(){ return ALL_ORDERS.filter(function(o){ return o.company_id===selectedCompanyId && o.paid; }); }
-  function orphanOrders(){ return ALL_ORDERS.filter(function(o){ return (!o.company_id || !validIds[o.company_id]) && !o.paid; }); }
+  function clientOrders(){ return ALL_ORDERS.filter(function(o){ return o.company_id===selectedCompanyId && !o.paid && !o.hidden; }); }
+  function clientPaid(){ return ALL_ORDERS.filter(function(o){ return o.company_id===selectedCompanyId && o.paid && !o.hidden; }); }
+  function orphanOrders(){ return ALL_ORDERS.filter(function(o){ return (!o.company_id || !validIds[o.company_id]) && !o.paid && !o.hidden; }); }
+  function hiddenOrders(){ return ALL_ORDERS.filter(function(o){ return o.hidden; }); }
   function selectedOrders(){ return clientOrders().filter(function(o){return o.checked;}); }
   function grandTotal(){ return selectedOrders().reduce(function(s,o){return s+o.total;},0); }
 
@@ -216,7 +218,7 @@
           '<td>'+esc(o.name)+'</td>'+
           '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'"></td>'+
           '<td class="num">'+money(o.total)+' ₸</td>'+
-          '<td><button class="btn ghost paybtn" data-id="'+esc(o.cardId)+'" type="button" title="Отметить, что клиент оплатил этот заказ">оплачен</button></td>'+
+          '<td style="white-space:nowrap"><button class="btn ghost paybtn" data-id="'+esc(o.cardId)+'" type="button" title="Клиент оплатил этот заказ">оплачен</button> <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" title="Убрать заказ из списка (не оплата)">убрать</button></td>'+
         '</tr>';
       });
       html+='</tbody></table>';
@@ -238,9 +240,24 @@
         html+='</tbody></table>';
       }
     }
+    // hidden orders (removed from the list) — restorable
+    var hid = hiddenOrders();
+    if(hid.length){
+      html+='<div style="margin-top:12px"><span class="lnk" id="hiddenToggle">'+(showHidden?'▾':'▸')+' Убранные заказы ('+hid.length+')</span></div>';
+      if(showHidden){
+        html+='<table style="margin-top:6px;opacity:.75"><thead><tr><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Сумма</th><th></th></tr></thead><tbody>';
+        hid.forEach(function(o){
+          html+='<tr>'+
+            '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
+            '<td>'+esc(o.name)+'</td>'+
+            '<td class="num">'+money(o.total)+' ₸</td>'+
+            '<td><button class="btn ghost unhidebtn" data-id="'+esc(o.cardId)+'" type="button" title="Вернуть заказ в список">вернуть</button></td>'+
+          '</tr>';
+        });
+        html+='</tbody></table>';
+      }
+    }
     html+='</div>';
-
-    // unlinked / orphaned orders — can be attached to the selected client
     var orph = orphanOrders();
     if(orph.length && selectedCompanyId){
       var selName = (companyById(selectedCompanyId)||{}).name || 'клиента';
@@ -281,8 +298,12 @@
     if(ot) ot.addEventListener('click', function(){ showOrphans=!showOrphans; render(); });
     var pt=document.getElementById('paidToggle');
     if(pt) pt.addEventListener('click', function(){ showPaid=!showPaid; render(); });
+    var ht=document.getElementById('hiddenToggle');
+    if(ht) ht.addEventListener('click', function(){ showHidden=!showHidden; render(); });
     [].forEach.call(document.querySelectorAll('.paybtn'), function(b){ b.addEventListener('click', function(){ markPaid(this.getAttribute('data-id'), true); }); });
     [].forEach.call(document.querySelectorAll('.unpaybtn'), function(b){ b.addEventListener('click', function(){ markPaid(this.getAttribute('data-id'), false); }); });
+    [].forEach.call(document.querySelectorAll('.hidebtn'), function(b){ b.addEventListener('click', function(){ markHidden(this.getAttribute('data-id'), true); }); });
+    [].forEach.call(document.querySelectorAll('.unhidebtn'), function(b){ b.addEventListener('click', function(){ markHidden(this.getAttribute('data-id'), false); }); });
     [].forEach.call(document.querySelectorAll('.rev'), function(s){ s.addEventListener('click', function(){ openCard(this.getAttribute('data-id')); }); });
     updateGrand();
   }
@@ -305,6 +326,16 @@
       .then(function(r){return r.json();}).then(function(j){
         if(j&&j.ok){ o.paid=paid?1:0; if(o.paid) o.checked=false; render(); }
         else alert('Не удалось изменить статус: '+((j&&j.error)||'?'));
+      }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
+  }
+
+  function markHidden(cardId, hidden){
+    var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]; if(!o) return;
+    fetch(WORKER+'/calc-hide',{ method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ cardId:cardId, hidden:hidden?1:0 }) })
+      .then(function(r){return r.json();}).then(function(j){
+        if(j&&j.ok){ o.hidden=hidden?1:0; if(o.hidden) o.checked=false; render(); }
+        else alert('Не удалось изменить: '+((j&&j.error)||'?'));
       }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
   }
 
