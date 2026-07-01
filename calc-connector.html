@@ -11,6 +11,23 @@
     // that opens the full calculator modal. Stores results on the card and
     // logs every order to the central D1 database via the Worker.
     window.TrelloPowerUp.initialize({
+      'card-buttons': function (t, options) {
+        return t.card('attachments').then(function (c) {
+          var has = ((c && c.attachments) || []).some(function (a) { return /\.zzx$/i.test(a.name || ''); });
+          if (!has) return [];
+          return [{
+            icon: t.signUrl('./calc-icon.svg'),
+            text: 'Чертёж .zzx',
+            callback: function (t) {
+              return t.modal({
+                url: t.signUrl('./zzx-modal.html') + '?t=' + Date.now(),
+                fullscreen: true,
+                title: 'Просмотр .zzx'
+              });
+            }
+          }];
+        }).catch(function () { return []; });
+      },
       'card-back-section': function (t, options) {
         return {
           title: 'Калькулятор стоимости',
