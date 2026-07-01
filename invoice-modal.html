@@ -90,6 +90,7 @@
   var ALL_ORDERS = [];   // every saved calc: {cardId, name, number, total, company_id, qty, checked}
   var supplierKey = 'ip';
   var invNumber = null;
+  var showOrphans = false;
 
   function boot(msg){ var b=document.getElementById('boot'); if(b) b.textContent=msg; }
 
@@ -222,18 +223,21 @@
     var orph = orphanOrders();
     if(orph.length && selectedCompanyId){
       var selName = (companyById(selectedCompanyId)||{}).name || 'клиента';
-      html+='<div class="sec"><h3>Заказы без клиента — привязать</h3>';
-      html+='<div class="small muted" style="margin-bottom:6px">Эти расчёты не привязаны к существующему клиенту (старые заказы). Нажмите «привязать», чтобы отнести заказ к «'+esc(selName)+'» — после этого он появится в списке выше.</div>';
-      html+='<table><thead><tr><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Сумма</th><th></th></tr></thead><tbody>';
-      orph.forEach(function(o){
-        html+='<tr>'+
-          '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
-          '<td>'+esc(o.name)+'</td>'+
-          '<td class="num">'+money(o.total)+' ₸</td>'+
-          '<td><button class="btn ghost relink" data-id="'+esc(o.cardId)+'" type="button">привязать</button></td>'+
-        '</tr>';
-      });
-      html+='</tbody></table></div>';
+      html+='<div class="sec"><h3 style="cursor:pointer" id="orphToggle">'+(showOrphans?'▾':'▸')+' Заказы без привязки к клиенту ('+orph.length+')</h3>';
+      html+='<div class="small muted"'+(showOrphans?'':' style="margin:0"')+'>Это заказы, которые в базе не привязаны ни к одному клиенту из справочника (старые заказы или те, где компанию в карточке не выбирали). Система не знает, чьи они — здесь могут быть заказы разных клиентов. Если среди них есть заказ клиента «'+esc(selName)+'», нажмите «привязать» — он поднимется в список выше. Проверить содержимое можно по номеру карточки.</div>';
+      if(showOrphans){
+        html+='<table style="margin-top:8px"><thead><tr><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Сумма</th><th></th></tr></thead><tbody>';
+        orph.forEach(function(o){
+          html+='<tr>'+
+            '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
+            '<td>'+esc(o.name)+'</td>'+
+            '<td class="num">'+money(o.total)+' ₸</td>'+
+            '<td><button class="btn ghost relink" data-id="'+esc(o.cardId)+'" type="button">привязать к «'+esc(selName)+'»</button></td>'+
+          '</tr>';
+        });
+        html+='</tbody></table>';
+      }
+      html+='</div>';
     }
 
     // invoice meta
@@ -252,6 +256,8 @@
     [].forEach.call(document.querySelectorAll('.ck'), function(c){ c.addEventListener('change', function(){ var id=this.getAttribute('data-id'), chk=this.checked; var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.checked=chk; updateGrand(); }); });
     [].forEach.call(document.querySelectorAll('.qn'), function(q){ q.addEventListener('input', function(){ var id=this.getAttribute('data-id'), v=Math.max(1,+this.value||1); var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.qty=v; }); });
     [].forEach.call(document.querySelectorAll('.relink'), function(b){ b.addEventListener('click', function(){ relink(this.getAttribute('data-id')); }); });
+    var ot=document.getElementById('orphToggle');
+    if(ot) ot.addEventListener('click', function(){ showOrphans=!showOrphans; render(); });
     [].forEach.call(document.querySelectorAll('.rev'), function(s){ s.addEventListener('click', function(){ openCard(this.getAttribute('data-id')); }); });
     updateGrand();
   }
