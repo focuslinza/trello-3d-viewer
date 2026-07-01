@@ -91,6 +91,7 @@
   var supplierKey = 'ip';
   var invNumber = null;
   var showOrphans = false;
+  var showPaid = false;
 
   function boot(msg){ var b=document.getElementById('boot'); if(b) b.textContent=msg; }
 
@@ -128,7 +129,7 @@
   function loadAllOrders(){
     return fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
       ALL_ORDERS = ((j&&j.rows)||[]).map(function(row){
-        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, company_id:row.company_id||null, qty:1, checked:false };
+        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, qty:1, checked:false };
       });
     }).catch(function(){ ALL_ORDERS=[]; });
   }
@@ -161,8 +162,9 @@
   }
 
   var validIds = {};
-  function clientOrders(){ return ALL_ORDERS.filter(function(o){ return o.company_id===selectedCompanyId; }); }
-  function orphanOrders(){ return ALL_ORDERS.filter(function(o){ return !o.company_id || !validIds[o.company_id]; }); }
+  function clientOrders(){ return ALL_ORDERS.filter(function(o){ return o.company_id===selectedCompanyId && !o.paid; }); }
+  function clientPaid(){ return ALL_ORDERS.filter(function(o){ return o.company_id===selectedCompanyId && o.paid; }); }
+  function orphanOrders(){ return ALL_ORDERS.filter(function(o){ return (!o.company_id || !validIds[o.company_id]) && !o.paid; }); }
   function selectedOrders(){ return clientOrders().filter(function(o){return o.checked;}); }
   function grandTotal(){ return selectedOrders().reduce(function(s,o){return s+o.total;},0); }
 
@@ -198,14 +200,15 @@
     }
     html+='</div>';
 
-    // orders of the selected client
+    // orders of the selected client (unpaid)
     var co = clientOrders();
+    var paidList = clientPaid();
     html+='<div class="sec"><h3>Заказы клиента — что включить в счёт</h3>';
     if(!co.length){
-      html+='<div class="muted">У выбранного клиента нет привязанных заказов. Если заказ есть, но привязан к другому/пустому клиенту — найдите его ниже в «Заказы без клиента» и привяжите.</div>';
+      html+='<div class="muted">У выбранного клиента нет неоплаченных заказов'+(paidList.length?' (оплаченные скрыты — см. ниже)':'')+'. Если заказ есть, но привязан к другому/пустому клиенту — разверните «Заказы без привязки» и привяжите.</div>';
     } else {
-      html+='<div class="small muted" style="margin-bottom:6px">Отметьте заказы — каждый станет строкой счёта. «Кол-во» — сколько это продуктов; цена за единицу = сумма заказа ÷ кол-во.</div>';
-      html+='<table><thead><tr><th></th><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Кол-во</th><th class="num">Сумма заказа</th></tr></thead><tbody>';
+      html+='<div class="small muted" style="margin-bottom:6px">Отметьте заказы — каждый станет строкой счёта. «Кол-во» — сколько это продуктов; цена за единицу = сумма заказа ÷ кол-во. Когда клиент оплатит — нажмите «оплачен», и заказ уйдёт из списка.</div>';
+      html+='<table><thead><tr><th></th><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Кол-во</th><th class="num">Сумма заказа</th><th></th></tr></thead><tbody>';
       co.forEach(function(o){
         html+='<tr>'+
           '<td><input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'></td>'+
@@ -213,9 +216,27 @@
           '<td>'+esc(o.name)+'</td>'+
           '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'"></td>'+
           '<td class="num">'+money(o.total)+' ₸</td>'+
+          '<td><button class="btn ghost paybtn" data-id="'+esc(o.cardId)+'" type="button" title="Отметить, что клиент оплатил этот заказ">оплачен</button></td>'+
         '</tr>';
       });
       html+='</tbody></table>';
+    }
+    // paid orders of this client (hidden by default)
+    if(paidList.length){
+      html+='<div style="margin-top:12px"><span class="lnk" id="paidToggle">'+(showPaid?'▾':'▸')+' Оплаченные заказы этого клиента ('+paidList.length+')</span></div>';
+      if(showPaid){
+        html+='<table style="margin-top:6px;opacity:.75"><thead><tr><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Сумма</th><th>Оплачен</th><th></th></tr></thead><tbody>';
+        paidList.forEach(function(o){
+          html+='<tr>'+
+            '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
+            '<td>'+esc(o.name)+'</td>'+
+            '<td class="num">'+money(o.total)+' ₸</td>'+
+            '<td class="small muted">'+esc(o.paid_at?String(o.paid_at).slice(0,10):'да')+'</td>'+
+            '<td><button class="btn ghost unpaybtn" data-id="'+esc(o.cardId)+'" type="button" title="Вернуть в неоплаченные">вернуть</button></td>'+
+          '</tr>';
+        });
+        html+='</tbody></table>';
+      }
     }
     html+='</div>';
 
@@ -258,6 +279,10 @@
     [].forEach.call(document.querySelectorAll('.relink'), function(b){ b.addEventListener('click', function(){ relink(this.getAttribute('data-id')); }); });
     var ot=document.getElementById('orphToggle');
     if(ot) ot.addEventListener('click', function(){ showOrphans=!showOrphans; render(); });
+    var pt=document.getElementById('paidToggle');
+    if(pt) pt.addEventListener('click', function(){ showPaid=!showPaid; render(); });
+    [].forEach.call(document.querySelectorAll('.paybtn'), function(b){ b.addEventListener('click', function(){ markPaid(this.getAttribute('data-id'), true); }); });
+    [].forEach.call(document.querySelectorAll('.unpaybtn'), function(b){ b.addEventListener('click', function(){ markPaid(this.getAttribute('data-id'), false); }); });
     [].forEach.call(document.querySelectorAll('.rev'), function(s){ s.addEventListener('click', function(){ openCard(this.getAttribute('data-id')); }); });
     updateGrand();
   }
@@ -270,6 +295,16 @@
       .then(function(r){return r.json();}).then(function(j){
         if(j&&j.ok && o){ o.company_id=co.id; o.checked=true; render(); }
         else alert('Не удалось привязать: '+((j&&j.error)||'?'));
+      }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
+  }
+
+  function markPaid(cardId, paid){
+    var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]; if(!o) return;
+    fetch(WORKER+'/calc-paid',{ method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ cardId:cardId, paid:paid?1:0 }) })
+      .then(function(r){return r.json();}).then(function(j){
+        if(j&&j.ok){ o.paid=paid?1:0; if(o.paid) o.checked=false; render(); }
+        else alert('Не удалось изменить статус: '+((j&&j.error)||'?'));
       }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
   }
 
