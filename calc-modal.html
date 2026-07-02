@@ -62,7 +62,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v21 · загрузка…</div>
+    <div class="sub" id="meta">v22 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -154,13 +154,8 @@
     var fmt = function(n){ return (Math.round((+n||0))).toLocaleString('ru-RU'); };
     var fmt2 = function(n){ return (Math.round((+n||0)*100)/100).toLocaleString('ru-RU'); };
 
-    // ---- catalogs ----
+    // ---- catalogs (rebuildable so custom items from the dashboard appear) ----
     var TH = CALC.TH; // allowed thicknesses
-    var OP_KINDS = [
-      ['cut','Резка листа (м)'], ['cutTube','Резка трубы/профиля (м)'],
-      ['bend','Гибка листа (кол.)'], ['bendTube','Гибка трубы (кол.)'], ['bendRod','Гибка прута (кол.)'],
-      ['weldSS','Сварка нерж (см)'], ['weldBlack','Сварка черн (см)']
-    ];
     function groupBySection(map){
       var groups={}, order=[];
       Object.keys(map).forEach(function(code){
@@ -170,8 +165,20 @@
       });
       return {groups:groups, order:order};
     }
-    var MATG = groupBySection(CALC.MAT);
-    var CMPG = groupBySection(CALC.CMP);
+    function buildOpKinds(){
+      var base=[
+        ['cut','Резка листа (м)'], ['cutTube','Резка трубы/профиля (м)'],
+        ['bend','Гибка листа (кол.)'], ['bendTube','Гибка трубы (кол.)'], ['bendRod','Гибка прута (кол.)'],
+        ['weldSS','Сварка нерж (см)'], ['weldBlack','Сварка черн (см)']
+      ];
+      var K=CALC.KIND||{};
+      Object.keys(K).forEach(function(code){ if(K[code]&&K[code].custom) base.push([code, (K[code].lbl||code)+' • своя']); });
+      return base;
+    }
+    var OP_KINDS, MATG, CMPG;
+    function rebuildCatalogs(){ OP_KINDS=buildOpKinds(); MATG=groupBySection(CALC.MAT); CMPG=groupBySection(CALC.CMP); }
+    rebuildCatalogs();
+
 
     function catalogSelect(grouped, selected){
       var s=document.createElement('select'); s.className='grow';
@@ -347,7 +354,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v21   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
+        + '   ·   v22   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
@@ -552,7 +559,7 @@
     function loadPricing(){
       return fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
         if(j&&j.ok&&j.pricing){ window.PRICING=j.pricing;
-          // init tax/shleif UI defaults from pricing if present
+          if(CALC.applyCustom){ CALC.applyCustom(); rebuildCatalogs(); }
           var c=j.pricing.coef||{};
           if(c.taxRate!=null&&c.taxRate!==''){ var tx=document.getElementById('tax'); if(tx&&!tx.dataset.userset) tx.value=Math.round(+c.taxRate*100); }
         }

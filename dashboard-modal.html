@@ -102,6 +102,40 @@
   }
   function kpi(k,v,cls){ return '<div class="kpi '+(cls||'')+'"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>'; }
 
+  function ci(f,ph,val,w){ return '<input data-f="'+f+'" placeholder="'+esc(ph)+'" value="'+esc(val==null?'':val)+'" style="width:'+(w||90)+'px">'; }
+  function custRow(t, it){
+    it=it||{};
+    var pct=function(v,def){ return (v!=null&&v!=='')?Math.round(+v*1000)/10:def; };
+    var h='<div class="custrow" data-t="'+t+'" data-code="'+esc(it.code||'')+'" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px">';
+    h+='<input data-f="lbl" placeholder="Название" value="'+esc(it.lbl||'')+'" style="flex:1;min-width:180px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px">';
+    h+='<input data-f="sec" placeholder="Раздел" value="'+esc(it.sec||'')+'" style="width:150px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px">';
+    function num(f,ph,val,w){ return '<input data-f="'+f+'" type="number" step="any" placeholder="'+esc(ph)+'" value="'+(val==null||val===''?'':val)+'" style="width:'+(w||80)+'px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px;text-align:right">'; }
+    if(t==='op'){
+      h+=num('rate','ставка ₸', it.rate);
+    } else {
+      h+=num('u','цена ₸', it.u);
+      if(t==='mat') h+=num('ost','ост %', pct(it.ost,15),64)+num('rah','рах %', pct(it.rah,4),64);
+      else h+=num('rah','рах %', pct(it.rah,7),64)+num('m','работа ×', (it.m!=null?it.m:1),70);
+    }
+    h+='<button class="delcust btnp ghost" data-t="'+t+'" data-code="'+esc(it.code||'')+'" type="button" style="padding:6px 10px">✕</button>';
+    h+='</div>';
+    return h;
+  }
+  function newCode(t){ return (t==='mat'?'CUSTM_':t==='cmp'?'CUSTC_':'CUSTO_')+Date.now().toString(36)+Math.floor(Math.random()*1000); }
+  function addCustom(t){
+    PRICING_EDIT=collectPricing();
+    if(t==='mat')(PRICING_EDIT.customMat=PRICING_EDIT.customMat||[]).push({code:newCode('mat'),lbl:'',sec:'',u:'',ost:0.15,rah:0.04});
+    if(t==='cmp')(PRICING_EDIT.customCmp=PRICING_EDIT.customCmp||[]).push({code:newCode('cmp'),lbl:'',sec:'',u:'',rah:0.07,m:1});
+    if(t==='op')(PRICING_EDIT.customOp=PRICING_EDIT.customOp||[]).push({code:newCode('op'),lbl:'',sec:'',rate:''});
+    render();
+  }
+  function delCustom(t, code){
+    PRICING_EDIT=collectPricing();
+    var arr = t==='mat'?'customMat':t==='cmp'?'customCmp':'customOp';
+    PRICING_EDIT[arr]=(PRICING_EDIT[arr]||[]).filter(function(x){ return x.code!==code; });
+    render();
+  }
+
   function pnum(v){ return (v==null||v==='')?'':v; }
   function coefField(label, key, val, un){
     return '<div class="prf"><label>'+esc(label)+'</label><input type="number" step="any" class="cf" data-key="'+key+'" value="'+pnum(val)+'"><span class="un">'+esc(un||'')+'</span></div>';
@@ -136,12 +170,27 @@
     h+='<h3 style="margin-top:16px">Цены материалов (₸ за м²/п.м)</h3>'+priceRows(MAT, pm, 'mp');
     h+='<h3 style="margin-top:6px">Цены компонентов (₸ за шт / краска за м²)</h3>'+priceRows(CMP, pc, 'cp');
 
+    // --- custom (added) items ---
+    var cm=P.customMat||[], cc=P.customCmp||[], co=P.customOp||[];
+    h+='<h3 style="margin-top:18px">Свои материалы</h3>';
+    h+='<div class="small muted" style="margin-bottom:6px">Добавляйте материалы, которых нет в списке выше. Они появятся в калькуляторе.</div>';
+    cm.forEach(function(it){ h+=custRow('mat', it); });
+    h+='<button class="btnp ghost" data-add="mat" type="button" style="margin-top:4px">+ материал</button>';
+
+    h+='<h3 style="margin-top:16px">Свои компоненты</h3>';
+    cc.forEach(function(it){ h+=custRow('cmp', it); });
+    h+='<button class="btnp ghost" data-add="cmp" type="button" style="margin-top:4px">+ компонент</button>';
+
+    h+='<h3 style="margin-top:16px">Свои работы (фиксированная ставка за единицу)</h3>';
+    co.forEach(function(it){ h+=custRow('op', it); });
+    h+='<button class="btnp ghost" data-add="op" type="button" style="margin-top:4px">+ работа</button>';
+
     h+='<div class="savebar"><button class="btnp" id="prSave" type="button">Сохранить цены</button><button class="btnp ghost" id="prReset" type="button">Сбросить к заводским</button><span id="prmsg"></span></div>';
     h+='<div class="small muted" style="margin-top:8px">После сохранения новые цены применяются во всех новых расчётах автоматически. Ранее сохранённые заказы не пересчитываются.</div>';
     return h;
   }
   function collectPricing(){
-    var P={ mat:{}, cmp:{}, coef:{} };
+    var P={ mat:{}, cmp:{}, coef:{}, customMat:[], customCmp:[], customOp:[] };
     [].forEach.call(document.querySelectorAll('.cf'), function(el){
       var k=el.getAttribute('data-key'), v=el.value;
       if(v===''){ return; }
@@ -151,6 +200,16 @@
     });
     [].forEach.call(document.querySelectorAll('.mp'), function(el){ if(el.value!=='') P.mat[el.getAttribute('data-code')]=+el.value; });
     [].forEach.call(document.querySelectorAll('.cp'), function(el){ if(el.value!=='') P.cmp[el.getAttribute('data-code')]=+el.value; });
+    // custom items
+    function fv(row,f){ var el=row.querySelector('[data-f="'+f+'"]'); return el?el.value:''; }
+    [].forEach.call(document.querySelectorAll('.custrow'), function(row){
+      var t=row.getAttribute('data-t'), code=row.getAttribute('data-code');
+      var lbl=fv(row,'lbl').trim(); if(!lbl) return;
+      var sec=fv(row,'sec').trim();
+      if(t==='mat') P.customMat.push({ code:code, lbl:lbl, sec:sec||'ДРУГИЕ МАТЕРИАЛЫ', u:+fv(row,'u')||0, ost:(+fv(row,'ost')||0)/100, rah:(+fv(row,'rah')||0)/100 });
+      else if(t==='cmp') P.customCmp.push({ code:code, lbl:lbl, sec:sec||'ДРУГИЕ КОМПОНЕНТЫ', u:+fv(row,'u')||0, ost:0, rah:(+fv(row,'rah')||0)/100, m:(fv(row,'m')!==''?+fv(row,'m'):1) });
+      else if(t==='op') P.customOp.push({ code:code, lbl:lbl, sec:sec||'РАБОТЫ', rate:+fv(row,'rate')||0 });
+    });
     return P;
   }
   function savePricing(){
@@ -199,6 +258,8 @@
     [].forEach.call(document.querySelectorAll('.tab'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
     var ps=document.getElementById('prSave'); if(ps) ps.onclick=savePricing;
     var pr=document.getElementById('prReset'); if(pr) pr.onclick=resetPricing;
+    [].forEach.call(document.querySelectorAll('[data-add]'), function(b){ b.onclick=function(){ addCustom(this.getAttribute('data-add')); }; });
+    [].forEach.call(document.querySelectorAll('.delcust'), function(b){ b.onclick=function(){ delCustom(this.getAttribute('data-t'), this.getAttribute('data-code')); }; });
   }
 
   function barCell(val,max){ var w=max>0?Math.round(100*val/max):0; return '<div class="barw"><div class="barf" style="width:'+w+'%"></div></div>'; }
@@ -248,7 +309,7 @@
       boot('Панель доступна только руководителю (администратору доски).'); return;
     }
     fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
-      if(j&&j.ok&&j.pricing){ PRICING_EDIT={ mat:j.pricing.mat||{}, cmp:j.pricing.cmp||{}, coef:j.pricing.coef||{} }; }
+      if(j&&j.ok&&j.pricing){ var p=j.pricing; PRICING_EDIT={ mat:p.mat||{}, cmp:p.cmp||{}, coef:p.coef||{}, customMat:p.customMat||[], customCmp:p.customCmp||[], customOp:p.customOp||[] }; }
     }).catch(function(){}).then(load);
   });
 </script>

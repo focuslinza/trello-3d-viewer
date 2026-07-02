@@ -106,6 +106,20 @@
     return 1;
   }
 
+  // ---- custom items added from the dashboard (materials / components / works) ----
+  var _customCodes=[];
+  function applyCustom(){
+    var p=PR();
+    _customCodes.forEach(function(c){ delete MAT[c]; delete CMP[c]; delete KIND[c]; });
+    _customCodes=[];
+    (p.customMat||[]).forEach(function(it){ if(!it || !it.code) return;
+      MAT[it.code]={u:+it.u||0,ost:+it.ost||0,rah:+it.rah||0,sec:it.sec||'ДРУГИЕ МАТЕРИАЛЫ',lbl:it.lbl||it.code,custom:true}; _customCodes.push(it.code); });
+    (p.customCmp||[]).forEach(function(it){ if(!it || !it.code) return;
+      CMP[it.code]={u:+it.u||0,ost:+it.ost||0,rah:+it.rah||0,m:(it.m!=null?+it.m:1),sec:it.sec||'ДРУГИЕ КОМПОНЕНТЫ',lbl:it.lbl||it.code,custom:true}; _customCodes.push(it.code); });
+    (p.customOp||[]).forEach(function(it){ if(!it || !it.code) return;
+      KIND[it.code]={t:'FLAT',mult:1,sec:it.sec||'РАБОТЫ',lbl:it.lbl||it.code,flatRate:+it.rate||0,custom:true}; _customCodes.push(it.code); });
+  }
+
   // inputs: { ops:{D:{th,qty},...}, materials:{M:qty,...}, components:{AZ:qty,...},
   //           urgency:0|1|2, engCoef:0.03|0.09|0.18|1, montazh:0|1, taxRate:0.16 }
   // OP kinds -> table + price multiplier (×3 for tube/profile cut & bend)
@@ -132,14 +146,15 @@
 
     operations.forEach(function(op){
       var k=KIND[op.kind]; if(!k)return;
-      var qty=+op.qty||0, th=+op.thickness||0; if(qty<=0||th<=0)return;
-      var rate=opRate(k.t,th,qty)*k.mult*rateMultFor(k.sec);
+      var qty=+op.qty||0, th=+op.thickness||0;
+      if(k.t==='FLAT'){ if(qty<=0) return; } else { if(qty<=0||th<=0) return; }
+      var rate = (k.t==='FLAT') ? (+k.flatRate||0) : opRate(k.t,th,qty)*k.mult*rateMultFor(k.sec);
       var base=rate*qty;
       var opOst=coef('opOst',OP_OST), opRah=coef('opRah',OP_RAH);
       var r7=base*(1+opOst)*(1+opRah);
       sumOps+=r7;
       if(k.t==='SS')weldSSsum+=r7; if(k.t==='BL')weldBlackSum+=r7;
-      line.push({group:'op',kind:op.kind,section:k.sec,name:k.lbl,thickness:th,qty:qty,unit:rate,base:base,ostatki:opOst,rashod:opRah,lineTotal:r7,worker:null});
+      line.push({group:'op',kind:op.kind,section:k.sec,name:k.lbl,thickness:(k.t==='FLAT'?0:th),qty:qty,unit:rate,base:base,ostatki:opOst,rashod:opRah,lineTotal:r7,worker:null});
     });
 
     // шлейф = shleifRate × weld (sheet: 0.5 of each weld grade)
@@ -202,5 +217,5 @@
             taxRate:taxRate,taxGrossUp:gross,taxAmount:taxAmount,total:total};
   }
 
-  root.CALC={compute:compute,MAT:MAT,CMP:CMP,OPS:OPS,opRate:opRate,taxGrossUp:taxGrossUp,TH:TH};
+  root.CALC={compute:compute,MAT:MAT,CMP:CMP,OPS:OPS,KIND:KIND,opRate:opRate,taxGrossUp:taxGrossUp,TH:TH,applyCustom:applyCustom};
 })(typeof window!=='undefined'?window:globalThis);
