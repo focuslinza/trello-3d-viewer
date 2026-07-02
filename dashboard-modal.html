@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Панель руководителя</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; --amber:#c99a3a; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+    .wrap{padding:16px;max-width:1000px;margin:0 auto}
+    .sec{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+    h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+    .muted{color:var(--muted)} .small{font-size:12px}
+    .period{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:14px}
+    .period button{background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px}
+    .period .lbl{min-width:190px;text-align:center;font-weight:600;font-size:15px}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+    .kpi{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px}
+    .kpi .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+    .kpi .v{font-size:24px;font-weight:800;margin-top:4px}
+    .kpi.green .v{color:var(--green)} .kpi.red .v{color:var(--red)} .kpi.amber .v{color:var(--amber)}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    .tab{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;color:var(--txt)}
+    .tab.active{border-color:var(--accent);background:#2b3a63;color:#fff}
+    table{width:100%;border-collapse:collapse;margin-top:4px}
+    th,td{padding:8px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+    th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+    td.num,th.num{text-align:right;white-space:nowrap}
+    .pill{display:inline-block;border-radius:20px;padding:1px 9px;font-size:11px}
+    .pill.paid{background:#173a26;color:#7ee0a1;border:1px solid #2c6b45}
+    .pill.unpaid{background:#3a2320;color:#e8a59d;border:1px solid #7a3a32}
+    .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end}
+    .btn{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
+    .barw{background:var(--bg);border-radius:4px;overflow:hidden;min-width:60px}
+    .barf{height:8px;background:var(--accent);border-radius:4px}
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
+  <div class="bar"><button class="btn" id="close" type="button">Закрыть</button></div>
+
+<script>
+  var t = window.TrelloPowerUp.iframe();
+  var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+  var MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  var now=new Date();
+  var cur={ y:now.getFullYear(), m:now.getMonth() };
+  var tab='people';
+  var DATA=null;
+
+  function money(v){ v=Math.round(+v||0); return v.toLocaleString('ru-RU'); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function pad(n){ return n<10?'0'+n:''+n; }
+  function boot(m){ var b=document.getElementById('boot'); if(b) b.textContent=m; }
+
+  function isDirector(){
+    return Promise.all([ t.member('id'), t.board('memberships'), t.organization('memberships').catch(function(){return null;}) ])
+      .then(function(res){ var me=res[0]||{};
+        function adminIn(o){ var ms=((o&&o.memberships)||[]).filter(function(x){return x.idMember===me.id;})[0]; return !!(ms&&ms.memberType==='admin'); }
+        return adminIn(res[1])||adminIn(res[2]);
+      }).catch(function(){ return false; });
+  }
+
+  function range(){
+    var last=new Date(cur.y,cur.m+1,0).getDate();
+    var isCur=(cur.y===now.getFullYear()&&cur.m===now.getMonth());
+    var toD=isCur?now.getDate():last;
+    return { from:cur.y+'-'+pad(cur.m+1)+'-01', to:cur.y+'-'+pad(cur.m+1)+'-'+pad(toD) };
+  }
+
+  function load(){
+    boot('Считаю показатели за '+MONTHS[cur.m]+' '+cur.y+'…');
+    var r=range();
+    fetch(WORKER+'/dashboard?from='+r.from+'&to='+r.to).then(function(x){return x.json();}).then(function(j){
+      if(!j||j.error){ boot('Ошибка: '+((j&&j.error)||'?')); return; }
+      DATA=j; render();
+    }).catch(function(e){ boot('Сеть недоступна: '+(e&&e.message||e)); });
+  }
+
+  function periodBar(){
+    return '<div class="period"><button id="prev" type="button">‹</button><div class="lbl">'+MONTHS[cur.m]+' '+cur.y+'</div><button id="next" type="button">›</button></div>';
+  }
+  function kpi(k,v,cls){ return '<div class="kpi '+(cls||'')+'"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>'; }
+
+  function render(){
+    var T=DATA.totals||{};
+    var h='';
+    h+='<div class="sec">'+periodBar();
+    h+='<div class="kpis">';
+    h+=kpi('Выручка', money(T.revenue)+' ₸');
+    h+=kpi('Зарплата (сдельная)', money(T.payroll)+' ₸', 'amber');
+    h+=kpi('Материалы', money(T.materials)+' ₸', 'amber');
+    h+=kpi('Прибыль (ориентир)', money(T.profit)+' ₸', T.profit>=0?'green':'red');
+    h+='</div>';
+    h+='<div class="kpis" style="margin-top:12px">';
+    h+=kpi('Заказов за период', T.orders);
+    h+=kpi('Оплачено', money(T.paidRev)+' ₸ · '+T.paidCount+' зак.', 'green');
+    h+=kpi('Не оплачено', money(T.unpaidRev)+' ₸ · '+T.unpaidCount+' зак.', 'red');
+    h+='</div>';
+    h+='<div class="small muted" style="margin-top:10px">«Прибыль (ориентир)» = выручка − сдельная зарплата − материалы. Без учёта аренды, налогов и прочих накладных — это грубый ориентир маржи.</div>';
+    h+='</div>';
+
+    h+='<div class="tabs">';
+    [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам']].forEach(function(x){
+      h+='<div class="tab'+(tab===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
+    });
+    h+='</div>';
+    h+='<div class="sec">'+renderTab()+'</div>';
+
+    document.getElementById('app').innerHTML=h;
+    document.getElementById('prev').onclick=function(){ cur.m--; if(cur.m<0){cur.m=11;cur.y--;} load(); };
+    document.getElementById('next').onclick=function(){ if(cur.y===now.getFullYear()&&cur.m===now.getMonth())return; cur.m++; if(cur.m>11){cur.m=0;cur.y++;} load(); };
+    [].forEach.call(document.querySelectorAll('.tab'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
+  }
+
+  function barCell(val,max){ var w=max>0?Math.round(100*val/max):0; return '<div class="barw"><div class="barf" style="width:'+w+'%"></div></div>'; }
+
+  function renderTab(){
+    if(tab==='people'){
+      var a=DATA.byWorker||[]; if(!a.length) return '<div class="muted">Нет начислений за период.</div>';
+      var max=a[0].earned||1;
+      var h='<h3>Заработок по работникам</h3><table><thead><tr><th>Работник</th><th class="num">Заработал</th><th class="num">Заказов</th><th>Доля</th></tr></thead><tbody>';
+      a.forEach(function(w){ h+='<tr><td>'+esc(w.name)+'</td><td class="num">'+money(w.earned)+' ₸</td><td class="num">'+w.orders+'</td><td style="width:160px">'+barCell(w.earned,max)+'</td></tr>'; });
+      return h+'</tbody></table>';
+    }
+    if(tab==='stages'){
+      var a=DATA.byStage||[]; if(!a.length) return '<div class="muted">Нет данных.</div>';
+      var max=a[0].earned||1;
+      var h='<h3>Зарплата по этапам</h3><table><thead><tr><th>Этап</th><th class="num">Сумма</th><th>Доля</th></tr></thead><tbody>';
+      a.forEach(function(s){ h+='<tr><td>'+esc(s.name)+'</td><td class="num">'+money(s.earned)+' ₸</td><td style="width:200px">'+barCell(s.earned,max)+'</td></tr>'; });
+      return h+'</tbody></table>';
+    }
+    if(tab==='clients'){
+      var a=DATA.byClient||[]; if(!a.length) return '<div class="muted">Нет данных.</div>';
+      var h='<h3>Выручка по клиентам</h3><table><thead><tr><th>Клиент</th><th class="num">Выручка</th><th class="num">Заказов</th><th class="num">Оплачено</th><th class="num">Не оплачено</th></tr></thead><tbody>';
+      a.forEach(function(c){ h+='<tr><td>'+esc(c.name)+'</td><td class="num">'+money(c.revenue)+' ₸</td><td class="num">'+c.orders+'</td><td class="num">'+money(c.paidRev)+'</td><td class="num">'+money(c.unpaidRev)+'</td></tr>'; });
+      return h+'</tbody></table>';
+    }
+    // orders
+    var a=DATA.byOrder||[]; if(!a.length) return '<div class="muted">Нет заказов за период.</div>';
+    var h='<h3>Аналитика по заказам</h3><table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Выручка</th><th class="num">Зарплата</th><th class="num">Материалы</th><th class="num">Прибыль</th><th>Оплата</th></tr></thead><tbody>';
+    a.forEach(function(o){
+      h+='<tr><td class="small">'+esc(o.number||'—')+'</td><td>'+esc(o.name)+'</td><td class="small muted">'+esc(o.client)+'</td>'+
+         '<td class="num">'+money(o.revenue)+'</td><td class="num">'+money(o.payroll)+'</td><td class="num">'+money(o.materials)+'</td>'+
+         '<td class="num" style="color:'+(o.profit>=0?'#7ee0a1':'#e8a59d')+'">'+money(o.profit)+'</td>'+
+         '<td>'+(o.paid?'<span class="pill paid">оплачен'+(o.paidAt?' '+o.paidAt.slice(0,10):'')+'</span>':'<span class="pill unpaid">не оплачен</span>')+'</td></tr>';
+    });
+    return h+'</tbody></table>';
+  }
+
+  document.getElementById('close').onclick=function(){ t.closeModal(); };
+
+  isDirector().then(function(admin){
+    if(!admin){ boot('Панель доступна только руководителю (администратору доски).'); return; }
+    load();
+  });
+</script>
+</body>
+</html>

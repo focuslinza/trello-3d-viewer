@@ -60,6 +60,16 @@
               title: 'Мой заработок'
             });
           }
+        }, {
+          icon: { dark: t.signUrl('./calc-icon.svg'), light: t.signUrl('./calc-icon.svg') },
+          text: 'Панель руководителя',
+          callback: function (t) {
+            return t.modal({
+              url: t.signUrl('./dashboard-modal.html') + '?t=' + Date.now(),
+              fullscreen: true,
+              title: 'Панель руководителя'
+            });
+          }
         }];
       }
     });
