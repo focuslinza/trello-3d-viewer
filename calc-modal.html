@@ -62,7 +62,7 @@
 <body>
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v20 · загрузка…</div>
+    <div class="sub" id="meta">v21 · загрузка…</div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -347,7 +347,7 @@
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
       document.getElementById('meta').textContent =
         (meta.join('  ·  ') || 'без компании')
-        + '   ·   v20   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
+        + '   ·   v21   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
       renderDxfHint();
     }
@@ -548,8 +548,19 @@
     }
 
     // ---- init ----
+    // pull editable prices/coefficients set in the dashboard, apply before computing
+    function loadPricing(){
+      return fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
+        if(j&&j.ok&&j.pricing){ window.PRICING=j.pricing;
+          // init tax/shleif UI defaults from pricing if present
+          var c=j.pricing.coef||{};
+          if(c.taxRate!=null&&c.taxRate!==''){ var tx=document.getElementById('tax'); if(tx&&!tx.dataset.userset) tx.value=Math.round(+c.taxRate*100); }
+        }
+      }).catch(function(){});
+    }
+
     applyCostPermission();
-    loadContext().then(restore).then(function(){ recompute(); });
+    loadPricing().then(loadContext).then(restore).then(function(){ recompute(); });
   })();
   </script>
 </body>

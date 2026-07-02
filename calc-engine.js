@@ -93,6 +93,19 @@
   }
   function taxGrossUp(rate){return rate/(1-rate);}
 
+  // ---- editable pricing overrides (from window.PRICING, set by the dashboard) ----
+  // when window.PRICING is empty, everything falls back to the verified defaults above.
+  function PR(){ return root.PRICING||{}; }
+  function matU(code){ var p=PR().mat; return (p&&p[code]!=null&&p[code]!=='')?+p[code]:(MAT[code]?MAT[code].u:0); }
+  function cmpU(code){ var p=PR().cmp; return (p&&p[code]!=null&&p[code]!=='')?+p[code]:(CMP[code]?CMP[code].u:0); }
+  function coef(name,def){ var c=PR().coef; return (c&&c[name]!=null&&c[name]!=='')?+c[name]:def; }
+  function rateMultFor(sec){ var c=PR().coef||{};
+    if(sec==='РЕЗКА') return (c.rateCut!=null&&c.rateCut!=='')?+c.rateCut:1;
+    if(sec==='ГИБКА') return (c.rateBend!=null&&c.rateBend!=='')?+c.rateBend:1;
+    if(sec==='СВАРКА')return (c.rateWeld!=null&&c.rateWeld!=='')?+c.rateWeld:1;
+    return 1;
+  }
+
   // inputs: { ops:{D:{th,qty},...}, materials:{M:qty,...}, components:{AZ:qty,...},
   //           urgency:0|1|2, engCoef:0.03|0.09|0.18|1, montazh:0|1, taxRate:0.16 }
   // OP kinds -> table + price multiplier (×3 for tube/profile cut & bend)
@@ -120,16 +133,17 @@
     operations.forEach(function(op){
       var k=KIND[op.kind]; if(!k)return;
       var qty=+op.qty||0, th=+op.thickness||0; if(qty<=0||th<=0)return;
-      var rate=opRate(k.t,th,qty)*k.mult;
+      var rate=opRate(k.t,th,qty)*k.mult*rateMultFor(k.sec);
       var base=rate*qty;
-      var r7=base*(1+OP_OST)*(1+OP_RAH);
+      var opOst=coef('opOst',OP_OST), opRah=coef('opRah',OP_RAH);
+      var r7=base*(1+opOst)*(1+opRah);
       sumOps+=r7;
       if(k.t==='SS')weldSSsum+=r7; if(k.t==='BL')weldBlackSum+=r7;
-      line.push({group:'op',kind:op.kind,section:k.sec,name:k.lbl,thickness:th,qty:qty,unit:rate,base:base,ostatki:OP_OST,rashod:OP_RAH,lineTotal:r7,worker:null});
+      line.push({group:'op',kind:op.kind,section:k.sec,name:k.lbl,thickness:th,qty:qty,unit:rate,base:base,ostatki:opOst,rashod:opRah,lineTotal:r7,worker:null});
     });
 
     // шлейф = shleifRate × weld (sheet: 0.5 of each weld grade)
-    var shleifRate=(inp.shleifRate!=null?+inp.shleifRate:0.5);
+    var shleifRate=(inp.shleifRate!=null?+inp.shleifRate:coef('shleifRate',0.5));
     var K4=weldSSsum*shleifRate, L4=weldBlackSum*shleifRate;
     if(K4)line.push({group:'shleif',section:'ШЛЕЙФ',name:'Шлейф нерж ('+(shleifRate*100)+'% сварки)',lineTotal:K4,worker:null});
     if(L4)line.push({group:'shleif',section:'ШЛЕЙФ',name:'Шлейф черн ('+(shleifRate*100)+'% сварки)',lineTotal:L4,worker:null});
@@ -138,9 +152,10 @@
     var matSum=0;
     materials.forEach(function(m){
       var M=MAT[m.code], q=+m.qty||0; if(!M||q<=0)return;
-      var b=M.u*q, r7m=b*(1+M.ost)*(1+M.rah);
+      var u=matU(m.code);
+      var b=u*q, r7m=b*(1+M.ost)*(1+M.rah);
       matSum+=r7m;
-      line.push({group:'material',code:m.code,section:M.sec,name:M.lbl,qty:q,unit:M.u,base:b,ostatki:M.ost,rashod:M.rah,lineTotal:r7m,worker:null});
+      line.push({group:'material',code:m.code,section:M.sec,name:M.lbl,qty:q,unit:u,base:b,ostatki:M.ost,rashod:M.rah,lineTotal:r7m,worker:null});
     });
 
     // components AZ..BN : material (row7) + labor (row7 × multiplier)
@@ -152,9 +167,10 @@
       var Cn=CMP[c.code], q=+c.qty||0; if(!Cn||q<=0)return;
       var isPaint = Cn.sec==='КРАСКА';
       var ostF = (isPaint && !paintInShop) ? 0 : Cn.ost;   // на стороне — без остатков
-      var b=Cn.u*q, r7c=b*(1+ostF)*(1+Cn.rah), r4c=isPaint?0:r7c*Cn.m;
+      var u=cmpU(c.code);
+      var b=u*q, r7c=b*(1+ostF)*(1+Cn.rah), r4c=isPaint?0:r7c*Cn.m;
       compMat+=r7c; compLabor+=r4c;
-      line.push({group:'component',code:c.code,section:Cn.sec,name:Cn.lbl,qty:q,unit:Cn.u,base:b,ostatki:ostF,rashod:Cn.rah,material:r7c,laborMult:isPaint?0:Cn.m,labor:r4c,lineTotal:isPaint?r7c:(r7c+r4c),isPaint:isPaint,worker:null});
+      line.push({group:'component',code:c.code,section:Cn.sec,name:Cn.lbl,qty:q,unit:u,base:b,ostatki:ostF,rashod:Cn.rah,material:r7c,laborMult:isPaint?0:Cn.m,labor:r4c,lineTotal:isPaint?r7c:(r7c+r4c),isPaint:isPaint,worker:null});
     });
 
     // монтаж = (weldSS + weldBlack + шлейф) × montazh
@@ -177,7 +193,7 @@
     // подытог (A4)
     var subtotal=E3 + C7 + sumOps + matSum + compMat + K4 + L4 + J4 + compLabor;
 
-    var taxRate=(inp.taxRate!=null?+inp.taxRate:0.16);
+    var taxRate=(inp.taxRate!=null?+inp.taxRate:coef('taxRate',0.16));
     var gross=taxGrossUp(taxRate);
     var taxAmount=subtotal*gross, total=subtotal+taxAmount;
 

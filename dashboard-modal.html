@@ -6,6 +6,7 @@
   <title>Панель руководителя</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
+  <script src="./calc-engine.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; --amber:#c99a3a; }
     *{box-sizing:border-box}
@@ -32,15 +33,29 @@
     .pill{display:inline-block;border-radius:20px;padding:1px 9px;font-size:11px}
     .pill.paid{background:#173a26;color:#7ee0a1;border:1px solid #2c6b45}
     .pill.unpaid{background:#3a2320;color:#e8a59d;border:1px solid #7a3a32}
-    .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end}
+    .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;gap:10px}
     .btn{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
     .barw{background:var(--bg);border-radius:4px;overflow:hidden;min-width:60px}
     .barf{height:8px;background:var(--accent);border-radius:4px}
+    .prgroup{margin-bottom:14px}
+    .prgroup h4{margin:14px 0 8px;font-size:13px;color:#cdd6df}
+    .prgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+    .prf{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+    .prf label{font-size:12px;color:var(--muted);flex:1;line-height:1.2}
+    .prf input{width:96px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px;font-size:13px;text-align:right}
+    .prf .un{font-size:11px;color:var(--muted);width:22px}
+    .savebar{display:flex;gap:10px;align-items:center;margin-top:14px}
+    .btnp{background:var(--green);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:14px;cursor:pointer}
+    .btnp.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+    #prmsg{font-size:13px;color:var(--green)}
   </style>
 </head>
 <body>
   <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
-  <div class="bar"><button class="btn" id="close" type="button">Закрыть</button></div>
+  <div class="bar">
+    <button class="btn" id="workers" type="button" style="border-color:#4f7cff;color:#a9c2ff">⚙ Зарплата / Работники</button>
+    <button class="btn" id="close" type="button">Закрыть</button>
+  </div>
 
 <script>
   var t = window.TrelloPowerUp.iframe();
@@ -50,6 +65,8 @@
   var cur={ y:now.getFullYear(), m:now.getMonth() };
   var tab='people';
   var DATA=null;
+  var PRICING_EDIT={ mat:{}, cmp:{}, coef:{} };
+  var CALC=window.CALC||{};
 
   function money(v){ v=Math.round(+v||0); return v.toLocaleString('ru-RU'); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -85,6 +102,72 @@
   }
   function kpi(k,v,cls){ return '<div class="kpi '+(cls||'')+'"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>'; }
 
+  function pnum(v){ return (v==null||v==='')?'':v; }
+  function coefField(label, key, val, un){
+    return '<div class="prf"><label>'+esc(label)+'</label><input type="number" step="any" class="cf" data-key="'+key+'" value="'+pnum(val)+'"><span class="un">'+esc(un||'')+'</span></div>';
+  }
+  function renderPricing(){
+    var MAT=CALC.MAT||{}, CMP=CALC.CMP||{};
+    var P=PRICING_EDIT||{}; var c=P.coef||{}, pm=P.mat||{}, pc=P.cmp||{};
+    var h='<h3>Коэффициенты (общие)</h3><div class="prgrid">';
+    h+=coefField('Налог','taxRate', c.taxRate!=null&&c.taxRate!==''? (+c.taxRate*100):16,'%');
+    h+=coefField('Шлейф / сборка (% от сварки)','shleifRate', c.shleifRate!=null&&c.shleifRate!==''?(+c.shleifRate*100):50,'%');
+    h+=coefField('Расходники на работы','opRah', c.opRah!=null&&c.opRah!==''?(+c.opRah*100):7,'%');
+    h+=coefField('Ставка резки (множитель)','rateCut', c.rateCut!=null&&c.rateCut!==''?+c.rateCut:1,'×');
+    h+=coefField('Ставка гибки (множитель)','rateBend', c.rateBend!=null&&c.rateBend!==''?+c.rateBend:1,'×');
+    h+=coefField('Ставка сварки (множитель)','rateWeld', c.rateWeld!=null&&c.rateWeld!==''?+c.rateWeld:1,'×');
+    h+='</div>';
+    h+='<div class="small muted" style="margin-top:6px">Множитель ставок: 1 = как сейчас, 1.1 = дороже на 10%. Сами ставки резки/гибки/сварки зависят от толщины и объёма (таблицы) — множитель поднимает или опускает их все сразу.</div>';
+
+    // group materials by section
+    function priceRows(CAT, over, cls){
+      var bySec={}; Object.keys(CAT).forEach(function(code){ var it=CAT[code]; (bySec[it.sec]=bySec[it.sec]||[]).push(code); });
+      var out='';
+      Object.keys(bySec).forEach(function(sec){
+        out+='<div class="prgroup"><h4>'+esc(sec)+'</h4><div class="prgrid">';
+        bySec[sec].forEach(function(code){
+          var it=CAT[code]; var val=(over[code]!=null&&over[code]!=='')?over[code]:it.u;
+          out+='<div class="prf"><label>'+esc(it.lbl)+'</label><input type="number" step="any" class="'+cls+'" data-code="'+code+'" value="'+pnum(val)+'"><span class="un">₸</span></div>';
+        });
+        out+='</div></div>';
+      });
+      return out;
+    }
+    h+='<h3 style="margin-top:16px">Цены материалов (₸ за м²/п.м)</h3>'+priceRows(MAT, pm, 'mp');
+    h+='<h3 style="margin-top:6px">Цены компонентов (₸ за шт / краска за м²)</h3>'+priceRows(CMP, pc, 'cp');
+
+    h+='<div class="savebar"><button class="btnp" id="prSave" type="button">Сохранить цены</button><button class="btnp ghost" id="prReset" type="button">Сбросить к заводским</button><span id="prmsg"></span></div>';
+    h+='<div class="small muted" style="margin-top:8px">После сохранения новые цены применяются во всех новых расчётах автоматически. Ранее сохранённые заказы не пересчитываются.</div>';
+    return h;
+  }
+  function collectPricing(){
+    var P={ mat:{}, cmp:{}, coef:{} };
+    [].forEach.call(document.querySelectorAll('.cf'), function(el){
+      var k=el.getAttribute('data-key'), v=el.value;
+      if(v===''){ return; }
+      v=+v;
+      if(k==='taxRate'||k==='shleifRate'||k==='opRah') P.coef[k]=v/100;
+      else P.coef[k]=v;
+    });
+    [].forEach.call(document.querySelectorAll('.mp'), function(el){ if(el.value!=='') P.mat[el.getAttribute('data-code')]=+el.value; });
+    [].forEach.call(document.querySelectorAll('.cp'), function(el){ if(el.value!=='') P.cmp[el.getAttribute('data-code')]=+el.value; });
+    return P;
+  }
+  function savePricing(){
+    var P=collectPricing();
+    var msg=document.getElementById('prmsg'); msg.textContent='Сохранение…';
+    fetch(WORKER+'/pricing-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pricing:P}) })
+      .then(function(r){return r.json();}).then(function(j){
+        if(j&&j.ok){ PRICING_EDIT=P; msg.textContent='Сохранено ✓ Новые расчёты будут по этим ценам.'; }
+        else msg.textContent='Ошибка: '+((j&&j.error)||'?');
+      }).catch(function(e){ msg.textContent='Сеть: '+(e&&e.message||e); });
+  }
+  function resetPricing(){
+    if(!confirm('Сбросить все цены и коэффициенты к заводским (исходным)? Ваши изменения удалятся.')) return;
+    fetch(WORKER+'/pricing-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pricing:{}}) })
+      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ PRICING_EDIT={mat:{},cmp:{},coef:{}}; render(); } });
+  }
+
   function render(){
     var T=DATA.totals||{};
     var h='';
@@ -104,7 +187,7 @@
     h+='</div>';
 
     h+='<div class="tabs">';
-    [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам']].forEach(function(x){
+    [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам'],['pricing','Цены и коэффициенты']].forEach(function(x){
       h+='<div class="tab'+(tab===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
     });
     h+='</div>';
@@ -114,6 +197,8 @@
     document.getElementById('prev').onclick=function(){ cur.m--; if(cur.m<0){cur.m=11;cur.y--;} load(); };
     document.getElementById('next').onclick=function(){ if(cur.y===now.getFullYear()&&cur.m===now.getMonth())return; cur.m++; if(cur.m>11){cur.m=0;cur.y++;} load(); };
     [].forEach.call(document.querySelectorAll('.tab'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
+    var ps=document.getElementById('prSave'); if(ps) ps.onclick=savePricing;
+    var pr=document.getElementById('prReset'); if(pr) pr.onclick=resetPricing;
   }
 
   function barCell(val,max){ var w=max>0?Math.round(100*val/max):0; return '<div class="barw"><div class="barf" style="width:'+w+'%"></div></div>'; }
@@ -139,6 +224,7 @@
       a.forEach(function(c){ h+='<tr><td>'+esc(c.name)+'</td><td class="num">'+money(c.revenue)+' ₸</td><td class="num">'+c.orders+'</td><td class="num">'+money(c.paidRev)+'</td><td class="num">'+money(c.unpaidRev)+'</td></tr>'; });
       return h+'</tbody></table>';
     }
+    if(tab==='pricing'){ return renderPricing(); }
     // orders
     var a=DATA.byOrder||[]; if(!a.length) return '<div class="muted">Нет заказов за период.</div>';
     var h='<h3>Аналитика по заказам</h3><table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Выручка</th><th class="num">Зарплата</th><th class="num">Материалы</th><th class="num">Прибыль</th><th>Оплата</th></tr></thead><tbody>';
@@ -152,10 +238,18 @@
   }
 
   document.getElementById('close').onclick=function(){ t.closeModal(); };
+  document.getElementById('workers').onclick=function(){
+    t.modal({ url:'./workers-modal.html?t='+Date.now(), fullscreen:true, title:'Зарплата и работники' });
+  };
 
   isDirector().then(function(admin){
-    if(!admin){ boot('Панель доступна только руководителю (администратору доски).'); return; }
-    load();
+    if(!admin){
+      var wb=document.getElementById('workers'); if(wb) wb.style.display='none';
+      boot('Панель доступна только руководителю (администратору доски).'); return;
+    }
+    fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
+      if(j&&j.ok&&j.pricing){ PRICING_EDIT={ mat:j.pricing.mat||{}, cmp:j.pricing.cmp||{}, coef:j.pricing.coef||{} }; }
+    }).catch(function(){}).then(load);
   });
 </script>
 </body>
