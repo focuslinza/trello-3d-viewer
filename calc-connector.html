@@ -41,16 +41,6 @@
       },
       'board-buttons': function (t, options) {
         return [{
-          icon: { dark: t.signUrl('./ic-workers.png'), light: t.signUrl('./ic-workers.png') },
-          text: 'Зарплата / Работники',
-          callback: function (t) {
-            return t.modal({
-              url: t.signUrl('./workers-modal.html') + '?t=' + Date.now(),
-              fullscreen: true,
-              title: 'Зарплата и работники'
-            });
-          }
-        }, {
           icon: { dark: t.signUrl('./ic-earnings.png'), light: t.signUrl('./ic-earnings.png') },
           text: 'Мой заработок',
           callback: function (t) {
