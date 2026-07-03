@@ -29,23 +29,6 @@
           }
         }];
       },
-      'card-buttons': function (t, options) {
-        return t.card('attachments').then(function (c) {
-          var has = ((c && c.attachments) || []).some(function (a) { return /\.zzx$/i.test(a.name || ''); });
-          if (!has) return [];
-          return [{
-            icon: t.signUrl('./calc-icon.svg'),
-            text: 'Чертёж .zzx',
-            callback: function (t) {
-              return t.modal({
-                url: t.signUrl('./zzx-modal.html') + '?t=' + Date.now(),
-                fullscreen: true,
-                title: 'Просмотр .zzx'
-              });
-            }
-          }];
-        }).catch(function () { return []; });
-      },
       'card-back-section': function (t, options) {
         return {
           title: 'Калькулятор стоимости',
@@ -59,16 +42,6 @@
       },
       'board-buttons': function (t, options) {
         return [{
-          icon: { dark: t.signUrl('./ic-label.png'), light: t.signUrl('./ic-label.png') },
-          text: 'Этикетки',
-          callback: function (t) {
-            return t.modal({
-              url: t.signUrl('./label-modal.html') + '?t=' + Date.now(),
-              fullscreen: true,
-              title: 'Печать этикеток со штрих-кодом'
-            });
-          }
-        }, {
           icon: { dark: t.signUrl('./ic-earnings.png'), light: t.signUrl('./ic-earnings.png') },
           text: 'Мой заработок',
           callback: function (t) {
