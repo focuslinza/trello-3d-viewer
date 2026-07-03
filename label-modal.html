@@ -256,13 +256,16 @@
   function load(){
     var argCard = t.arg('cardId');
     MODE = argCard ? 'card' : 'batch';
-    if (MODE==='card'){
-      return t.card('id','name','idShort','shortLink','shortUrl').then(function(c){
-        var m=mapCard(c||{}); m.checked=true; CARDS=[m];
-      });
-    }
+    // окно живёт на уровне доски, поэтому берём список всех карточек и находим нужную по id
     return t.cards('id','name','idShort','shortLink','shortUrl').then(function(cards){
-      CARDS=(cards||[]).map(mapCard).sort(function(a,b){ return (+b.number||0)-(+a.number||0); });
+      cards = cards || [];
+      if (MODE==='card'){
+        var c = cards.filter(function(x){ return x.id===argCard; })[0];
+        if (!c) throw new Error('карточка не найдена на этой доске');
+        var m=mapCard(c); m.checked=true; CARDS=[m];
+        return;
+      }
+      CARDS=cards.map(mapCard).sort(function(a,b){ return (+b.number||0)-(+a.number||0); });
     });
   }
 
