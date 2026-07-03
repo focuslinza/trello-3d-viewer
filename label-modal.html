@@ -36,7 +36,7 @@
 <body>
   <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
   <div class="bar">
-    <div class="muted small" id="stat">—</div>
+    <div class="muted small"><span id="stat">—</span> <span style="opacity:.45">· в. 3</span></div>
     <div style="display:flex;gap:10px">
       <button class="btn ghost" id="close" type="button">Закрыть</button>
       <button class="btn green" id="print" type="button" disabled>🖨 Печать</button>
@@ -256,7 +256,7 @@
   function load(){
     var argCard = t.arg('cardId');
     MODE = argCard ? 'card' : 'batch';
-    // окно живёт на уровне доски, поэтому берём список всех карточек и находим нужную по id
+    // основной путь: список карточек доски (работает в окнах любого уровня)
     return t.cards('id','name','idShort','shortLink','shortUrl').then(function(cards){
       cards = cards || [];
       if (MODE==='card'){
@@ -266,6 +266,14 @@
         return;
       }
       CARDS=cards.map(mapCard).sort(function(a,b){ return (+b.number||0)-(+a.number||0); });
+    }).catch(function(e1){
+      // запасной путь: прямой запрос карточки (если окно вдруг открыто в контексте карточки)
+      return t.card('id','name','idShort','shortLink','shortUrl').then(function(c){
+        if(!c || !c.id) throw e1;
+        var m=mapCard(c); m.checked=true; CARDS=[m]; MODE='card';
+      }).catch(function(e2){
+        throw new Error('не удалось получить данные ни списком ('+(e1&&e1.message||e1)+'), ни напрямую ('+(e2&&e2.message||e2)+')');
+      });
     });
   }
 
