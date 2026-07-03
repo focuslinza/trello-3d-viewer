@@ -79,11 +79,12 @@
 
   // ---------- QR: своя сборка SVG из модулей (чёткая печать в любом размере) ----------
   function qrSvg(text, sizeMm){
-    var qr = qrcode(0, 'M');           // 0 = авто-версия, M = средняя коррекция ошибок
+    var qr = qrcode(0, 'H');           // 0 = авто-версия, H = высокая коррекция ошибок (нужна для логотипа в центре)
     qr.addData(text);
     qr.make();
     var n = qr.getModuleCount();
-    var q = 2;                          // тихая зона (модулей) с каждой стороны
+    var q = 2;                          // тихая зона (модулей) с каждой стороны — увеличивать НЕ нужно:
+                                         // на мелкой печати это только уменьшает полезную область и вредит чтению
     var total = n + q*2;
     var path = '';
     for (var r=0; r<n; r++){
@@ -91,8 +92,16 @@
         if (qr.isDark(r,c)) path += 'M'+(c+q)+' '+(r+q)+'h1v1h-1z';
       }
     }
+    // логотип «TTMS» по центру: ширина ограничена ~11 модулями QR-кода (не процентом от общей картинки) —
+    // так его физический размер не растёт вместе с длиной ссылки, что подтверждено проверкой на самой
+    // маленькой этикетке при слабой камере (более length-agnostic вариант «доля от всей картинки» там ломался)
+    var boxFrac = Math.min(0.30, 11/total);
+    var boxSize = total * boxFrac;
+    var bx = (total - boxSize) / 2, by = (total - boxSize) / 2;
+    var logo = '<rect x="'+bx+'" y="'+by+'" width="'+boxSize+'" height="'+boxSize+'" fill="#fff" stroke="#000" stroke-width="'+(total*0.006)+'"/>'+
+      '<text x="'+(total/2)+'" y="'+(total/2)+'" text-anchor="middle" dominant-baseline="central" font-family="Arial,Helvetica,sans-serif" font-weight="900" font-size="'+(boxSize*0.42)+'" fill="#000">TTMS</text>';
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+total+' '+total+'" width="'+sizeMm+'mm" height="'+sizeMm+'mm" shape-rendering="crispEdges">'+
-           '<rect width="'+total+'" height="'+total+'" fill="#fff"/><path d="'+path+'" fill="#000"/></svg>';
+           '<rect width="'+total+'" height="'+total+'" fill="#fff"/><path d="'+path+'" fill="#000"/>'+logo+'</svg>';
   }
 
   // ---------- разметка одной этикетки ----------
@@ -164,21 +173,12 @@
       for(var i=0;i<n;i++) body+=labelHtml(c, sz.w, sz.h);
     });
     var doc='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Этикетки</title>'+
-      '<style>'+PRINT_CSS.replace('__W__',sz.w).replace('__H__',sz.h)+'</style></head><body>'+body+'</body></html>';
-    // печать через скрытый фрейм в этом же окне — без window.open(), который блокируется
-    // в некоторых браузерах для окон, встроенных в Trello (даже при разрешённых всплывающих окнах)
-    var old = document.getElementById('printFrame');
-    if (old && old.parentNode) old.parentNode.removeChild(old);
-    var f = document.createElement('iframe');
-    f.id = 'printFrame';
-    f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
-    document.body.appendChild(f);
-    var fdoc = f.contentWindow.document;
-    fdoc.open(); fdoc.write(doc); fdoc.close();
-    setTimeout(function(){
-      try { f.contentWindow.focus(); f.contentWindow.print(); }
-      catch(e){ alert('Не удалось открыть печать: '+(e&&e.message||e)); }
-    }, 200);
+      '<style>'+PRINT_CSS.replace('__W__',sz.w).replace('__H__',sz.h)+'</style></head><body>'+body+
+      '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},150);};</scr'+'ipt>'+
+      '</body></html>';
+    var w=window.open('','_blank','noopener,width=520,height=640');
+    if(!w){ alert('Браузер заблокировал всплывающее окно. Разрешите всплывающие окна для trello.com и нажмите «Печать» ещё раз.'); return; }
+    w.document.open(); w.document.write(doc); w.document.close();
   }
 
   // ---------- настройки: сохранить ----------
