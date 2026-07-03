@@ -106,18 +106,30 @@
   function custRow(t, it){
     it=it||{};
     var pct=function(v,def){ return (v!=null&&v!=='')?Math.round(+v*1000)/10:def; };
-    var h='<div class="custrow" data-t="'+t+'" data-code="'+esc(it.code||'')+'" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px">';
-    h+='<input data-f="lbl" placeholder="Название" value="'+esc(it.lbl||'')+'" style="flex:1;min-width:180px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px">';
-    h+='<input data-f="sec" placeholder="Раздел" value="'+esc(it.sec||'')+'" style="width:150px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px">';
-    function num(f,ph,val,w){ return '<input data-f="'+f+'" type="number" step="any" placeholder="'+esc(ph)+'" value="'+(val==null||val===''?'':val)+'" style="width:'+(w||80)+'px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px;text-align:right">'; }
-    if(t==='op'){
-      h+=num('rate','ставка ₸', it.rate);
-    } else {
-      h+=num('u','цена ₸', it.u);
-      if(t==='mat') h+=num('ost','ост %', pct(it.ost,15),64)+num('rah','рах %', pct(it.rah,4),64);
-      else h+=num('rah','рах %', pct(it.rah,7),64)+num('m','работа ×', (it.m!=null?it.m:1),70);
+    var IST='background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px';
+    // fld = a stacked field: tiny caption above the input
+    function fld(cap, inner, wrapStyle){
+      return '<div style="display:flex;flex-direction:column;gap:2px;'+(wrapStyle||'')+'">'+
+             '<span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap">'+esc(cap)+'</span>'+inner+'</div>';
     }
-    h+='<button class="delcust btnp ghost" data-t="'+t+'" data-code="'+esc(it.code||'')+'" type="button" style="padding:6px 10px">✕</button>';
+    function txt(f,val,w){ return '<input data-f="'+f+'" value="'+esc(val==null?'':val)+'" style="'+IST+';'+(w||'')+'">'; }
+    function num(f,val,w){ return '<input data-f="'+f+'" type="number" step="any" value="'+(val==null||val===''?'':val)+'" style="'+IST+';text-align:right;'+(w||'width:80px')+'">'; }
+
+    var h='<div class="custrow" data-t="'+t+'" data-code="'+esc(it.code||'')+'" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+    h+=fld('Название', txt('lbl', it.lbl, 'width:100%'), 'flex:1;min-width:170px');
+    h+=fld('Раздел', txt('sec', it.sec, 'width:100%'), 'width:150px');
+    if(t==='op'){
+      h+=fld('Ставка, ₸/ед', num('rate', it.rate, 'width:100px'));
+    } else if(t==='mat'){
+      h+=fld('Цена, ₸', num('u', it.u, 'width:100px'));
+      h+=fld('Отходы, %', num('ost', pct(it.ost,15), 'width:80px'));
+      h+=fld('Расходники, %', num('rah', pct(it.rah,4), 'width:110px'));
+    } else {
+      h+=fld('Цена, ₸', num('u', it.u, 'width:100px'));
+      h+=fld('Расходники, %', num('rah', pct(it.rah,7), 'width:110px'));
+      h+=fld('Работа, ×', num('m', (it.m!=null?it.m:1), 'width:80px'));
+    }
+    h+='<button class="delcust btnp ghost" data-t="'+t+'" data-code="'+esc(it.code||'')+'" type="button" style="padding:7px 10px" title="Удалить">✕</button>';
     h+='</div>';
     return h;
   }
@@ -173,7 +185,7 @@
     // --- custom (added) items ---
     var cm=P.customMat||[], cc=P.customCmp||[], co=P.customOp||[];
     h+='<h3 style="margin-top:18px">Свои материалы</h3>';
-    h+='<div class="small muted" style="margin-bottom:6px">Добавляйте материалы, которых нет в списке выше. Они появятся в калькуляторе.</div>';
+    h+='<div class="small muted" style="margin-bottom:6px">Добавляйте материалы, которых нет выше — они появятся в калькуляторе. «Отходы %» — надбавка на обрезки (обычно 15, для труб/профилей 20). «Расходники %» — сопутствующие затраты (обычно 4). Итог = цена × кол-во × (1+отходы) × (1+расходники).</div>';
     cm.forEach(function(it){ h+=custRow('mat', it); });
     h+='<button class="btnp ghost" data-add="mat" type="button" style="margin-top:4px">+ материал</button>';
 
