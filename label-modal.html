@@ -164,12 +164,21 @@
       for(var i=0;i<n;i++) body+=labelHtml(c, sz.w, sz.h);
     });
     var doc='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Этикетки</title>'+
-      '<style>'+PRINT_CSS.replace('__W__',sz.w).replace('__H__',sz.h)+'</style></head><body>'+body+
-      '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},150);};</scr'+'ipt>'+
-      '</body></html>';
-    var w=window.open('','_blank','noopener,width=520,height=640');
-    if(!w){ alert('Браузер заблокировал всплывающее окно. Разрешите всплывающие окна для trello.com и нажмите «Печать» ещё раз.'); return; }
-    w.document.open(); w.document.write(doc); w.document.close();
+      '<style>'+PRINT_CSS.replace('__W__',sz.w).replace('__H__',sz.h)+'</style></head><body>'+body+'</body></html>';
+    // печать через скрытый фрейм в этом же окне — без window.open(), который блокируется
+    // в некоторых браузерах для окон, встроенных в Trello (даже при разрешённых всплывающих окнах)
+    var old = document.getElementById('printFrame');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var f = document.createElement('iframe');
+    f.id = 'printFrame';
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+    document.body.appendChild(f);
+    var fdoc = f.contentWindow.document;
+    fdoc.open(); fdoc.write(doc); fdoc.close();
+    setTimeout(function(){
+      try { f.contentWindow.focus(); f.contentWindow.print(); }
+      catch(e){ alert('Не удалось открыть печать: '+(e&&e.message||e)); }
+    }, 200);
   }
 
   // ---------- настройки: сохранить ----------
