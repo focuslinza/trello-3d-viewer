@@ -98,15 +98,31 @@
     pdfMake.fonts = { DejaVu: { normal:'DejaVuSans.ttf', bold:'DejaVuSans-Bold.ttf', italics:'DejaVuSans.ttf', bolditalics:'DejaVuSans-Bold.ttf' } };
     return true;
   }
-  function downloadPdf(row){
-    if(!setupFonts()){ alert('Не удалось загрузить генератор PDF (pdfMake). Проверьте интернет.'); return; }
-    if(!row.supplier || !row.buyer){ alert('В этом счёте не сохранены реквизиты (старый формат) — скачать нельзя.'); return; }
+  function buildDoc(row){
+    if(!setupFonts()){ alert('Не удалось загрузить генератор PDF (pdfMake). Проверьте интернет.'); return null; }
+    if(!row.supplier || !row.buyer){ alert('В этом счёте не сохранены реквизиты (старый формат) — открыть нельзя.'); return null; }
     var data={ supplier:row.supplier, buyer:row.buyer, number:String(row.number||''),
                date:row.dateText||ruDateFromIso(row.dateIso), contract:row.contract||'Без договора',
                items:row.items||[], nds:null };
-    var dd=window.INVOICE.buildInvoiceDoc(data);
-    var fname='Счет_'+data.number+'_'+(row.buyer&&row.buyer.name?String(row.buyer.name).replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30):'клиент')+'.pdf';
-    pdfMake.createPdf(dd).download(fname);
+    return { dd:window.INVOICE.buildInvoiceDoc(data),
+             fname:'Счет_'+data.number+'_'+(row.buyer&&row.buyer.name?String(row.buyer.name).replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30):'клиент')+'.pdf' };
+  }
+  function downloadPdf(row){
+    var b=buildDoc(row); if(!b) return;
+    pdfMake.createPdf(b.dd).download(b.fname);
+  }
+  // просмотр без скачивания: собираем PDF в память и открываем во всплывающем окне
+  function previewPdf(row){
+    var b=buildDoc(row); if(!b) return;
+    // окно открываем СРАЗУ по клику (иначе браузер заблокирует), PDF подставляем когда готов
+    var w=window.open('','_blank','width=920,height=1000');
+    if(!w){ alert('Браузер заблокировал всплывающее окно. Разрешите всплывающие окна для trello.com и нажмите «Просмотр» ещё раз.'); return; }
+    try { w.document.write('<title>Счёт № '+String(row.number||'').replace(/[<>&"]/g,'')+'</title><body style="margin:0;background:#333;color:#ccc;font-family:Arial"><div style="padding:20px">Готовлю счёт…</div></body>'); } catch(e){}
+    pdfMake.createPdf(b.dd).getBlob(function(blob){
+      var url=URL.createObjectURL(blob);
+      try { w.location.href=url; }
+      catch(e){ try{ w.close(); }catch(_){} alert('Не удалось открыть просмотр: '+(e&&e.message||e)); }
+    });
   }
   function delInvoice(row){
     if(!IS_DIRECTOR) return;
@@ -133,6 +149,7 @@
           '<td class="num">'+money(r.total)+' ₸</td>'+
           '<td class="small muted">'+esc(supLbl)+'</td>'+
           '<td style="white-space:nowrap;text-align:right">'+
+            '<button class="btn vw" data-i="'+i+'" type="button" title="Открыть в новом окне без скачивания">Просмотр</button> '+
             '<button class="btn green dl" data-i="'+i+'" type="button">Скачать PDF</button>'+
             (IS_DIRECTOR?' <button class="btn red del" data-i="'+i+'" type="button" title="Удалить из журнала">✕</button>':'')+
           '</td>'+
@@ -144,6 +161,7 @@
     h+='</div>';
     document.getElementById('app').innerHTML=h;
     [].forEach.call(document.querySelectorAll('.dl'), function(b){ b.onclick=function(){ downloadPdf(ROWS[+this.getAttribute('data-i')]); }; });
+    [].forEach.call(document.querySelectorAll('.vw'), function(b){ b.onclick=function(){ previewPdf(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.del'), function(b){ b.onclick=function(){ delInvoice(ROWS[+this.getAttribute('data-i')]); }; });
   }
 
