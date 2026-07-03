@@ -156,20 +156,40 @@
     if(!(STATE.cutLenM>0)) return;
     var btn=document.getElementById('save'); btn.disabled=true; document.getElementById('msg').textContent='\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u0435\u2026';
     var rec={ fileName:ctx.fileName, tube:true, cutLenM:STATE.cutLenM, thicknessMm:STATE.thick||null, quantity:STATE.qty, section:STATE.section, tubeLenMm:STATE.length, secClass:STATE.secClass, savedAt:Date.now() };
-    t.get('card','shared','dxfMetrics', {}).then(function(all){
-      all=all||{}; all[ctx.attId || ('zzx:'+ctx.fileName)] = rec;
-      return t.set('card','shared','dxfMetrics', all);
-    }).then(function(){
+    var attKey = ctx.attId || ('zzx:'+ctx.fileName);
+    fetch(WORKER+'/dxf-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ cardId: ctx.cardId, attachmentId: attKey, rec: rec })
+    }).then(function(r){ return r.json(); }).then(function(j){
+      if(!j || !j.ok) throw new Error((j&&j.error)||'сервер не подтвердил сохранение');
       document.getElementById('msg').textContent='\u041f\u0435\u0440\u0435\u0434\u0430\u043d\u043e \u2713 \u041e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 \u00ab\u041a\u0430\u043b\u044c\u043a\u0443\u043b\u044f\u0442\u043e\u0440 \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u0438\u00bb \u2192 \u00ab\u041f\u043e\u0434\u0442\u044f\u043d\u0443\u0442\u044c \u0438\u0437 DXF\u00bb.';
       btn.disabled=false;
+      // одноразовый перенос старых записей с карточки в базу + освобождение места
+      return t.get('card','shared','dxfMetrics', {}).then(function(all){
+        if (!all || !Object.keys(all).length) return;
+        return fetch(WORKER+'/dxf-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ cardId: ctx.cardId, records: all })
+        }).then(function(r){ return r.json(); }).then(function(j2){
+          if (j2 && j2.ok) return t.remove('card','shared','dxfMetrics').catch(function(){ return t.set('card','shared','dxfMetrics', {}); });
+        });
+      }).catch(function(){});
     }).catch(function(e){ document.getElementById('msg').textContent='\u041e\u0448\u0438\u0431\u043a\u0430: '+(e&&e.message||e); btn.disabled=false; });
   }
 
   function loadSaved(){
-    return t.get('card','shared','dxfMetrics', {}).then(function(all){
-      var rec = all && (all[ctx.attId] || all['zzx:'+ctx.fileName]);
-      if(rec){ if(rec.cutLenM) STATE.cutLenM=rec.cutLenM; if(rec.quantity) STATE.qty=rec.quantity; if(rec.thicknessMm) STATE.thick=rec.thicknessMm; }
-    }).catch(function(){});
+    function apply(rec){
+      if(rec){ if(rec.cutLenM) STATE.cutLenM=rec.cutLenM; if(rec.quantity) STATE.qty=rec.quantity; if(rec.thicknessMm) STATE.thick=rec.thicknessMm; return true; }
+      return false;
+    }
+    return fetch(WORKER+'/dxf-get?cardId='+encodeURIComponent(ctx.cardId||''))
+      .then(function(r){ return r.json(); })
+      .then(function(j){ return apply(j && j.ok && j.metrics && (j.metrics[ctx.attId] || j.metrics['zzx:'+ctx.fileName])); })
+      .catch(function(){ return false; })
+      .then(function(found){
+        if(found) return;
+        return t.get('card','shared','dxfMetrics', {}).then(function(all){
+          apply(all && (all[ctx.attId] || all['zzx:'+ctx.fileName]));
+        }).catch(function(){});
+      });
   }
 
   function loadContext(){
