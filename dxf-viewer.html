@@ -215,17 +215,27 @@
     canvas.addEventListener('pointerup', function(e){ dragging=false; });
     window.addEventListener('resize', fitView);
 
-    // ---------- load saved inputs for this attachment ----------
+    // ---------- load saved inputs for this attachment (из базы; старые записи — из карточки) ----------
+    function applyRec(rec){
+      if (!rec) return false;
+      if (rec.thicknessMm!=null) document.getElementById('thickness').value = rec.thicknessMm;
+      if (rec.materialCode) document.getElementById('material').value = rec.materialCode;
+      if (rec.bendCount!=null) document.getElementById('bendInput').value = rec.bendCount;
+      if (rec.quantity!=null) document.getElementById('quantity').value = rec.quantity;
+      return true;
+    }
     function loadSaved(){
-      return t.get('card','shared','dxfMetrics', {}).then(function(all){
-        var rec = all && all[attachmentId];
-        if (rec){
-          if (rec.thicknessMm!=null) document.getElementById('thickness').value = rec.thicknessMm;
-          if (rec.materialCode) document.getElementById('material').value = rec.materialCode;
-          if (rec.bendCount!=null) document.getElementById('bendInput').value = rec.bendCount;
-          if (rec.quantity!=null) document.getElementById('quantity').value = rec.quantity;
-        }
-      }).catch(function(){});
+      var W = (window.WORKER_URL||'').replace(/\/$/,'');
+      return fetch(W+'/dxf-get?cardId='+encodeURIComponent(cardId))
+        .then(function(r){ return r.json(); })
+        .then(function(j){ return applyRec(j && j.ok && j.metrics && j.metrics[attachmentId]); })
+        .catch(function(){ return false; })
+        .then(function(found){
+          if (found) return;
+          return t.get('card','shared','dxfMetrics', {}).then(function(all){
+            applyRec(all && all[attachmentId]);
+          }).catch(function(){});
+        });
     }
 
     // ---------- run ----------
@@ -287,12 +297,22 @@
       };
       var msg = document.getElementById('savedMsg');
       msg.textContent = 'Сохранение…';
-      t.get('card','shared','dxfMetrics', {}).then(function(all){
-        all = all || {}; all[attachmentId] = rec;
-        return t.set('card','shared','dxfMetrics', all);
-      }).then(function(){
+      var W = (window.WORKER_URL||'').replace(/\/$/,'');
+      fetch(W+'/dxf-save', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ cardId: cardId, attachmentId: attachmentId, rec: rec })
+      }).then(function(r){ return r.json(); }).then(function(j){
+        if(!j || !j.ok) throw new Error((j&&j.error)||'сервер не подтвердил сохранение');
         msg.textContent = 'Сохранено ✓ Данные готовы для калькулятора.';
         setTimeout(function(){ msg.textContent=''; }, 4000);
+        // одноразовый перенос: старые записи с карточки — в базу, затем освобождаем место на карточке
+        return t.get('card','shared','dxfMetrics', {}).then(function(all){
+          if (!all || !Object.keys(all).length) return;
+          return fetch(W+'/dxf-save', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ cardId: cardId, records: all })
+          }).then(function(r){ return r.json(); }).then(function(j2){
+            if (j2 && j2.ok) return t.remove('card','shared','dxfMetrics').catch(function(){ return t.set('card','shared','dxfMetrics', {}); });
+          });
+        }).catch(function(){});
       }).catch(function(e){ msg.textContent = 'Ошибка сохранения: '+(e&&e.message?e.message:''); });
     });
   </script>
