@@ -20,8 +20,10 @@
 </head>
 <body>
   <div id="wrap"><div class="muted">Загрузка…</div></div>
+  <script src="./config.js"></script>
   <script>
     var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     function fmt(n){ return (Math.round((+n||0))).toLocaleString('ru-RU'); }
 
     var CARD = { id:null, board:'', name:'', status:'' };
@@ -65,7 +67,9 @@
       }).catch(function(){ return false; });
     }
 
+    var renderGen = 0;
     t.render(function(){
+      var myGen = ++renderGen;
       // capture card id/name with the minimal field set (matches the working DXF section)
       return t.card('id','name').then(function(card){
         CARD.id = card && card.id || null;
@@ -77,6 +81,7 @@
         try { t.list('name').then(function(l){ CARD.status=(l&&l.name)||''; }).catch(function(){}); } catch(e){}
         return t.get('card','shared','calcData', null);
       }).then(function(d){
+        if (myGen !== renderGen) return; // устарело — подоспела более новая перерисовка
         var el=document.getElementById('wrap');
         el.innerHTML='';
         var row=document.createElement('div'); row.className='row';
@@ -117,6 +122,7 @@
           row4.appendChild(lbl4); row4.appendChild(sb); el.appendChild(row4);
         }
         return Promise.all([ isDirector(), t.member('id').catch(function(){return {};}) ]).then(function(r){
+          if (myGen !== renderGen) return; // устарело
           var admin=r[0], me=r[1]||{};
           if(admin){
             var row2=document.createElement('div'); row2.className='row'; row2.style.marginTop='8px';
@@ -129,8 +135,9 @@
           if(admin){ addInvoiceBtn(); return t.sizeTo('#wrap'); }
           // not admin: show invoice only if my Trello account is an allowed worker
           return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||'')).then(function(x){return x.json();}).then(function(j){
+            if (myGen !== renderGen) return; // устарело
             if(j&&j.canInvoice) addInvoiceBtn();
-          }).catch(function(){}).then(function(){ return t.sizeTo('#wrap'); });
+          }).catch(function(){}).then(function(){ if (myGen !== renderGen) return; return t.sizeTo('#wrap'); });
         });
       });
     });
