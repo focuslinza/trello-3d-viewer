@@ -11,11 +11,12 @@
     // that opens the full calculator modal. Stores results on the card and
     // logs every order to the central D1 database via the Worker.
     window.TrelloPowerUp.initialize({
-      'card-buttons': function (t, options) {
-        // "Этикетка" is always available; ".zzx" only when such an attachment exists
-        var labelBtn = {
-          icon: t.signUrl('./label-icon.svg'),
-          text: 'Этикетка (штрих-код)',
+      'card-detail-badges': function (t, options) {
+        // фишка «QR-этикетка» в одном ряду и стиле с «Метки» и «Card Number»
+        return [{
+          title: 'Этикетка',
+          text: '▦ QR / печать',
+          color: null,
           callback: function (t) {
             return t.card('id').then(function (c) {
               return t.modal({
@@ -26,11 +27,13 @@
               });
             });
           }
-        };
+        }];
+      },
+      'card-buttons': function (t, options) {
         return t.card('attachments').then(function (c) {
           var has = ((c && c.attachments) || []).some(function (a) { return /\.zzx$/i.test(a.name || ''); });
-          var btns = [labelBtn];
-          if (has) btns.push({
+          if (!has) return [];
+          return [{
             icon: t.signUrl('./calc-icon.svg'),
             text: 'Чертёж .zzx',
             callback: function (t) {
@@ -40,9 +43,8 @@
                 title: 'Просмотр .zzx'
               });
             }
-          });
-          return btns;
-        }).catch(function () { return [labelBtn]; });
+          }];
+        }).catch(function () { return []; });
       },
       'card-back-section': function (t, options) {
         return {
