@@ -12,10 +12,25 @@
     // logs every order to the central D1 database via the Worker.
     window.TrelloPowerUp.initialize({
       'card-buttons': function (t, options) {
+        // "Этикетка" is always available; ".zzx" only when such an attachment exists
+        var labelBtn = {
+          icon: t.signUrl('./label-icon.svg'),
+          text: 'Этикетка (штрих-код)',
+          callback: function (t) {
+            return t.card('id').then(function (c) {
+              return t.modal({
+                url: t.signUrl('./label-modal.html') + '?t=' + Date.now(),
+                fullscreen: true,
+                title: 'Этикетка со штрих-кодом',
+                args: { cardId: (c && c.id) || '' }
+              });
+            });
+          }
+        };
         return t.card('attachments').then(function (c) {
           var has = ((c && c.attachments) || []).some(function (a) { return /\.zzx$/i.test(a.name || ''); });
-          if (!has) return [];
-          return [{
+          var btns = [labelBtn];
+          if (has) btns.push({
             icon: t.signUrl('./calc-icon.svg'),
             text: 'Чертёж .zzx',
             callback: function (t) {
@@ -25,8 +40,9 @@
                 title: 'Просмотр .zzx'
               });
             }
-          }];
-        }).catch(function () { return []; });
+          });
+          return btns;
+        }).catch(function () { return [labelBtn]; });
       },
       'card-back-section': function (t, options) {
         return {
@@ -41,6 +57,16 @@
       },
       'board-buttons': function (t, options) {
         return [{
+          icon: { dark: t.signUrl('./ic-label.png'), light: t.signUrl('./ic-label.png') },
+          text: 'Этикетки',
+          callback: function (t) {
+            return t.modal({
+              url: t.signUrl('./label-modal.html') + '?t=' + Date.now(),
+              fullscreen: true,
+              title: 'Печать этикеток со штрих-кодом'
+            });
+          }
+        }, {
           icon: { dark: t.signUrl('./ic-earnings.png'), light: t.signUrl('./ic-earnings.png') },
           text: 'Мой заработок',
           callback: function (t) {

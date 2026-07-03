@@ -353,7 +353,7 @@
     var numEl=document.getElementById('inum'), dEl=document.getElementById('idate'), cEl=document.getElementById('icontract');
     var items = selectedOrders().map(function(o){
       var qty=Math.max(1,o.qty||1);
-      return { code:o.number||'', name:o.name, qty:qty, unit:'Услуга', price:(o.total/qty) };
+      return { code:o.number||'', name:o.name, qty:qty, unit:'Услуга', price:(o.total/qty), cardId:o.cardId };
     });
     return {
       supplier:sup, buyer:ctx.buyer,
@@ -383,6 +383,24 @@
       pdfMake.createPdf(dd).download(fname, function(){
         gen.textContent='Скачать PDF'; gen.disabled=false;
       });
+      // сохранить счёт в журнал (D1) — чтобы он был виден внутри карточек заказов.
+      // не блокирует скачивание PDF; если Worker ещё без маршрута /invoice-save — просто молча пропустится.
+      try {
+        var dEl2=document.getElementById('idate');
+        fetch(WORKER+'/invoice-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            number:String(data.number||''),
+            dateIso:(dEl2&&dEl2.value)||'',
+            dateText:data.date||'',
+            contract:data.contract||'',
+            supplier:data.supplier||null,
+            buyer:data.buyer||null,
+            items:data.items||[],
+            total:grandTotal(),
+            cardIds:selectedOrders().map(function(o){ return o.cardId; })
+          })
+        }).catch(function(){});
+      } catch(e){}
     }).catch(function(e){
       gen.textContent='Скачать PDF'; gen.disabled=false;
       alert('Ошибка: '+(e&&e.message||e));

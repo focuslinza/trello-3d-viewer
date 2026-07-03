@@ -100,6 +100,21 @@
           ib.textContent='Счёт на оплату';
           ib.addEventListener('click', openInvoice);
           row3.appendChild(lbl3); row3.appendChild(ib); el.appendChild(row3);
+          // выставленные ранее счета, в которые входит этот заказ (виден только директору и допущенным)
+          var row4=document.createElement('div'); row4.className='row'; row4.style.marginTop='8px';
+          var lbl4=document.createElement('div'); lbl4.className='muted'; lbl4.textContent='Выставленные счета по этому заказу';
+          var sb=document.createElement('button'); sb.className='btn'; sb.type='button'; sb.style.background='#5a5a5a';
+          sb.textContent='Счета (PDF)';
+          sb.addEventListener('click', function(){
+            return t.modal({
+              title: 'Счета по заказу',
+              url: './card-invoices-modal.html?t=' + Date.now(),
+              fullscreen: true,
+              accentColor: '#0c66e4',
+              args: { cardId: CARD.id }
+            });
+          });
+          row4.appendChild(lbl4); row4.appendChild(sb); el.appendChild(row4);
         }
         return Promise.all([ isDirector(), t.member('id').catch(function(){return {};}) ]).then(function(r){
           var admin=r[0], me=r[1]||{};

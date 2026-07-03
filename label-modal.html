@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Этикетки со штрих-кодом</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+    .wrap{padding:16px;max-width:960px;margin:0 auto}
+    .sec{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+    h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+    .muted{color:var(--muted)} .small{font-size:12px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+    .fld{display:flex;flex-direction:column;gap:4px}
+    .fld label{font-size:12px;color:var(--muted)}
+    select,input[type=text],input[type=number]{background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:14px}
+    input[type=number]{width:84px;text-align:right}
+    .btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
+    .btn.green{background:var(--green)}
+    .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+    table{width:100%;border-collapse:collapse;margin-top:6px}
+    th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+    th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+    .prevbox{background:#fff;display:inline-block;border-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+    #prevwrap{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+    .cnt{width:64px !important}
+    .lnk{color:#7aa2ff;cursor:pointer;text-decoration:underline dotted}
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
+  <div class="bar">
+    <div class="muted small" id="stat">—</div>
+    <div style="display:flex;gap:10px">
+      <button class="btn ghost" id="close" type="button">Закрыть</button>
+      <button class="btn green" id="print" type="button" disabled>🖨 Печать</button>
+    </div>
+  </div>
+
+<script>
+  var t = window.TrelloPowerUp.iframe();
+
+  // ---------- label size presets (mm) ----------
+  var SIZES = [
+    { key:'58x40',  w:58,  h:40,  label:'58 × 40 мм (стандарт)' },
+    { key:'58x30',  w:58,  h:30,  label:'58 × 30 мм' },
+    { key:'60x40',  w:60,  h:40,  label:'60 × 40 мм' },
+    { key:'40x25',  w:40,  h:25,  label:'40 × 25 мм (маленькая)' },
+    { key:'75x120', w:75,  h:120, label:'75 × 120 мм' },
+    { key:'100x50', w:100, h:50,  label:'100 × 50 мм' },
+    { key:'100x100',w:100, h:100, label:'100 × 100 мм' },
+    { key:'custom', w:0,   h:0,   label:'Другой размер…' }
+  ];
+
+  var prefs = { size:'58x40', w:58, h:40, firm:true };
+  try { var p=JSON.parse(localStorage.getItem('labelPrefs')||'{}'); if(p&&p.size) prefs=p; } catch(e){}
+
+  var MODE = 'batch';           // 'card' (кнопка в карточке) или 'batch' (кнопка на доске)
+  var CARDS = [];               // {id, name, number, url, created, copies, checked}
+  var filter = '';
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function pad(n){ return n<10?'0'+n:''+n; }
+  function boot(m){ var b=document.getElementById('boot'); if(b) b.textContent=m; }
+  // дата создания карточки зашита в её id (первые 8 hex-символов — unix-время)
+  function createdFromId(id){
+    try { var ts=parseInt(String(id).slice(0,8),16)*1000; var d=new Date(ts);
+      return pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.'+d.getFullYear();
+    } catch(e){ return ''; }
+  }
+
+  // ---------- QR: своя сборка SVG из модулей (чёткая печать в любом размере) ----------
+  function qrSvg(text, sizeMm){
+    var qr = qrcode(0, 'M');           // 0 = авто-версия, M = средняя коррекция ошибок
+    qr.addData(text);
+    qr.make();
+    var n = qr.getModuleCount();
+    var q = 2;                          // тихая зона (модулей) с каждой стороны
+    var total = n + q*2;
+    var path = '';
+    for (var r=0; r<n; r++){
+      for (var c=0; c<n; c++){
+        if (qr.isDark(r,c)) path += 'M'+(c+q)+' '+(r+q)+'h1v1h-1z';
+      }
+    }
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+total+' '+total+'" width="'+sizeMm+'mm" height="'+sizeMm+'mm" shape-rendering="crispEdges">'+
+           '<rect width="'+total+'" height="'+total+'" fill="#fff"/><path d="'+path+'" fill="#000"/></svg>';
+  }
+
+  // ---------- разметка одной этикетки ----------
+  function labelHtml(card, w, h){
+    var padMm = 2;
+    var qs = Math.min(h - padMm*2, w*0.48, 42);      // сторона QR, мм
+    var fNum  = Math.min(9,   Math.max(4, h*0.20));  // № — крупно
+    var fDate = Math.min(4.5, Math.max(2.6, h*0.11));
+    var fName = Math.min(4,   Math.max(2.4, h*0.10));
+    var nameLines = h >= 60 ? 5 : (h >= 38 ? 3 : 2);
+    var qrs = qrSvg(card.url, qs);
+    var html = '<div class="lb" style="width:'+w+'mm;height:'+h+'mm;padding:'+padMm+'mm">';
+    html += '<div class="q" style="flex:0 0 '+qs+'mm;width:'+qs+'mm;height:'+qs+'mm">'+qrs+'</div>';
+    html += '<div class="tx">';
+    html += '<div class="num" style="font-size:'+fNum+'mm">№ '+esc(card.number||'—')+'</div>';
+    html += '<div class="dt" style="font-size:'+fDate+'mm">от '+esc(card.created||'')+'</div>';
+    html += '<div class="nm" style="font-size:'+fName+'mm;-webkit-line-clamp:'+nameLines+'">'+esc(card.name||'')+'</div>';
+    if (prefs.firm) html += '<div class="fm" style="font-size:'+Math.min(3.2,fName)+'mm">MetalShop</div>';
+    html += '</div></div>';
+    return html;
+  }
+
+  var PRINT_CSS =
+    '@page{size:__W__mm __H__mm;margin:0}'+
+    'html,body{margin:0;padding:0}'+
+    'body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000}'+
+    '.lb{box-sizing:border-box;display:flex;gap:2mm;align-items:center;overflow:hidden;'+
+        'page-break-after:always;break-after:page;background:#fff}'+
+    '.lb:last-child{page-break-after:auto;break-after:auto}'+
+    '.q svg{display:block}'+
+    '.tx{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:.6mm;overflow:hidden}'+
+    '.num{font-weight:800;line-height:1;white-space:nowrap}'+
+    '.dt{color:#000;line-height:1.1;white-space:nowrap}'+
+    '.nm{line-height:1.15;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}'+
+    '.fm{color:#333;margin-top:.6mm;letter-spacing:.3mm;text-transform:uppercase}';
+
+  function curSize(){
+    if (prefs.size==='custom') return { w:+prefs.w||58, h:+prefs.h||40 };
+    var s = SIZES.filter(function(x){return x.key===prefs.size;})[0] || SIZES[0];
+    return { w:s.w, h:s.h };
+  }
+  function selectedCards(){ return CARDS.filter(function(c){ return c.checked; }); }
+
+  // ---------- предпросмотр ----------
+  function renderPreview(){
+    var box=document.getElementById('prevwrap'); if(!box) return;
+    var sel=selectedCards();
+    var sz=curSize();
+    if(!sel.length){ box.innerHTML='<div class="muted">Отметьте хотя бы одну карточку.</div>'; return; }
+    var first=sel[0];
+    var scale=Math.min(1, 320/(sz.w*3.7795)); // 1мм ≈ 3.78px
+    var html='<div><div class="small muted" style="margin-bottom:6px">Предпросмотр ('+sz.w+'×'+sz.h+' мм'+(sel.length>1?', первая из выбранных':'')+'):</div>'+
+      '<div class="prevbox" style="width:'+(sz.w*3.7795*scale)+'px;height:'+(sz.h*3.7795*scale)+'px;overflow:hidden">'+
+      '<div style="transform:scale('+scale+');transform-origin:0 0">'+
+      '<style>'+PRINT_CSS.replace('__W__',sz.w).replace('__H__',sz.h)+'</style>'+
+      labelHtml(first, sz.w, sz.h)+
+      '</div></div></div>';
+    box.innerHTML=html;
+  }
+
+  // ---------- печать ----------
+  function doPrint(){
+    var sel=selectedCards();
+    if(!sel.length){ alert('Отметьте хотя бы одну карточку.'); return; }
+    var sz=curSize();
+    var body='';
+    sel.forEach(function(c){
+      var n=Math.max(1, Math.min(200, +c.copies||1));
+      for(var i=0;i<n;i++) body+=labelHtml(c, sz.w, sz.h);
+    });
+    var doc='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Этикетки</title>'+
+      '<style>'+PRINT_CSS.replace('__W__',sz.w).replace('__H__',sz.h)+'</style></head><body>'+body+
+      '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},150);};</scr'+'ipt>'+
+      '</body></html>';
+    var w=window.open('','_blank','noopener,width=520,height=640');
+    if(!w){ alert('Браузер заблокировал всплывающее окно. Разрешите всплывающие окна для trello.com и нажмите «Печать» ещё раз.'); return; }
+    w.document.open(); w.document.write(doc); w.document.close();
+  }
+
+  // ---------- настройки: сохранить ----------
+  function savePrefs(){ try{ localStorage.setItem('labelPrefs', JSON.stringify(prefs)); }catch(e){} }
+
+  // ---------- основной рендер ----------
+  function render(){
+    var h='';
+    h+='<div class="sec"><h3>Размер этикетки (под ваш принтер Zebra)</h3><div class="row">';
+    h+='<div class="fld"><label>Размер</label><select id="szSel">'+SIZES.map(function(s){
+        return '<option value="'+s.key+'"'+(s.key===prefs.size?' selected':'')+'>'+s.label+'</option>';
+      }).join('')+'</select></div>';
+    if(prefs.size==='custom'){
+      h+='<div class="fld"><label>Ширина, мм</label><input type="number" id="szW" min="20" max="210" value="'+(+prefs.w||58)+'"></div>';
+      h+='<div class="fld"><label>Высота, мм</label><input type="number" id="szH" min="15" max="300" value="'+(+prefs.h||40)+'"></div>';
+    }
+    h+='<label style="display:flex;align-items:center;gap:8px;padding-bottom:9px;cursor:pointer"><input type="checkbox" id="firmCk"'+(prefs.firm?' checked':'')+'> <span class="small">печатать «MetalShop»</span></label>';
+    h+='</div><div class="small muted" style="margin-top:8px">Размер запоминается. В диалоге печати выберите принтер Zebra; поля страницы — «Нет/None», масштаб — 100%.</div></div>';
+
+    h+='<div class="sec"><h3>'+(MODE==='card'?'Карточка':'Карточки (заказы)')+'</h3>';
+    if(MODE==='batch'){
+      h+='<div class="row" style="margin-bottom:8px"><input type="text" id="srch" placeholder="Поиск по названию или №…" value="'+esc(filter)+'" style="flex:1;min-width:200px">'+
+         '<button class="btn ghost" id="selAll" type="button">Выбрать все</button>'+
+         '<button class="btn ghost" id="selNone" type="button">Снять все</button></div>';
+    }
+    var list = CARDS.filter(function(c){
+      if(!filter) return true;
+      var f=filter.toLowerCase();
+      return String(c.name||'').toLowerCase().indexOf(f)>=0 || String(c.number||'').indexOf(f)>=0;
+    });
+    h+='<table><thead><tr><th></th><th>№</th><th>Заказ</th><th>Создан</th><th class="num" style="text-align:right">Копий</th></tr></thead><tbody>';
+    list.forEach(function(c){
+      h+='<tr>'+
+        '<td><input type="checkbox" class="ck" data-id="'+esc(c.id)+'"'+(c.checked?' checked':'')+'></td>'+
+        '<td class="small">'+esc(c.number||'—')+'</td>'+
+        '<td>'+esc(c.name)+'</td>'+
+        '<td class="small muted">'+esc(c.created)+'</td>'+
+        '<td style="text-align:right"><input type="number" class="cnt cop" data-id="'+esc(c.id)+'" min="1" max="200" value="'+(c.copies||1)+'"></td>'+
+      '</tr>';
+    });
+    h+='</tbody></table>';
+    if(!list.length) h+='<div class="muted" style="margin-top:8px">Ничего не найдено.</div>';
+    h+='</div>';
+
+    h+='<div class="sec"><h3>Предпросмотр</h3><div id="prevwrap"></div>'+
+       '<div class="small muted" style="margin-top:10px">QR-код содержит уникальную ссылку на карточку — при сканировании телефоном или сканером откроется именно эта карточка. Перепутать этикетки невозможно: у каждой карточки своя ссылка и свой номер.</div></div>';
+
+    document.getElementById('app').innerHTML=h;
+
+    document.getElementById('szSel').onchange=function(){ prefs.size=this.value; savePrefs(); render(); };
+    var sw=document.getElementById('szW'), sh=document.getElementById('szH');
+    if(sw) sw.oninput=function(){ prefs.w=+this.value||58; savePrefs(); renderPreview(); };
+    if(sh) sh.oninput=function(){ prefs.h=+this.value||40; savePrefs(); renderPreview(); };
+    document.getElementById('firmCk').onchange=function(){ prefs.firm=this.checked; savePrefs(); renderPreview(); };
+    var sr=document.getElementById('srch');
+    if(sr) sr.oninput=function(){ filter=this.value; render(); };
+    var sa=document.getElementById('selAll');
+    if(sa) sa.onclick=function(){ CARDS.forEach(function(c){ c.checked=true; }); render(); };
+    var sn=document.getElementById('selNone');
+    if(sn) sn.onclick=function(){ CARDS.forEach(function(c){ c.checked=false; }); render(); };
+    [].forEach.call(document.querySelectorAll('.ck'), function(el){
+      el.onchange=function(){ var id=this.getAttribute('data-id'), v=this.checked;
+        CARDS.forEach(function(c){ if(c.id===id) c.checked=v; }); updateStat(); renderPreview(); };
+    });
+    [].forEach.call(document.querySelectorAll('.cop'), function(el){
+      el.oninput=function(){ var id=this.getAttribute('data-id'), v=Math.max(1,+this.value||1);
+        CARDS.forEach(function(c){ if(c.id===id) c.copies=v; }); updateStat(); };
+    });
+    updateStat();
+    renderPreview();
+  }
+
+  function updateStat(){
+    var sel=selectedCards();
+    var tot=sel.reduce(function(s,c){ return s+Math.max(1,+c.copies||1); },0);
+    document.getElementById('stat').textContent = sel.length? ('Выбрано карточек: '+sel.length+' · этикеток к печати: '+tot) : 'Ничего не выбрано';
+    document.getElementById('print').disabled = !sel.length;
+  }
+
+  function mapCard(c){
+    var url = c.shortUrl || (c.shortLink ? 'https://trello.com/c/'+c.shortLink : 'https://trello.com/c/'+c.id);
+    return { id:c.id, name:c.name||'', number:(c.idShort!=null?String(c.idShort):''), url:url,
+             created:createdFromId(c.id), copies:1, checked:false };
+  }
+
+  function load(){
+    var argCard = t.arg('cardId');
+    MODE = argCard ? 'card' : 'batch';
+    if (MODE==='card'){
+      return t.card('id','name','idShort','shortLink','shortUrl').then(function(c){
+        var m=mapCard(c||{}); m.checked=true; CARDS=[m];
+      });
+    }
+    return t.cards('id','name','idShort','shortLink','shortUrl').then(function(cards){
+      CARDS=(cards||[]).map(mapCard).sort(function(a,b){ return (+b.number||0)-(+a.number||0); });
+    });
+  }
+
+  document.getElementById('close').onclick=function(){ t.closeModal(); };
+  document.getElementById('print').onclick=doPrint;
+
+  load().then(render).catch(function(e){ boot('Ошибка загрузки: '+(e&&e.message||e)); });
+</script>
+</body>
+</html>
