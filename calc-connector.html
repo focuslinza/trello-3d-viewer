@@ -20,7 +20,7 @@
           callback: function (t) {
             return t.card('id').then(function (c) {
               return t.modal({
-                url: t.signUrl('./label-modal.html') + '?t=' + Date.now(),
+                url: './label-modal.html?t=' + Date.now(),
                 fullscreen: true,
                 title: 'Этикетка со штрих-кодом',
                 args: { cardId: (c && c.id) || '' }
