@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Этикетки со штрих-кодом</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; }
@@ -36,7 +37,7 @@
 <body>
   <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
   <div class="bar">
-    <div class="muted small"><span id="stat">—</span> <span style="opacity:.45">· в. 3</span></div>
+    <div class="muted small"><span id="stat">—</span> <span style="opacity:.45">· в. 4</span></div>
     <div style="display:flex;gap:10px">
       <button class="btn ghost" id="close" type="button">Закрыть</button>
       <button class="btn green" id="print" type="button" disabled>🖨 Печать</button>
@@ -45,6 +46,7 @@
 
 <script>
   var t = window.TrelloPowerUp.iframe();
+  var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
 
   // ---------- label size presets (mm) ----------
   var SIZES = [
@@ -253,26 +255,53 @@
              created:createdFromId(c.id), copies:1, checked:false };
   }
 
+  function applyCardsList(cards, argCard){
+    cards = cards || [];
+    if (MODE==='card'){
+      var c = cards.filter(function(x){ return x.id===argCard; })[0];
+      if (!c) throw new Error('карточка не найдена на этой доске');
+      var m=mapCard(c); m.checked=true; CARDS=[m];
+      return;
+    }
+    CARDS=cards.map(mapCard).sort(function(a,b){ return (+b.number||0)-(+a.number||0); });
+  }
+
   function load(){
     var argCard = t.arg('cardId');
+    var argBoard = t.arg('boardId');
     MODE = argCard ? 'card' : 'batch';
-    // основной путь: список карточек доски (работает в окнах любого уровня)
-    return t.cards('id','name','idShort','shortLink','shortUrl').then(function(cards){
-      cards = cards || [];
-      if (MODE==='card'){
-        var c = cards.filter(function(x){ return x.id===argCard; })[0];
-        if (!c) throw new Error('карточка не найдена на этой доске');
-        var m=mapCard(c); m.checked=true; CARDS=[m];
-        return;
-      }
-      CARDS=cards.map(mapCard).sort(function(a,b){ return (+b.number||0)-(+a.number||0); });
-    }).catch(function(e1){
-      // запасной путь: прямой запрос карточки (если окно вдруг открыто в контексте карточки)
+
+    // основной путь: список карточек через ваш сервер (Worker → Trello REST API).
+    // Он не зависит от особенностей модальных окон Trello, которые иногда
+    // не пропускают t.cards()/t.card() из окна, открытого через фишку.
+    function viaWorker(){
+      if (!WORKER || !argBoard) return Promise.reject(new Error('нет доступа к серверу или id доски'));
+      return fetch(WORKER+'/board-cards?boardId='+encodeURIComponent(argBoard))
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if (!j || !j.ok) throw new Error((j&&j.error)||'сервер вернул ошибку');
+          applyCardsList(j.cards, argCard);
+        });
+    }
+    // запасной путь 1: список карточек напрямую через клиент Trello
+    function viaCardsCmd(){
+      return t.cards('id','name','idShort','shortLink','shortUrl').then(function(cards){
+        applyCardsList(cards, argCard);
+      });
+    }
+    // запасной путь 2: прямой запрос одной карточки
+    function viaCardCmd(){
       return t.card('id','name','idShort','shortLink','shortUrl').then(function(c){
-        if(!c || !c.id) throw e1;
+        if(!c || !c.id) throw new Error('карточка недоступна');
         var m=mapCard(c); m.checked=true; CARDS=[m]; MODE='card';
-      }).catch(function(e2){
-        throw new Error('не удалось получить данные ни списком ('+(e1&&e1.message||e1)+'), ни напрямую ('+(e2&&e2.message||e2)+')');
+      });
+    }
+
+    return viaWorker().catch(function(e1){
+      return viaCardsCmd().catch(function(e2){
+        return viaCardCmd().catch(function(e3){
+          throw new Error('не удалось получить данные карточек: через сервер ('+(e1&&e1.message||e1)+'), списком ('+(e2&&e2.message||e2)+'), напрямую ('+(e3&&e3.message||e3)+')');
+        });
       });
     });
   }

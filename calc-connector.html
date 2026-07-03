@@ -18,12 +18,13 @@
           text: '▦ QR / печать',
           color: null,
           callback: function (t) {
-            return t.card('id').then(function (c) {
+            return Promise.all([ t.card('id'), t.board('id') ]).then(function (r) {
+              var c = r[0], b = r[1];
               return t.modal({
                 url: './label-modal.html?t=' + Date.now(),
                 fullscreen: true,
                 title: 'Этикетка со штрих-кодом',
-                args: { cardId: (c && c.id) || '' }
+                args: { cardId: (c && c.id) || '', boardId: (b && b.id) || '' }
               });
             });
           }
