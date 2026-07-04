@@ -7,6 +7,7 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
   <script src="./calc-engine.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; --amber:#c99a3a; }
     *{box-sizing:border-box}
@@ -33,6 +34,8 @@
     .pill{display:inline-block;border-radius:20px;padding:1px 9px;font-size:11px}
     .pill.paid{background:#173a26;color:#7ee0a1;border:1px solid #2c6b45}
     .pill.unpaid{background:#3a2320;color:#e8a59d;border:1px solid #7a3a32}
+    .chartbox{position:relative;height:220px}
+    .chartbox2{position:relative;height:200px;margin-top:10px}
     .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;gap:10px}
     .btn{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
     .barw{background:var(--bg);border-radius:4px;overflow:hidden;min-width:60px}
@@ -79,16 +82,59 @@
   var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
   var MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   var now=new Date();
-  var cur={ y:now.getFullYear(), m:now.getMonth() };
+  function pad(n){ return n<10?'0'+n:''+n; }
+  function fmtDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function startOfWeek(d){ var x=new Date(d); var wd=(x.getDay()+6)%7; x.setDate(x.getDate()-wd); return x; } // неделя с понедельника
+  var RANGE = { from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now), presetKey:'month' };
+  var EXCL_WEEKENDS = false;
   var tab='people';
   var DATA=null;
+  var CHARTS={};
   var PRICING_EDIT={ mat:{}, cmp:{}, coef:{}, matOstBySec:{}, matRahBySec:{}, cmpOstBySec:{}, cmpRahBySec:{}, opOstBySec:{}, opRahBySec:{}, rates:{} };
   var CALC=window.CALC||{};
 
   function money(v){ v=Math.round(+v||0); return v.toLocaleString('ru-RU'); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
-  function pad(n){ return n<10?'0'+n:''+n; }
   function boot(m){ var b=document.getElementById('boot'); if(b) b.textContent=m; }
+
+  function calendarDays(){ var a=new Date(RANGE.from+'T00:00:00'), b=new Date(RANGE.to+'T00:00:00'); return Math.max(1, Math.round((b-a)/86400000)+1); }
+  function periodLabel(){ return RANGE.from===RANGE.to ? RANGE.from : (RANGE.from+' — '+RANGE.to); }
+  function applyPreset(key){
+    var n=new Date(), s;
+    if(key==='today') s=new Date(n);
+    else if(key==='week') s=startOfWeek(n);
+    else if(key==='month') s=new Date(n.getFullYear(), n.getMonth(), 1);
+    else if(key==='quarter') s=new Date(n.getFullYear(), Math.floor(n.getMonth()/3)*3, 1);
+    else if(key==='year') s=new Date(n.getFullYear(), 0, 1);
+    else s=new Date(2020,0,1); // "всё время" — достаточно давняя точка отсчёта
+    RANGE.from=fmtDate(s); RANGE.to=fmtDate(n); RANGE.presetKey=key;
+    load();
+  }
+  // группируем дневные точки в недели/месяцы, если диапазон длинный — иначе график станет нечитаемым
+  function bucketDaily(daily){
+    daily = daily||[];
+    var n=daily.length;
+    if(n<=45) return { labels:daily.map(function(d){return d.date.slice(5);}), rev:daily.map(function(d){return d.revenue;}), prof:daily.map(function(d){return d.profit;}) };
+    var byKey={}, keyFn;
+    if(n<=200) keyFn=function(d){ return fmtDate(startOfWeek(new Date(d.date+'T00:00:00'))); };
+    else keyFn=function(d){ return d.date.slice(0,7); };
+    daily.forEach(function(d){ var k=keyFn(d); var b=byKey[k]||(byKey[k]={revenue:0,profit:0}); b.revenue+=d.revenue; b.profit+=d.profit; });
+    var keys=Object.keys(byKey).sort();
+    return { labels:keys, rev:keys.map(function(k){return byKey[k].revenue;}), prof:keys.map(function(k){return byKey[k].profit;}) };
+  }
+  function destroyChart(id){ if(CHARTS[id]){ CHARTS[id].destroy(); delete CHARTS[id]; } }
+  function makeLineChart(id, labels, datasets){
+    destroyChart(id); var el=document.getElementById(id); if(!el || !window.Chart) return;
+    CHARTS[id]=new Chart(el.getContext('2d'), { type:'line', data:{ labels:labels, datasets:datasets },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#c7d1db' } } },
+        scales:{ x:{ ticks:{ color:'#9fadbc', maxRotation:0 }, grid:{ color:'#2c333a' } }, y:{ ticks:{ color:'#9fadbc' }, grid:{ color:'#2c333a' } } } } });
+  }
+  function makeBarChart(id, labels, values, color, horizontal){
+    destroyChart(id); var el=document.getElementById(id); if(!el || !window.Chart) return;
+    CHARTS[id]=new Chart(el.getContext('2d'), { type:'bar', data:{ labels:labels, datasets:[{ data:values, backgroundColor: color||'#4f7cff', borderRadius:4 }] },
+      options:{ indexAxis: horizontal?'y':'x', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+        scales:{ x:{ ticks:{ color:'#9fadbc' }, grid:{ color:'#2c333a' } }, y:{ ticks:{ color:'#9fadbc' }, grid:{ color:'#2c333a' } } } } });
+  }
 
   function isDirector(){
     return Promise.all([ t.member('id'), t.board('memberships'), t.organization('memberships').catch(function(){return null;}) ])
@@ -98,15 +144,10 @@
       }).catch(function(){ return false; });
   }
 
-  function range(){
-    var last=new Date(cur.y,cur.m+1,0).getDate();
-    var isCur=(cur.y===now.getFullYear()&&cur.m===now.getMonth());
-    var toD=isCur?now.getDate():last;
-    return { from:cur.y+'-'+pad(cur.m+1)+'-01', to:cur.y+'-'+pad(cur.m+1)+'-'+pad(toD) };
-  }
+  function range(){ return { from: RANGE.from, to: RANGE.to }; }
 
   function load(){
-    boot('Считаю показатели за '+MONTHS[cur.m]+' '+cur.y+'…');
+    boot('Считаю показатели за '+periodLabel()+'…');
     var r=range();
     fetch(WORKER+'/dashboard?from='+r.from+'&to='+r.to).then(function(x){return x.json();}).then(function(j){
       if(!j||j.error){ boot('Ошибка: '+((j&&j.error)||'?')); return; }
@@ -115,7 +156,19 @@
   }
 
   function periodBar(){
-    return '<div class="period"><button id="prev" type="button">‹</button><div class="lbl">'+MONTHS[cur.m]+' '+cur.y+'</div><button id="next" type="button">›</button></div>';
+    var presets=[['today','Сегодня'],['week','Неделя'],['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']];
+    var h='<div class="tabs" style="margin-bottom:10px">';
+    presets.forEach(function(p){ h+='<div class="tab'+(RANGE.presetKey===p[0]?' active':'')+'" data-preset="'+p[0]+'">'+p[1]+'</div>'; });
+    h+='</div>';
+    h+='<div class="period" style="justify-content:flex-start;flex-wrap:wrap;margin-bottom:8px">'+
+       '<input type="date" id="fromD" value="'+RANGE.from+'" style="background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px 8px;font-size:13px">'+
+       '<span class="muted">—</span>'+
+       '<input type="date" id="toD" value="'+RANGE.to+'" style="background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px 8px;font-size:13px">'+
+       '<button type="button" id="applyRange" class="btn" style="padding:6px 14px">Применить</button>'+
+       '<label class="small muted" style="display:flex;align-items:center;gap:6px;margin-left:8px;cursor:pointer"><input type="checkbox" id="exclWeekends"'+(EXCL_WEEKENDS?' checked':'')+'> без выходных (для средних)</label>'+
+       '</div>';
+    h+='<div class="lbl" style="text-align:left;font-weight:700;font-size:15px">'+esc(periodLabel())+'</div>';
+    return h;
   }
   function kpi(k,v,cls){ return '<div class="kpi '+(cls||'')+'"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>'; }
 
@@ -365,8 +418,19 @@
       h+=kpi('Оплачено', money(T.paidRev)+' ₸ · '+T.paidCount+' зак.', 'green');
       h+=kpi('Не оплачено', money(T.unpaidRev)+' ₸ · '+T.unpaidCount+' зак.', 'red');
       h+='</div>';
-      h+='<div class="small muted" style="margin-top:10px">«Прибыль (ориентир)» = выручка − сдельная зарплата − материалы. Без учёта аренды, налогов и прочих накладных — это грубый ориентир маржи.</div>';
+      h+='<div class="kpis" style="margin-top:12px">';
+      h+=kpi('Средний чек', money(T.avgOrderValue)+' ₸');
+      h+=kpi('Средний срок заказа', T.avgLeadDays!=null?(T.avgLeadDays+' дн.'):'—', 'amber');
+      h+=kpi('Узкое место (этап)', T.bottleneck?(esc(T.bottleneck.label)+' · '+T.bottleneck.avgHours+' ч/зак.'):'—', 'amber');
+      h+=kpi(EXCL_WEEKENDS?'Выручка / раб. день':'Выручка / день', money(T.revenue/(EXCL_WEEKENDS?(T.workingDays||1):calendarDays()))+' ₸');
       h+='</div>';
+      h+='<div class="small muted" style="margin-top:10px">«Прибыль (ориентир)» = выручка − сдельная зарплата − материалы. Без учёта аренды, налогов и прочих накладных — это грубый ориентир маржи. «Узкое место» — этап, который в среднем занимает больше всего часов на заказ (по данным авто-отслеживания резки/гибки/сварки/инженера).</div>';
+      h+='</div>';
+
+      h+='<div class="sec"><h3>Выручка и прибыль по периоду</h3><div class="chartbox"><canvas id="chartTrend"></canvas></div></div>';
+      if(T.bottleneck){
+        h+='<div class="sec"><h3>Среднее время на этап (часы на заказ) — где затор</h3><div class="chartbox" style="height:'+Math.max(120,(DATA.stageTime||[]).length*40)+'px"><canvas id="chartStageTime"></canvas></div></div>';
+      }
 
       h+='<div class="tabs">';
       [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам']].forEach(function(x){
@@ -376,9 +440,16 @@
       h+='<div class="sec">'+renderTab()+'</div>';
 
       document.getElementById('app').innerHTML=h;
-      document.getElementById('prev').onclick=function(){ cur.m--; if(cur.m<0){cur.m=11;cur.y--;} load(); };
-      document.getElementById('next').onclick=function(){ if(cur.y===now.getFullYear()&&cur.m===now.getMonth())return; cur.m++; if(cur.m>11){cur.m=0;cur.y++;} load(); };
-      [].forEach.call(document.querySelectorAll('.tab'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
+      [].forEach.call(document.querySelectorAll('[data-preset]'), function(el){ el.onclick=function(){ applyPreset(this.getAttribute('data-preset')); }; });
+      var ar=document.getElementById('applyRange'); if(ar) ar.onclick=function(){
+        var f=document.getElementById('fromD').value, t2=document.getElementById('toD').value;
+        if(!f||!t2) return;
+        if(f>t2){ var tmp=f; f=t2; t2=tmp; }
+        RANGE.from=f; RANGE.to=t2; RANGE.presetKey='custom'; load();
+      };
+      var ew=document.getElementById('exclWeekends'); if(ew) ew.onchange=function(){ EXCL_WEEKENDS=this.checked; render(); };
+      [].forEach.call(document.querySelectorAll('.tab[data-tab]'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
+      renderCharts();
     }
     var ps=document.getElementById('prSave'); if(ps) ps.onclick=savePricing;
     var pr=document.getElementById('prReset'); if(pr) pr.onclick=resetPricing;
@@ -388,26 +459,61 @@
 
   function barCell(val,max){ var w=max>0?Math.round(100*val/max):0; return '<div class="barw"><div class="barf" style="width:'+w+'%"></div></div>'; }
 
+  function renderCharts(){
+    if(!DATA || !window.Chart) return;
+    Object.keys(CHARTS).forEach(function(id){ if(!document.getElementById(id)) destroyChart(id); });
+    var b=bucketDaily(DATA.daily||[]);
+    makeLineChart('chartTrend', b.labels, [
+      { label:'Выручка', data:b.rev, borderColor:'#4f7cff', backgroundColor:'rgba(79,124,255,.15)', tension:.25, fill:true },
+      { label:'Прибыль', data:b.prof, borderColor:'#3aa657', backgroundColor:'rgba(58,166,87,.15)', tension:.25, fill:true }
+    ]);
+    var st=(DATA.stageTime||[]).slice().sort(function(a,b){return b.avgHours-a.avgHours;});
+    if(st.length) makeBarChart('chartStageTime', st.map(function(s){return s.label;}), st.map(function(s){return s.avgHours;}), '#c99a3a', true);
+
+    if(tab==='people'){
+      var w=(DATA.byWorker||[]).slice(0,10);
+      if(w.length) makeBarChart('chartWorkers', w.map(function(x){return x.name;}), w.map(function(x){return x.earned;}), '#4f7cff', true);
+    }
+    if(tab==='stages'){
+      var s=DATA.byStage||[];
+      if(s.length) makeBarChart('chartStages', s.map(function(x){return x.name;}), s.map(function(x){return x.earned;}), '#3aa657', true);
+    }
+    if(tab==='clients'){
+      var c=(DATA.byClient||[]).slice(0,8);
+      if(c.length) makeBarChart('chartClients', c.map(function(x){return x.name;}), c.map(function(x){return x.revenue;}), '#c99a3a', true);
+    }
+  }
+
   function renderTab(){
     if(tab==='people'){
       var a=DATA.byWorker||[]; if(!a.length) return '<div class="muted">Нет начислений за период.</div>';
       var max=a[0].earned||1;
-      var h='<h3>Заработок по работникам</h3><table><thead><tr><th>Работник</th><th class="num">Заработал</th><th class="num">Заказов</th><th>Доля</th></tr></thead><tbody>';
-      a.forEach(function(w){ h+='<tr><td>'+esc(w.name)+'</td><td class="num">'+money(w.earned)+' ₸</td><td class="num">'+w.orders+'</td><td style="width:160px">'+barCell(w.earned,max)+'</td></tr>'; });
-      return h+'</tbody></table>';
+      var h='<h3>Заработок по работникам</h3><table><thead><tr><th>Работник</th><th class="num">Заработал</th><th class="num">Заказов</th><th class="num">Часов</th><th class="num">₸/час</th><th>Доля</th></tr></thead><tbody>';
+      a.forEach(function(w){ h+='<tr><td>'+esc(w.name)+'</td><td class="num">'+money(w.earned)+' ₸</td><td class="num">'+w.orders+'</td><td class="num">'+(w.hours||'—')+'</td><td class="num">'+(w.perHour?money(w.perHour)+' ₸':'—')+'</td><td style="width:140px">'+barCell(w.earned,max)+'</td></tr>'; });
+      h+='</tbody></table><div class="chartbox2"><canvas id="chartWorkers"></canvas></div>';
+      return h;
     }
     if(tab==='stages'){
       var a=DATA.byStage||[]; if(!a.length) return '<div class="muted">Нет данных.</div>';
       var max=a[0].earned||1;
       var h='<h3>Зарплата по этапам</h3><table><thead><tr><th>Этап</th><th class="num">Сумма</th><th>Доля</th></tr></thead><tbody>';
       a.forEach(function(s){ h+='<tr><td>'+esc(s.name)+'</td><td class="num">'+money(s.earned)+' ₸</td><td style="width:200px">'+barCell(s.earned,max)+'</td></tr>'; });
-      return h+'</tbody></table>';
+      h+='</tbody></table><div class="chartbox2"><canvas id="chartStages"></canvas></div>';
+      var st=DATA.stageTime||[];
+      if(st.length){
+        h+='<h3 style="margin-top:18px">Время на этап (авто-отслеживание по движению карточек)</h3>';
+        h+='<table><thead><tr><th>Этап</th><th class="num">Заказов</th><th class="num">Часов всего</th><th class="num">Часов на заказ (в среднем)</th></tr></thead><tbody>';
+        st.forEach(function(s){ h+='<tr><td>'+esc(s.label)+'</td><td class="num">'+s.orders+'</td><td class="num">'+s.totalHours+'</td><td class="num" style="'+(s===st[0]?'color:#e8c07d;font-weight:700':'')+'">'+s.avgHours+'</td></tr>'; });
+        h+='</tbody></table><div class="small muted" style="margin-top:8px">Самый долгий этап в среднем на заказ подсвечен — это ваше текущее «узкое место» (bottleneck).</div>';
+      }
+      return h;
     }
     if(tab==='clients'){
       var a=DATA.byClient||[]; if(!a.length) return '<div class="muted">Нет данных.</div>';
       var h='<h3>Выручка по клиентам</h3><table><thead><tr><th>Клиент</th><th class="num">Выручка</th><th class="num">Заказов</th><th class="num">Оплачено</th><th class="num">Не оплачено</th></tr></thead><tbody>';
       a.forEach(function(c){ h+='<tr><td>'+esc(c.name)+'</td><td class="num">'+money(c.revenue)+' ₸</td><td class="num">'+c.orders+'</td><td class="num">'+money(c.paidRev)+'</td><td class="num">'+money(c.unpaidRev)+'</td></tr>'; });
-      return h+'</tbody></table>';
+      h+='</tbody></table><div class="chartbox2"><canvas id="chartClients"></canvas></div>';
+      return h;
     }
     if(tab==='pricing'){ return renderPricing(); }
     // orders
