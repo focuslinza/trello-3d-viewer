@@ -212,6 +212,13 @@
     h+=coefField('Ставка гибки (множитель)','rateBend', c.rateBend!=null&&c.rateBend!==''?+c.rateBend:1,'×');
     h+=coefField('Ставка сварки (множитель)','rateWeld', c.rateWeld!=null&&c.rateWeld!==''?+c.rateWeld:1,'×');
     h+='</div>';
+    h+='<h3 style="margin-top:18px">Доля работника от стоимости работ</h3>';
+    h+='<div class="small muted" style="margin-bottom:8px">Раньше было зашито в коде как дроби (⅓ и ½) без возможности менять. Теперь — проценты, можно настраивать. Пример: при доле «Цех» = 33% и стоимости резки по заказу 10 000 ₸ работник получит 3 300 ₸.</div>';
+    h+='<div class="prgrid">';
+    h+=coefField('Цех (инженер / резка / гибка / сварка / краска)','shareShop', c.shareShop!=null&&c.shareShop!==''?+c.shareShop*100:(100/3),'%');
+    h+=coefField('Сборка (шлейфовка, установка компонентов)','shareAssembly', c.shareAssembly!=null&&c.shareAssembly!==''?+c.shareAssembly*100:50,'%');
+    h+=coefField('Монтажная бригада (от стоимости работ по заказу)','shareMontazh', c.shareMontazh!=null&&c.shareMontazh!==''?+c.shareMontazh*100:50,'%');
+    h+='</div>';
     h+='<div class="small muted" style="margin-top:6px">Множитель ставок поднимает или опускает сразу всю таблицу ставок ниже (резка/гибка используют одну таблицу с разным множителем, сварка — свою). Отдельные ячейки таблицы можно поправить точечно — см. «Таблицы ставок» ниже.</div>';
 
     // --- остатки / расходники: теперь по каждому разделу отдельно, а не одной цифрой на всё ---
@@ -283,7 +290,7 @@
       var k=el.getAttribute('data-key'), v=el.value;
       if(v===''){ return; }
       v=+v;
-      if(k==='taxRate'||k==='shleifRate'||k==='opRah') P.coef[k]=v/100;
+      if(k==='taxRate'||k==='shleifRate'||k==='opRah'||k==='shareShop'||k==='shareAssembly'||k==='shareMontazh') P.coef[k]=v/100;
       else P.coef[k]=v;
     });
     [].forEach.call(document.querySelectorAll('.mp'), function(el){ if(el.value!=='') P.mat[el.getAttribute('data-code')]=+el.value; });

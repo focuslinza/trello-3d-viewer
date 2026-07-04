@@ -123,17 +123,17 @@
       if(!stages.length){
         html+='<div class="muted">В этом заказе нет этапов с работами.</div>';
       } else {
-        html+='<div class="muted" style="margin-bottom:8px">Выберите исполнителя по каждому этапу/работе. «По умолчанию» — закрепить работника для будущих заказов. Цех (Инженер/Резка/Гибка/Сварка) — доля ⅓; сборка (шлейфовка/краска/компоненты) — доля ½. Источник: <b>авто</b> (кто двигал карточку), <b>умолч.</b> (закрепление), <b>вручную</b> (выбрали вы).</div>';
+        html+='<div class="muted" style="margin-bottom:8px">Выберите исполнителя по каждому этапу/работе. «По умолчанию» — закрепить работника для будущих заказов. Доля работника по каждому виду работ настраивается в Панели руководителя → «Цены и коэффициенты». Источник: <b>авто</b> (кто двигал карточку), <b>умолч.</b> (закрепление), <b>вручную</b> (выбрали вы).</div>';
         html+='<table><thead><tr><th>Этап / работа</th><th class="num">Стоимость</th><th>Исполнитель</th><th class="num">Заработок</th><th class="num">Время / выработка</th></tr></thead><tbody>';
         stages.forEach(function(s){
           var srcLbl = s.source==='auto'?'<span class="src">авто</span>': s.source==='default'?'<span class="src">умолч.</span>': s.source==='manual'?'<span class="src man">вручную</span>':'<span class="src none">нет</span>';
           var pool=workersFor(unitGroup(s.key));
           var opts='<option value="">— выбрать —</option>'+pool.map(function(w){ return '<option value="'+w.id+'"'+(w.id===s.assigneeId?' selected':'')+'>'+esc(w.name)+'</option>'; }).join('');
           var defChecked = (data.defaults && data.defaults[s.key] && data.defaults[s.key]===s.assigneeId) ? ' checked' : '';
-          var shareLbl = s.share>0.4 ? '½' : '⅓';
+          var shareLbl = Math.round((+s.share||0)*1000)/10 + '%';
           var timeCell = s.hours!=null ? (s.hours+' ч'+(s.assigneeId&&s.earned&&s.hours? ' / '+fmt(s.earned/s.hours)+' ₸/ч':'')) : '<span class="muted">—</span>';
           // paint row shows the mode (set in the calculator), read-only here
-          var paintToggle = s.paint ? ('<div class="stages">'+(data.paintInShop?'красили в цеху → ⅓ начисляется':'красили на стороне → не начисляется')+' · меняется в калькуляторе</div>') : '';
+          var paintToggle = s.paint ? ('<div class="stages">'+(data.paintInShop?('красили в цеху → '+shareLbl+' начисляется'):'красили на стороне → не начисляется')+' · меняется в калькуляторе</div>') : '';
           var earnCell = s.paintOutside ? '<span class="muted">на стороне</span>' : (s.assigneeId? fmt(s.earned)+' ₸':'<span class="muted">—</span>');
           html+='<tr>'+
             '<td>'+esc(s.label||s.key)+'<div class="stages">'+srcLbl+' · доля '+shareLbl+(s.autoName?(' · двигал: '+esc(s.autoName)):'')+'</div>'+paintToggle+'</td>'+
