@@ -342,34 +342,44 @@
   }
 
   function render(){
-    var T=DATA.totals||{};
     var h='';
-    h+='<div class="sec">'+periodBar();
-    h+='<div class="kpis">';
-    h+=kpi('Выручка', money(T.revenue)+' ₸');
-    h+=kpi('Зарплата (сдельная)', money(T.payroll)+' ₸', 'amber');
-    h+=kpi('Материалы', money(T.materials)+' ₸', 'amber');
-    h+=kpi('Прибыль (ориентир)', money(T.profit)+' ₸', T.profit>=0?'green':'red');
-    h+='</div>';
-    h+='<div class="kpis" style="margin-top:12px">';
-    h+=kpi('Заказов за период', T.orders);
-    h+=kpi('Оплачено', money(T.paidRev)+' ₸ · '+T.paidCount+' зак.', 'green');
-    h+=kpi('Не оплачено', money(T.unpaidRev)+' ₸ · '+T.unpaidCount+' зак.', 'red');
-    h+='</div>';
-    h+='<div class="small muted" style="margin-top:10px">«Прибыль (ориентир)» = выручка − сдельная зарплата − материалы. Без учёта аренды, налогов и прочих накладных — это грубый ориентир маржи.</div>';
-    h+='</div>';
+    if(tab==='pricing'){
+      h+='<div class="sec" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+         '<div style="font-weight:700;font-size:15px;color:#e6edf3">💲 Цены и коэффициенты</div>'+
+         '<button class="btn" id="backToReports" type="button">← Назад к отчётам</button>'+
+         '</div>';
+      h+='<div class="sec">'+renderTab()+'</div>';
+      document.getElementById('app').innerHTML=h;
+      var bb=document.getElementById('backToReports'); if(bb) bb.onclick=function(){ tab='people'; render(); };
+    } else {
+      var T=DATA.totals||{};
+      h+='<div class="sec">'+periodBar();
+      h+='<div class="kpis">';
+      h+=kpi('Выручка', money(T.revenue)+' ₸');
+      h+=kpi('Зарплата (сдельная)', money(T.payroll)+' ₸', 'amber');
+      h+=kpi('Материалы', money(T.materials)+' ₸', 'amber');
+      h+=kpi('Прибыль (ориентир)', money(T.profit)+' ₸', T.profit>=0?'green':'red');
+      h+='</div>';
+      h+='<div class="kpis" style="margin-top:12px">';
+      h+=kpi('Заказов за период', T.orders);
+      h+=kpi('Оплачено', money(T.paidRev)+' ₸ · '+T.paidCount+' зак.', 'green');
+      h+=kpi('Не оплачено', money(T.unpaidRev)+' ₸ · '+T.unpaidCount+' зак.', 'red');
+      h+='</div>';
+      h+='<div class="small muted" style="margin-top:10px">«Прибыль (ориентир)» = выручка − сдельная зарплата − материалы. Без учёта аренды, налогов и прочих накладных — это грубый ориентир маржи.</div>';
+      h+='</div>';
 
-    h+='<div class="tabs">';
-    [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам']].forEach(function(x){
-      h+='<div class="tab'+(tab===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
-    });
-    h+='</div>';
-    h+='<div class="sec">'+renderTab()+'</div>';
+      h+='<div class="tabs">';
+      [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам']].forEach(function(x){
+        h+='<div class="tab'+(tab===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
+      });
+      h+='</div>';
+      h+='<div class="sec">'+renderTab()+'</div>';
 
-    document.getElementById('app').innerHTML=h;
-    document.getElementById('prev').onclick=function(){ cur.m--; if(cur.m<0){cur.m=11;cur.y--;} load(); };
-    document.getElementById('next').onclick=function(){ if(cur.y===now.getFullYear()&&cur.m===now.getMonth())return; cur.m++; if(cur.m>11){cur.m=0;cur.y++;} load(); };
-    [].forEach.call(document.querySelectorAll('.tab'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
+      document.getElementById('app').innerHTML=h;
+      document.getElementById('prev').onclick=function(){ cur.m--; if(cur.m<0){cur.m=11;cur.y--;} load(); };
+      document.getElementById('next').onclick=function(){ if(cur.y===now.getFullYear()&&cur.m===now.getMonth())return; cur.m++; if(cur.m>11){cur.m=0;cur.y++;} load(); };
+      [].forEach.call(document.querySelectorAll('.tab'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
+    }
     var ps=document.getElementById('prSave'); if(ps) ps.onclick=savePricing;
     var pr=document.getElementById('prReset'); if(pr) pr.onclick=resetPricing;
     [].forEach.call(document.querySelectorAll('[data-add]'), function(b){ b.onclick=function(){ addCustom(this.getAttribute('data-add')); }; });
@@ -418,7 +428,6 @@
   };
   document.getElementById('pricingBtn').onclick=function(){
     tab='pricing'; render();
-    var el=document.querySelector('.tabs'); if(el && el.scrollIntoView) el.scrollIntoView({behavior:'smooth', block:'start'});
   };
 
   isDirector().then(function(admin){
