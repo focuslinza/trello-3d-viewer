@@ -53,6 +53,16 @@
             });
           }
         }, {
+          icon: { dark: t.signUrl('./ic-crm.png'), light: t.signUrl('./ic-crm.png') },
+          text: 'CRM / Клиенты',
+          callback: function (t) {
+            return t.modal({
+              url: './crm-modal.html?t=' + Date.now(),
+              fullscreen: true,
+              title: 'CRM — Клиенты'
+            });
+          }
+        }, {
           icon: { dark: t.signUrl('./ic-dashboard.png'), light: t.signUrl('./ic-dashboard.png') },
           text: 'Панель руководителя',
           callback: function (t) {

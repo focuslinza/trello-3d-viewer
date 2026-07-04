@@ -8,15 +8,39 @@
    ============================================================ */
 window.CRM = (function () {
   var DIR_KEY = 'companies';
-  var SOFT_LIMIT = 7800; // warn before Trello's ~8192 hard limit
+  function W(){ return ((window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '').replace(/\/$/,''); }
 
   function newId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
 
-  function getDirectory(t) {
+  // Справочник клиентов живёт в базе D1 (безлимит). Старые записи с доски (лимит ~8КБ)
+  // переносятся в базу автоматически при первом чтении, после чего место на доске освобождается.
+  function legacyDirectory(t) {
     return t.get('board', 'shared', DIR_KEY, []).then(function (list) {
       return Array.isArray(list) ? list : [];
+    }).catch(function(){ return []; });
+  }
+
+  function getDirectory(t) {
+    return fetch(W() + '/companies-list').then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) throw new Error((j && j.error) || 'companies-list failed');
+      var d1 = j.companies || [];
+      if (d1.length) return d1;
+      // база пуста — возможно, справочник ещё на доске: переносим одним разом
+      return legacyDirectory(t).then(function (legacy) {
+        if (!legacy.length) return d1;
+        return fetch(W() + '/companies-import', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ companies: legacy })
+        }).then(function (r) { return r.json(); }).then(function (j2) {
+          if (j2 && j2.ok) { t.remove('board', 'shared', DIR_KEY).catch(function () {}); }
+          return legacy;
+        }).catch(function () { return legacy; });
+      });
+    }).catch(function () {
+      // сеть недоступна — читаем что есть на доске, чтобы модуль не ослеп
+      return legacyDirectory(t);
     });
   }
 
@@ -24,16 +48,14 @@ window.CRM = (function () {
     try { return JSON.stringify(list).length; } catch (e) { return 0; }
   }
 
+  // сохранение всего списка целиком (используется для переноса; лимитов больше нет)
   function saveDirectory(t, list) {
-    var size = directorySize(list);
-    if (size > 8192) {
-      return Promise.reject(new Error(
-        'Справочник компаний переполнен (лимит хранилища Trello). ' +
-        'Пора перенести его в Cloudflare — обратитесь к разработчику.'
-      ));
-    }
-    return t.set('board', 'shared', DIR_KEY, list).then(function () {
-      return { size: size, nearFull: size > SOFT_LIMIT };
+    return fetch(W() + '/companies-import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companies: list || [] })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) throw new Error((j && j.error) || 'не удалось сохранить справочник');
+      return { size: directorySize(list), nearFull: false };
     });
   }
 
@@ -48,23 +70,32 @@ window.CRM = (function () {
   }
 
   function upsertCompany(t, company) {
-    return getDirectory(t).then(function (list) {
-      var found = false;
-      for (var i = 0; i < list.length; i++) {
-        if (list[i].id === company.id) { list[i] = company; found = true; break; }
-      }
-      if (!found) list.push(company);
-      return saveDirectory(t, list).then(function (info) {
-        return { company: company, info: info };
-      });
+    return fetch(W() + '/company-save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company: company })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) throw new Error((j && j.error) || 'не удалось сохранить клиента');
+      return { company: company, info: { size: 0, nearFull: false } };
     });
   }
 
   function deleteCompany(t, id) {
-    return getDirectory(t).then(function (list) {
-      var next = list.filter(function (c) { return c.id !== id; });
-      return saveDirectory(t, next);
+    return fetch(W() + '/company-delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) throw new Error((j && j.error) || 'не удалось удалить клиента');
+      return { size: 0, nearFull: false };
     });
+  }
+
+  // история заказов клиента (из сохранённых расчётов)
+  function companyOrders(companyId, companyName) {
+    return fetch(W() + '/company-orders?companyId=' + encodeURIComponent(companyId || '') +
+                 '&companyName=' + encodeURIComponent(companyName || ''))
+      .then(function (r) { return r.json(); })
+      .then(function (j) { return (j && j.ok) ? j : { ok: false, totals: { orders: 0, revenue: 0, paidRev: 0, unpaidRev: 0 }, orders: [] }; })
+      .catch(function () { return { ok: false, totals: { orders: 0, revenue: 0, paidRev: 0, unpaidRev: 0 }, orders: [] }; });
   }
 
   // ---- card-level links ----
@@ -141,6 +172,7 @@ window.CRM = (function () {
     getCompanyById: getCompanyById,
     upsertCompany: upsertCompany,
     deleteCompany: deleteCompany,
+    companyOrders: companyOrders,
     getCardCompanyId: getCardCompanyId,
     setCardCompanyId: setCardCompanyId,
     getCardContacts: getCardContacts,

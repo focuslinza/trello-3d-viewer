@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>CRM — Клиенты</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <script src="./crm-common.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #app{max-width:1000px;margin:0 auto;padding:16px 16px 70px}
+    h2{margin:0 0 12px;font-size:18px}
+    h3{margin:16px 0 8px;font-size:14px;color:#e6edf3}
+    .muted{color:var(--muted);font-size:12.5px}
+    .search{width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:10px 12px;font-size:14px;margin-bottom:10px}
+    .clist{display:flex;flex-direction:column;gap:8px}
+    .crow{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
+    .crow:hover{border-color:var(--blue)}
+    .crow .nm{font-weight:700}
+    .crow .sub{font-size:12px;color:var(--muted);margin-top:2px}
+    .crow .stats{text-align:right;font-size:12.5px;white-space:nowrap}
+    .crow .stats .rev{font-weight:700}
+    .crow .stats .debt{color:var(--red)}
+    .crow .stats .ok{color:var(--green)}
+    .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 14px;font-size:13px;cursor:pointer}
+    .btn:hover{border-color:var(--blue)}
+    .btn.primary{background:#274469;border-color:var(--blue);color:#cfe1ff}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0}
+    .kpi{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+    .kpi .k{font-size:11px;color:var(--muted);text-transform:uppercase}
+    .kpi .v{font-size:16px;font-weight:800;margin-top:4px}
+    .kpi.green .v{color:var(--green)} .kpi.red .v{color:var(--red)}
+    table{width:100%;border-collapse:collapse;margin-top:6px}
+    th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+    th{color:var(--muted);font-size:11px;text-transform:uppercase}
+    td.num,th.num{text-align:right;white-space:nowrap}
+    .pill{display:inline-block;border-radius:10px;padding:2px 9px;font-size:11.5px;font-weight:600}
+    .pill.paid{background:#1c3329;color:var(--green)}
+    .pill.unpaid{background:#3a2320;color:var(--red)}
+    a{color:#8ab4ff;text-decoration:none} a:hover{text-decoration:underline}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+    .empty{color:var(--muted);padding:14px 4px}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;gap:10px;z-index:50}
+    .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:6px 18px;font-size:13px}
+    .grid2 .lbl{color:var(--muted);font-size:11.5px;text-transform:uppercase;margin-top:6px}
+  </style>
+</head>
+<body>
+  <div id="app"><div class="empty" id="boot">Загрузка клиентов…</div></div>
+  <div class="bar">
+    <button class="btn" id="back" type="button" style="display:none">← Все клиенты</button>
+    <span></span>
+    <button class="btn" id="close" type="button">Закрыть</button>
+  </div>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var LIST = [];        // весь справочник
+    var ORDERS_CACHE = {}; // companyId -> {totals, orders}
+    var VIEW = { mode:'list', companyId:null, filter:'' };
+
+    function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
+    function esc(s){ return CRM.esc(s); }
+
+    document.getElementById('close').onclick=function(){ t.closeModal(); };
+    document.getElementById('back').onclick=function(){ VIEW.mode='list'; VIEW.companyId=null; render(); };
+
+    function matches(c, f){
+      if(!f) return true;
+      f=f.toLowerCase();
+      var hay=[c.name,c.bin,c.phone,c.addr].concat((c.contacts||[]).map(function(p){return (p.name||'')+' '+(p.phone||'');})).join(' ').toLowerCase();
+      return hay.indexOf(f)>=0;
+    }
+
+    function ordersFor(c){
+      if(ORDERS_CACHE[c.id]) return Promise.resolve(ORDERS_CACHE[c.id]);
+      return CRM.companyOrders(c.id, c.name).then(function(j){ ORDERS_CACHE[c.id]=j; return j; });
+    }
+
+    function renderList(){
+      var app=document.getElementById('app');
+      var h='<h2>Клиенты <span class="muted" style="font-weight:400">· всего '+LIST.length+'</span></h2>';
+      h+='<div class="topbar"><input class="search" id="q" type="text" placeholder="Поиск: название, БИН/ИИН, телефон, контактное лицо…" value="'+esc(VIEW.filter)+'" style="flex:1;margin:0">';
+      h+='<button class="btn primary" id="addC" type="button">+ Новый клиент</button></div>';
+      var shown=LIST.filter(function(c){ return matches(c, VIEW.filter); });
+      if(!shown.length){ h+='<div class="empty">'+(LIST.length?'Никого не нашлось по запросу.':'Справочник пуст — добавьте первого клиента.')+'</div>'; }
+      h+='<div class="clist">';
+      shown.forEach(function(c){
+        var st=ORDERS_CACHE[c.id];
+        var stats = st ? ('<div class="rev">'+money(st.totals.revenue)+' ₸ · '+st.totals.orders+' зак.</div>'+
+          (st.totals.unpaidRev>0?('<div class="debt">долг '+money(st.totals.unpaidRev)+' ₸</div>'):'<div class="ok">долгов нет</div>')) : '<div class="muted">…</div>';
+        h+='<div class="crow" data-id="'+esc(c.id)+'"><div><div class="nm">'+esc(c.name||'(без названия)')+'</div>'+
+           '<div class="sub">'+esc([c.bin?('БИН '+c.bin):'', c.phone||''].filter(Boolean).join(' · '))+'</div></div>'+
+           '<div class="stats">'+stats+'</div></div>';
+      });
+      h+='</div>';
+      app.innerHTML=h;
+      document.getElementById('back').style.display='none';
+      document.getElementById('q').oninput=function(){ VIEW.filter=this.value; renderList(); this.focus(); var v=this.value; this.value=''; this.value=v; };
+      document.getElementById('addC').onclick=function(){ openEdit(null); };
+      [].forEach.call(document.querySelectorAll('.crow'), function(el){
+        el.onclick=function(){ VIEW.mode='card'; VIEW.companyId=this.getAttribute('data-id'); render(); };
+      });
+      // подтягиваем суммы для видимых клиентов лениво (не более 15 за раз, чтобы не заспамить сервер)
+      shown.slice(0,15).forEach(function(c){
+        if(ORDERS_CACHE[c.id]) return;
+        ordersFor(c).then(function(){ if(VIEW.mode==='list') renderList(); });
+      });
+    }
+
+    function renderCard(){
+      var c=LIST.filter(function(x){return x.id===VIEW.companyId;})[0];
+      if(!c){ VIEW.mode='list'; return renderList(); }
+      var app=document.getElementById('app');
+      var h='<h2>'+esc(c.name||'(без названия)')+'</h2>';
+      h+='<div id="ordersBlock"><div class="muted">Загружаю заказы…</div></div>';
+      // реквизиты
+      h+='<h3>Реквизиты</h3><div class="grid2">';
+      CRM.COMPANY_FIELDS.forEach(function(f){
+        if(f.type==='checkbox'){ h+='<div><div class="lbl">'+esc(f.label)+'</div>'+(c[f.key]?'Да':'Нет')+'</div>'; }
+        else if(c[f.key]){ h+='<div><div class="lbl">'+esc(f.label)+'</div>'+esc(c[f.key])+'</div>'; }
+      });
+      h+='</div>';
+      // контакты
+      var ppl=c.contacts||[];
+      h+='<h3>Контактные лица</h3>';
+      if(!ppl.length) h+='<div class="muted">Нет контактов.</div>';
+      else{
+        h+='<table><thead><tr><th>Имя</th><th>Роль</th><th>Телефон</th><th>Связь</th></tr></thead><tbody>';
+        ppl.forEach(function(p){
+          var wa=CRM.waLink(p.phone), tel=CRM.telLink(p.phone);
+          h+='<tr><td>'+esc(p.name||'')+'</td><td>'+esc(p.role||'')+'</td><td>'+esc(p.phone||'')+'</td><td>'+
+             (wa?('<a href="'+wa+'" target="_blank">WhatsApp</a>'):'')+(tel?(' · <a href="'+tel+'">Позвонить</a>'):'')+'</td></tr>';
+        });
+        h+='</tbody></table>';
+      }
+      // объекты
+      var objs=c.objects||[];
+      if(objs.length){
+        h+='<h3>Объекты</h3><table><thead><tr><th>Название</th><th>Адрес</th><th>Маршрут</th></tr></thead><tbody>';
+        objs.forEach(function(o){
+          var m=CRM.mapUrls(o.addr||'');
+          h+='<tr><td>'+esc(o.name||'')+'</td><td>'+esc(o.addr||'')+'</td><td><a href="'+m.gis+'" target="_blank">2ГИС</a> · <a href="'+m.yandex+'" target="_blank">Яндекс</a></td></tr>';
+        });
+        h+='</tbody></table>';
+      }
+      h+='<div style="margin-top:16px"><button class="btn" id="editC" type="button">✎ Редактировать клиента</button> <button class="btn" id="delC" type="button" style="border-color:#7a3a32;color:#e8a59d">Удалить</button></div>';
+      app.innerHTML=h;
+      document.getElementById('back').style.display='';
+      document.getElementById('editC').onclick=function(){ openEdit(c); };
+      document.getElementById('delC').onclick=function(){
+        if(!confirm('Удалить клиента «'+(c.name||'')+'» из справочника? Заказы в Trello не пострадают.')) return;
+        CRM.deleteCompany(t, c.id).then(function(){ return reload(); }).then(function(){ VIEW.mode='list'; render(); })
+          .catch(function(e){ alert('Не удалось удалить: '+(e&&e.message||e)); });
+      };
+      // заказы
+      ordersFor(c).then(function(j){
+        var el=document.getElementById('ordersBlock'); if(!el) return;
+        var T=j.totals||{};
+        var oh='<div class="kpis">';
+        oh+='<div class="kpi"><div class="k">Заказов</div><div class="v">'+(T.orders||0)+'</div></div>';
+        oh+='<div class="kpi"><div class="k">Выручка</div><div class="v">'+money(T.revenue)+' ₸</div></div>';
+        oh+='<div class="kpi green"><div class="k">Оплачено</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
+        oh+='<div class="kpi red"><div class="k">Долг</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
+        oh+='</div>';
+        var orders=j.orders||[];
+        if(orders.length){
+          oh+='<table><thead><tr><th>№</th><th>Заказ</th><th class="num">Сумма</th><th>Оплата</th><th>Дата</th></tr></thead><tbody>';
+          orders.forEach(function(o){
+            oh+='<tr><td>'+esc(o.number)+'</td><td>'+esc(o.name)+'</td><td class="num">'+money(o.total)+' ₸</td>'+
+                '<td><span class="pill '+(o.paid?'paid':'unpaid')+'">'+(o.paid?'оплачен':'не оплачен')+'</span></td><td>'+esc(o.date)+'</td></tr>';
+          });
+          oh+='</tbody></table>';
+        } else oh+='<div class="muted">Заказов с расчётом пока нет.</div>';
+        el.innerHTML=oh;
+      });
+    }
+
+    // редактирование: простая форма по COMPANY_FIELDS + контакты
+    function openEdit(c){
+      var isNew=!c;
+      c = c ? JSON.parse(JSON.stringify(c)) : { id: CRM.newId(), contacts: [], objects: [] };
+      var app=document.getElementById('app');
+      var h='<h2>'+(isNew?'Новый клиент':'Редактировать клиента')+'</h2><div class="grid2">';
+      CRM.COMPANY_FIELDS.forEach(function(f){
+        if(f.type==='checkbox'){
+          h+='<div><div class="lbl">'+esc(f.label)+'</div><label><input type="checkbox" id="f_'+f.key+'"'+(c[f.key]?' checked':'')+'> Да</label></div>';
+        } else {
+          h+='<div><div class="lbl">'+esc(f.label)+(f.required?' *':'')+'</div><input class="search" style="margin:0" type="text" id="f_'+f.key+'" value="'+esc(c[f.key]||'')+'" placeholder="'+esc(f.placeholder||'')+'"></div>';
+        }
+      });
+      h+='</div>';
+      h+='<h3>Контактные лица</h3><div id="cts"></div><button class="btn" id="addP" type="button">+ Контакт</button>';
+      h+='<div style="margin-top:18px"><button class="btn primary" id="saveC" type="button">💾 Сохранить</button> <button class="btn" id="cancelC" type="button">Отмена</button></div>';
+      app.innerHTML=h;
+      document.getElementById('back').style.display='';
+      function drawContacts(){
+        var el=document.getElementById('cts'); var ch='';
+        (c.contacts||[]).forEach(function(p,i){
+          ch+='<div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap">'+
+              '<input class="search" style="margin:0;flex:1;min-width:140px" placeholder="Имя" data-ci="'+i+'" data-f="name" value="'+esc(p.name||'')+'">'+
+              '<input class="search" style="margin:0;flex:1;min-width:120px" placeholder="Роль" data-ci="'+i+'" data-f="role" value="'+esc(p.role||'')+'">'+
+              '<input class="search" style="margin:0;flex:1;min-width:150px" placeholder="+7 701 …" data-ci="'+i+'" data-f="phone" value="'+esc(p.phone||'')+'">'+
+              '<button class="btn" data-del="'+i+'" type="button">✕</button></div>';
+        });
+        el.innerHTML=ch||'<div class="muted" style="margin-bottom:6px">Нет контактов.</div>';
+        [].forEach.call(el.querySelectorAll('input'), function(inp){
+          inp.oninput=function(){ c.contacts[+this.getAttribute('data-ci')][this.getAttribute('data-f')]=this.value; };
+        });
+        [].forEach.call(el.querySelectorAll('[data-del]'), function(b){
+          b.onclick=function(){ c.contacts.splice(+this.getAttribute('data-del'),1); drawContacts(); };
+        });
+      }
+      drawContacts();
+      document.getElementById('addP').onclick=function(){ (c.contacts=c.contacts||[]).push({id:CRM.newId(),name:'',role:'',phone:''}); drawContacts(); };
+      document.getElementById('cancelC').onclick=function(){ render(); };
+      document.getElementById('saveC').onclick=function(){
+        CRM.COMPANY_FIELDS.forEach(function(f){
+          var el=document.getElementById('f_'+f.key); if(!el) return;
+          c[f.key]=(f.type==='checkbox')?el.checked:el.value.trim();
+        });
+        if(!c.name){ alert('Укажите название компании.'); return; }
+        c.contacts=(c.contacts||[]).filter(function(p){ return (p.name||p.phone); });
+        var btn=this; btn.disabled=true; btn.textContent='Сохранение…';
+        CRM.upsertCompany(t, c).then(function(){ return reload(); }).then(function(){
+          VIEW.mode='card'; VIEW.companyId=c.id; render();
+        }).catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); btn.disabled=false; btn.textContent='💾 Сохранить'; });
+      };
+    }
+
+    function render(){ if(VIEW.mode==='card') renderCard(); else renderList(); }
+    function reload(){ return CRM.getDirectory(t).then(function(list){ LIST=list; }); }
+
+    reload().then(render).catch(function(e){
+      document.getElementById('boot').textContent='Ошибка загрузки: '+(e&&e.message||e);
+    });
+  </script>
+</body>
+</html>
