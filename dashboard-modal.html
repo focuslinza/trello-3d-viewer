@@ -67,7 +67,10 @@
 <body>
   <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
   <div class="bar">
-    <button class="btn" id="workers" type="button" style="border-color:#4f7cff;color:#a9c2ff">⚙ Зарплата / Работники</button>
+    <div style="display:flex;gap:10px">
+      <button class="btn" id="pricingBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">💲 Цены и коэффициенты</button>
+      <button class="btn" id="workers" type="button" style="border-color:#4f7cff;color:#a9c2ff">⚙ Зарплата / Работники</button>
+    </div>
     <button class="btn" id="close" type="button">Закрыть</button>
   </div>
 
@@ -357,7 +360,7 @@
     h+='</div>';
 
     h+='<div class="tabs">';
-    [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам'],['pricing','Цены и коэффициенты']].forEach(function(x){
+    [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам']].forEach(function(x){
       h+='<div class="tab'+(tab===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
     });
     h+='</div>';
@@ -413,10 +416,15 @@
   document.getElementById('workers').onclick=function(){
     t.modal({ url:'./workers-modal.html?t='+Date.now(), fullscreen:true, title:'Зарплата и работники' });
   };
+  document.getElementById('pricingBtn').onclick=function(){
+    tab='pricing'; render();
+    var el=document.querySelector('.tabs'); if(el && el.scrollIntoView) el.scrollIntoView({behavior:'smooth', block:'start'});
+  };
 
   isDirector().then(function(admin){
     if(!admin){
       var wb=document.getElementById('workers'); if(wb) wb.style.display='none';
+      var pb=document.getElementById('pricingBtn'); if(pb) pb.style.display='none';
       boot('Панель доступна только руководителю (администратору доски).'); return;
     }
     fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){

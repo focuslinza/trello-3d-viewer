@@ -14,7 +14,8 @@
     *{box-sizing:border-box}
     html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
       font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px}
-    #app{max-width:900px;margin:0 auto;padding:16px 16px 40px}
+    #app{max-width:900px;margin:0 auto;padding:16px 16px 70px}
+    .bottombar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-start;gap:10px;z-index:50}
     h2{margin:0 0 4px;font-size:18px}
     .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
     .sec{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
@@ -46,6 +47,9 @@
   </style>
 </head>
 <body>
+  <div class="bottombar">
+    <button class="btn" id="backToDash" type="button" style="border-color:#4f7cff;color:#a9c2ff">← Назад к панели руководителя</button>
+  </div>
   <div id="app">
     <h2>Зарплата и работники</h2>
     <div class="sub" id="meta">v5 · загрузка…</div>
@@ -82,6 +86,9 @@
 
   <script>
     var t = window.TrelloPowerUp.iframe();
+    document.getElementById('backToDash').onclick=function(){
+      t.modal({ url:'./dashboard-modal.html?t='+Date.now(), fullscreen:true, title:'Панель руководителя' });
+    };
     var WORKER = (window.WORKER_URL || '').replace(/\/+$/,'');
     var rowsEl = document.getElementById('rows');
     var msgEl = document.getElementById('msg');
