@@ -42,7 +42,22 @@
         };
       },
       'board-buttons': function (t, options) {
-        return [{
+        // «Мой заработок» видят все; «CRM» и «Панель руководителя» — только руководитель (админ доски/пространства)
+        function isAdmin(){
+          return Promise.all([
+            t.member('id'),
+            t.board('memberships'),
+            t.organization('memberships').catch(function(){ return null; })
+          ]).then(function(res){
+            var me = res[0] || {};
+            function adminIn(o){
+              var ms = ((o && o.memberships) || []).filter(function(x){ return x.idMember === me.id; })[0];
+              return !!(ms && ms.memberType === 'admin');
+            }
+            return adminIn(res[1]) || adminIn(res[2]);
+          }).catch(function(){ return false; });
+        }
+        var earnBtn = {
           icon: { dark: t.signUrl('./ic-earnings.png'), light: t.signUrl('./ic-earnings.png') },
           text: 'Мой заработок',
           callback: function (t) {
@@ -52,7 +67,8 @@
               title: 'Мой заработок'
             });
           }
-        }, {
+        };
+        var crmBtn = {
           icon: { dark: t.signUrl('./ic-crm.png'), light: t.signUrl('./ic-crm.png') },
           text: 'CRM / Клиенты',
           callback: function (t) {
@@ -62,7 +78,8 @@
               title: 'CRM — Клиенты'
             });
           }
-        }, {
+        };
+        var dashBtn = {
           icon: { dark: t.signUrl('./ic-dashboard.png'), light: t.signUrl('./ic-dashboard.png') },
           text: 'Панель руководителя',
           callback: function (t) {
@@ -72,7 +89,10 @@
               title: 'Панель руководителя'
             });
           }
-        }];
+        };
+        return isAdmin().then(function(admin){
+          return admin ? [earnBtn, crmBtn, dashBtn] : [earnBtn];
+        });
       }
     });
   </script>

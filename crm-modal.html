@@ -87,7 +87,7 @@
       h+='<div class="clist">';
       shown.forEach(function(c){
         var st=ORDERS_CACHE[c.id];
-        var stats = st ? ('<div class="rev">'+money(st.totals.revenue)+' ₸ · '+st.totals.orders+' зак.</div>'+
+        var stats = (st && st.totals) ? ('<div class="rev">'+money(st.totals.revenue)+' ₸ · '+st.totals.orders+' зак.</div>'+
           (st.totals.unpaidRev>0?('<div class="debt">долг '+money(st.totals.unpaidRev)+' ₸</div>'):'<div class="ok">долгов нет</div>')) : '<div class="muted">…</div>';
         h+='<div class="crow" data-id="'+esc(c.id)+'"><div><div class="nm">'+esc(c.name||'(без названия)')+'</div>'+
            '<div class="sub">'+esc([c.bin?('БИН '+c.bin):'', c.phone||''].filter(Boolean).join(' · '))+'</div></div>'+
@@ -231,7 +231,29 @@
     function render(){ if(VIEW.mode==='card') renderCard(); else renderList(); }
     function reload(){ return CRM.getDirectory(t).then(function(list){ LIST=list; }); }
 
-    reload().then(render).catch(function(e){
+    // раздел доступен только руководителю (админу доски/пространства) — здесь клиенты, выручка и долги
+    function isDirector(){
+      return Promise.all([
+        t.member('id'),
+        t.board('memberships'),
+        t.organization('memberships').catch(function(){ return null; })
+      ]).then(function(res){
+        var me = res[0] || {};
+        function adminIn(o){
+          var ms = ((o && o.memberships) || []).filter(function(x){ return x.idMember === me.id; })[0];
+          return !!(ms && ms.memberType === 'admin');
+        }
+        return adminIn(res[1]) || adminIn(res[2]);
+      }).catch(function(){ return false; });
+    }
+
+    isDirector().then(function(admin){
+      if(!admin){
+        document.getElementById('boot').textContent='Раздел доступен только руководителю (администратору доски).';
+        return;
+      }
+      return reload().then(render);
+    }).catch(function(e){
       document.getElementById('boot').textContent='Ошибка загрузки: '+(e&&e.message||e);
     });
   </script>
