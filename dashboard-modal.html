@@ -43,6 +43,20 @@
     .prf{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
     .prf label{font-size:12px;color:var(--muted);flex:1;line-height:1.2}
     .prf input{width:96px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px;font-size:13px;text-align:right}
+    .secrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+    .secrow .sn{flex:1;min-width:160px;font-size:12.5px;color:#cdd6df}
+    .secrow label{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted)}
+    .secrow input{width:64px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:5px 6px;font-size:12.5px;text-align:right}
+    .rtwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:10px}
+    table.rtable{width:auto;min-width:100%;border-collapse:collapse;margin:0}
+    table.rtable th,table.rtable td{padding:5px 6px;border:1px solid var(--line);text-align:center;font-size:12px;white-space:nowrap}
+    table.rtable thead th{background:var(--bg);color:var(--muted);font-weight:600;font-size:10.5px;text-transform:uppercase}
+    table.rtable td.thc{background:var(--bg);color:#cdd6df;font-weight:700;text-align:left}
+    table.rtable input{width:62px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--txt);padding:3px 4px;font-size:12px;text-align:center}
+    table.rtable input:hover,table.rtable input:focus{background:var(--bg2);border-color:var(--line)}
+    table.rtable input.ov{background:#2b3a1f;border-color:#4a6b2c;color:#c8e6a0}
+    .rtlegend{display:flex;align-items:center;gap:14px;font-size:11.5px;color:var(--muted);margin:2px 0 10px}
+    .rtlegend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px}
     .prf .un{font-size:11px;color:var(--muted);width:22px}
     .savebar{display:flex;gap:10px;align-items:center;margin-top:14px}
     .btnp{background:var(--green);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:14px;cursor:pointer}
@@ -65,7 +79,7 @@
   var cur={ y:now.getFullYear(), m:now.getMonth() };
   var tab='people';
   var DATA=null;
-  var PRICING_EDIT={ mat:{}, cmp:{}, coef:{} };
+  var PRICING_EDIT={ mat:{}, cmp:{}, coef:{}, matOstBySec:{}, matRahBySec:{}, cmpOstBySec:{}, cmpRahBySec:{}, opOstBySec:{}, opRahBySec:{}, rates:{} };
   var CALC=window.CALC||{};
 
   function money(v){ v=Math.round(+v||0); return v.toLocaleString('ru-RU'); }
@@ -148,9 +162,45 @@
     render();
   }
 
-  function pnum(v){ return (v==null||v==='')?'':v; }
+  function pnum(v){ if(v==null||v==='') return ''; var n=+v; return Math.round(n*10000)/10000; }
   function coefField(label, key, val, un){
     return '<div class="prf"><label>'+esc(label)+'</label><input type="number" step="any" class="cf" data-key="'+key+'" value="'+pnum(val)+'"><span class="un">'+esc(un||'')+'</span></div>';
+  }
+  // --- отступление секций материалов/компонентов: список секций в порядке появления + заводские ost/rah первого кода секции ---
+  function sectionsOf(CAT){
+    var order=[], seen={};
+    Object.keys(CAT).forEach(function(code){ var it=CAT[code]; if(!seen[it.sec]){ seen[it.sec]=1; order.push({sec:it.sec, ost:it.ost, rah:it.rah}); } });
+    return order;
+  }
+  function secOstRahRow(bucketOst, bucketRah, secInfo, overOst, overRah, opts){
+    opts=opts||{};
+    var vOst=(overOst&&overOst[secInfo.sec]!=null&&overOst[secInfo.sec]!=='')?+overOst[secInfo.sec]*100:secInfo.ost*100;
+    var vRah=(overRah&&overRah[secInfo.sec]!=null&&overRah[secInfo.sec]!=='')?+overRah[secInfo.sec]*100:secInfo.rah*100;
+    var h='<div class="secrow"><div class="sn">'+esc(secInfo.sec)+'</div>';
+    if(!opts.noOst) h+='<label>Остатки <input type="number" step="any" class="so" data-bucket="'+bucketOst+'" data-sec="'+esc(secInfo.sec)+'" value="'+pnum(vOst)+'">%</label>';
+    h+='<label>Расходники <input type="number" step="any" class="so" data-bucket="'+bucketRah+'" data-sec="'+esc(secInfo.sec)+'" value="'+pnum(vRah)+'">%</label>';
+    h+='</div>';
+    return h;
+  }
+  var TIER_LABELS_CB=['от 1','от 20','от 100','от 500'];
+  var TIER_LABELS_W =['от 1','от 6','от 11','от 16','от 21','от 51','от 101','от 301'];
+  function renderRateTable(tableCode, table, tiers, tierLabels, overrides){
+    var ths=Object.keys(table).map(Number).sort(function(a,b){return a-b;});
+    var h='<div class="rtwrap"><table class="rtable"><thead><tr><th>Толщина, мм</th>';
+    tierLabels.forEach(function(lb){ h+='<th>'+esc(lb)+'<br>шт/м</th>'; });
+    h+='</tr></thead><tbody>';
+    ths.forEach(function(th){
+      h+='<tr><td class="thc">'+th+'</td>';
+      table[th].forEach(function(def,idx){
+        var ov=overrides&&overrides[th]&&overrides[th][idx];
+        var val=(ov!=null&&ov!=='')?ov:def;
+        var isOv=(ov!=null&&ov!==''&&+ov!==def);
+        h+='<td><input type="number" step="any" class="rt'+(isOv?' ov':'')+'" data-table="'+tableCode+'" data-th="'+th+'" data-idx="'+idx+'" data-def="'+def+'" value="'+pnum(val)+'"></td>';
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+    return h;
   }
   function renderPricing(){
     var MAT=CALC.MAT||{}, CMP=CALC.CMP||{};
@@ -158,14 +208,39 @@
     var h='<h3>Коэффициенты (общие)</h3><div class="prgrid">';
     h+=coefField('Налог','taxRate', c.taxRate!=null&&c.taxRate!==''? (+c.taxRate*100):16,'%');
     h+=coefField('Шлейф / сборка (% от сварки)','shleifRate', c.shleifRate!=null&&c.shleifRate!==''?(+c.shleifRate*100):50,'%');
-    h+=coefField('Расходники на работы','opRah', c.opRah!=null&&c.opRah!==''?(+c.opRah*100):7,'%');
     h+=coefField('Ставка резки (множитель)','rateCut', c.rateCut!=null&&c.rateCut!==''?+c.rateCut:1,'×');
     h+=coefField('Ставка гибки (множитель)','rateBend', c.rateBend!=null&&c.rateBend!==''?+c.rateBend:1,'×');
     h+=coefField('Ставка сварки (множитель)','rateWeld', c.rateWeld!=null&&c.rateWeld!==''?+c.rateWeld:1,'×');
     h+='</div>';
-    h+='<div class="small muted" style="margin-top:6px">Множитель ставок: 1 = как сейчас, 1.1 = дороже на 10%. Сами ставки резки/гибки/сварки зависят от толщины и объёма (таблицы) — множитель поднимает или опускает их все сразу.</div>';
+    h+='<div class="small muted" style="margin-top:6px">Множитель ставок поднимает или опускает сразу всю таблицу ставок ниже (резка/гибка используют одну таблицу с разным множителем, сварка — свою). Отдельные ячейки таблицы можно поправить точечно — см. «Таблицы ставок» ниже.</div>';
 
-    // group materials by section
+    // --- остатки / расходники: теперь по каждому разделу отдельно, а не одной цифрой на всё ---
+    h+='<h3 style="margin-top:18px">Остатки и расходники — работы (резка / гибка / сварка)</h3>';
+    h+='<div class="small muted" style="margin-bottom:8px">У каждого вида работ — свой процент. «Остатки» обычно 0% для работ (относится к материалу, не к труду). Если для какого-то вида работ здесь ничего не задано, используется значение по умолчанию ниже.</div>';
+    ['РЕЗКА','ГИБКА','СВАРКА'].forEach(function(sec){
+      h+=secOstRahRow('opOstBySec','opRahBySec',{sec:sec,ost:0,rah:0.07}, P.opOstBySec, P.opRahBySec, {});
+    });
+    h+=coefField('Расходники на работы — по умолчанию (если не задано выше)','opRah', c.opRah!=null&&c.opRah!==''?(+c.opRah*100):7,'%');
+
+    h+='<h3 style="margin-top:18px">Остатки и расходники — материалы (по разделам)</h3>';
+    h+='<div class="small muted" style="margin-bottom:8px">«Остатки» — надбавка на обрезки при раскрое; «Расходники» — сопутствующие затраты. У листов обычно 15% отходов, у труб/профиля — 20%.</div>';
+    sectionsOf(MAT).forEach(function(s){ h+=secOstRahRow('matOstBySec','matRahBySec',s, P.matOstBySec, P.matRahBySec, {}); });
+
+    h+='<h3 style="margin-top:18px">Остатки и расходники — компоненты (по разделам)</h3>';
+    sectionsOf(CMP).forEach(function(s){ h+=secOstRahRow('cmpOstBySec','cmpRahBySec',s, P.cmpOstBySec, P.cmpRahBySec, {}); });
+
+    // --- таблицы ставок (Excel-подобные) ---
+    h+='<h3 style="margin-top:20px">Таблицы ставок — резка / гибка листа (₸ за м / шт, по толщине и объёму заказа)</h3>';
+    h+='<div class="rtlegend"><span><span class="sw" style="background:#2b3a1f;border:1px solid #4a6b2c"></span>изменённая ячейка</span><span>Труба/профиль считаются той же таблицей ×3 (см. множитель выше)</span></div>';
+    h+=renderRateTable('CB', CALC.CUTBEND, CALC.CUTBEND_TIERS, TIER_LABELS_CB, (P.rates&&P.rates.CB)||{});
+
+    h+='<h3 style="margin-top:18px">Таблица ставок — сварка нержавейка (₸ за см шва, по толщине и объёму)</h3>';
+    h+=renderRateTable('SS', CALC.WELD_SS, CALC.WELD_TIERS, TIER_LABELS_W, (P.rates&&P.rates.SS)||{});
+
+    h+='<h3 style="margin-top:18px">Таблица ставок — сварка чёрный металл (₸ за см шва, по толщине и объёму)</h3>';
+    h+=renderRateTable('BL', CALC.WELD_BLACK, CALC.WELD_TIERS, TIER_LABELS_W, (P.rates&&P.rates.BL)||{});
+
+    // group materials by section (цены за единицу)
     function priceRows(CAT, over, cls){
       var bySec={}; Object.keys(CAT).forEach(function(code){ var it=CAT[code]; (bySec[it.sec]=bySec[it.sec]||[]).push(code); });
       var out='';
@@ -202,7 +277,8 @@
     return h;
   }
   function collectPricing(){
-    var P={ mat:{}, cmp:{}, coef:{}, customMat:[], customCmp:[], customOp:[] };
+    var P={ mat:{}, cmp:{}, coef:{}, customMat:[], customCmp:[], customOp:[],
+            matOstBySec:{}, matRahBySec:{}, cmpOstBySec:{}, cmpRahBySec:{}, opOstBySec:{}, opRahBySec:{}, rates:{} };
     [].forEach.call(document.querySelectorAll('.cf'), function(el){
       var k=el.getAttribute('data-key'), v=el.value;
       if(v===''){ return; }
@@ -212,6 +288,22 @@
     });
     [].forEach.call(document.querySelectorAll('.mp'), function(el){ if(el.value!=='') P.mat[el.getAttribute('data-code')]=+el.value; });
     [].forEach.call(document.querySelectorAll('.cp'), function(el){ if(el.value!=='') P.cmp[el.getAttribute('data-code')]=+el.value; });
+    // проценты по разделам (остатки/расходники для материалов, компонентов, работ)
+    [].forEach.call(document.querySelectorAll('.so'), function(el){
+      var v=el.value; if(v==='') return;
+      var bucket=el.getAttribute('data-bucket'), sec=el.getAttribute('data-sec');
+      P[bucket][sec]=(+v)/100;
+    });
+    // ячейки таблиц ставок — сохраняем только те, что реально отличаются от заводского значения
+    [].forEach.call(document.querySelectorAll('.rt'), function(el){
+      var v=el.value; if(v==='') return;
+      var def=+el.getAttribute('data-def');
+      if(+v===def) return; // не изменено — не засоряем сохранение
+      var tbl=el.getAttribute('data-table'), th=el.getAttribute('data-th'), idx=+el.getAttribute('data-idx');
+      P.rates[tbl]=P.rates[tbl]||{};
+      P.rates[tbl][th]=P.rates[tbl][th]||[];
+      P.rates[tbl][th][idx]=+v;
+    });
     // custom items
     function fv(row,f){ var el=row.querySelector('[data-f="'+f+'"]'); return el?el.value:''; }
     [].forEach.call(document.querySelectorAll('.custrow'), function(row){
@@ -236,7 +328,7 @@
   function resetPricing(){
     if(!confirm('Сбросить все цены и коэффициенты к заводским (исходным)? Ваши изменения удалятся.')) return;
     fetch(WORKER+'/pricing-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pricing:{}}) })
-      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ PRICING_EDIT={mat:{},cmp:{},coef:{}}; render(); } });
+      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ PRICING_EDIT={mat:{},cmp:{},coef:{},matOstBySec:{},matRahBySec:{},cmpOstBySec:{},cmpRahBySec:{},opOstBySec:{},opRahBySec:{},rates:{}}; render(); } });
   }
 
   function render(){
@@ -321,7 +413,8 @@
       boot('Панель доступна только руководителю (администратору доски).'); return;
     }
     fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
-      if(j&&j.ok&&j.pricing){ var p=j.pricing; PRICING_EDIT={ mat:p.mat||{}, cmp:p.cmp||{}, coef:p.coef||{}, customMat:p.customMat||[], customCmp:p.customCmp||[], customOp:p.customOp||[] }; }
+      if(j&&j.ok&&j.pricing){ var p=j.pricing; PRICING_EDIT={ mat:p.mat||{}, cmp:p.cmp||{}, coef:p.coef||{}, customMat:p.customMat||[], customCmp:p.customCmp||[], customOp:p.customOp||[],
+        matOstBySec:p.matOstBySec||{}, matRahBySec:p.matRahBySec||{}, cmpOstBySec:p.cmpOstBySec||{}, cmpRahBySec:p.cmpRahBySec||{}, opOstBySec:p.opOstBySec||{}, opRahBySec:p.opRahBySec||{}, rates:p.rates||{} }; }
     }).catch(function(){}).then(load);
   });
 </script>

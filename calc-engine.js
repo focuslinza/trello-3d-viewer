@@ -86,10 +86,18 @@
 
   function approxTier(qty,tiers){var idx=0;for(var i=0;i<tiers.length;i++)if(qty>=tiers[i])idx=i;return idx;}
   function lookup(table,tiers,th,qty){var row=table[th];if(!row)return 0;return row[approxTier(qty,tiers)]||0;}
+  // override-aware lookup: window.PRICING.rates[tableCode][thickness][tierIndex], falls back to the verified defaults.
+  function lookupOv(tableCode,table,tiers,th,qty){
+    var idx=approxTier(qty,tiers);
+    var rt=(root.PRICING&&root.PRICING.rates&&root.PRICING.rates[tableCode])||{};
+    var rrow=rt[th];
+    if(rrow && rrow[idx]!=null && rrow[idx]!==''){ var v=+rrow[idx]; if(!isNaN(v)) return v; }
+    var row=table[th]; if(!row)return 0; return row[idx]||0;
+  }
   function opRate(code,th,qty){
-    if(code==='SS')return lookup(WELD_SS,WELD_TIERS,th,qty);
-    if(code==='BL')return lookup(WELD_BLACK,WELD_TIERS,th,qty);
-    return lookup(CUTBEND,CUTBEND_TIERS,th,qty);
+    if(code==='SS')return lookupOv('SS',WELD_SS,WELD_TIERS,th,qty);
+    if(code==='BL')return lookupOv('BL',WELD_BLACK,WELD_TIERS,th,qty);
+    return lookupOv('CB',CUTBEND,CUTBEND_TIERS,th,qty);
   }
   function taxGrossUp(rate){return rate/(1-rate);}
 
@@ -105,6 +113,13 @@
     if(sec==='СВАРКА')return (c.rateWeld!=null&&c.rateWeld!=='')?+c.rateWeld:1;
     return 1;
   }
+  // per-category «остатки»/«расходники» overrides (материалы и компоненты — по разделу sec;
+  // операции — тоже по разделу sec: РЕЗКА / ГИБКА / СВАРКА). Не заданное значение -> заводской процент раздела,
+  // а для операций есть ещё старый общий opRah/opOst как запасной вариант (совместимость с уже сохранённым).
+  function secOst(bucket,sec,def){ var m=PR()[bucket]; var v=m&&m[sec]; return (v!=null&&v!=='')?+v:def; }
+  function secRah(bucket,sec,def){ var m=PR()[bucket]; var v=m&&m[sec]; return (v!=null&&v!=='')?+v:def; }
+  function opSecOst(sec,def){ var v=secOst('opOstBySec',sec,null); if(v!=null)return v; return coef('opOst',def); }
+  function opSecRah(sec,def){ var v=secRah('opRahBySec',sec,null); if(v!=null)return v; return coef('opRah',def); }
 
   // ---- custom items added from the dashboard (materials / components / works) ----
   var _customCodes=[];
@@ -150,7 +165,7 @@
       if(k.t==='FLAT'){ if(qty<=0) return; } else { if(qty<=0||th<=0) return; }
       var rate = (k.t==='FLAT') ? (+k.flatRate||0) : opRate(k.t,th,qty)*k.mult*rateMultFor(k.sec);
       var base=rate*qty;
-      var opOst=coef('opOst',OP_OST), opRah=coef('opRah',OP_RAH);
+      var opOst=opSecOst(k.sec,OP_OST), opRah=opSecRah(k.sec,OP_RAH);
       var r7=base*(1+opOst)*(1+opRah);
       sumOps+=r7;
       if(k.t==='SS')weldSSsum+=r7; if(k.t==='BL')weldBlackSum+=r7;
@@ -168,9 +183,10 @@
     materials.forEach(function(m){
       var M=MAT[m.code], q=+m.qty||0; if(!M||q<=0)return;
       var u=matU(m.code);
-      var b=u*q, r7m=b*(1+M.ost)*(1+M.rah);
+      var ost=secOst('matOstBySec',M.sec,M.ost), rah=secRah('matRahBySec',M.sec,M.rah);
+      var b=u*q, r7m=b*(1+ost)*(1+rah);
       matSum+=r7m;
-      line.push({group:'material',code:m.code,section:M.sec,name:M.lbl,qty:q,unit:u,base:b,ostatki:M.ost,rashod:M.rah,lineTotal:r7m,worker:null});
+      line.push({group:'material',code:m.code,section:M.sec,name:M.lbl,qty:q,unit:u,base:b,ostatki:ost,rashod:rah,lineTotal:r7m,worker:null});
     });
 
     // components AZ..BN : material (row7) + labor (row7 × multiplier)
@@ -181,9 +197,10 @@
     components.forEach(function(c){
       var Cn=CMP[c.code], q=+c.qty||0; if(!Cn||q<=0)return;
       var isPaint = Cn.sec==='КРАСКА';
-      var ostF = (isPaint && !paintInShop) ? 0 : Cn.ost;   // на стороне — без остатков
+      var baseOst = (isPaint && !paintInShop) ? 0 : Cn.ost;   // на стороне — без остатков
+      var ostF=secOst('cmpOstBySec',Cn.sec,baseOst), rahF=secRah('cmpRahBySec',Cn.sec,Cn.rah);
       var u=cmpU(c.code);
-      var b=u*q, r7c=b*(1+ostF)*(1+Cn.rah), r4c=isPaint?0:r7c*Cn.m;
+      var b=u*q, r7c=b*(1+ostF)*(1+rahF), r4c=isPaint?0:r7c*Cn.m;
       compMat+=r7c; compLabor+=r4c;
       line.push({group:'component',code:c.code,section:Cn.sec,name:Cn.lbl,qty:q,unit:u,base:b,ostatki:ostF,rashod:Cn.rah,material:r7c,laborMult:isPaint?0:Cn.m,labor:r4c,lineTotal:isPaint?r7c:(r7c+r4c),isPaint:isPaint,worker:null});
     });
@@ -217,5 +234,6 @@
             taxRate:taxRate,taxGrossUp:gross,taxAmount:taxAmount,total:total};
   }
 
-  root.CALC={compute:compute,MAT:MAT,CMP:CMP,OPS:OPS,KIND:KIND,opRate:opRate,taxGrossUp:taxGrossUp,TH:TH,applyCustom:applyCustom};
+  root.CALC={compute:compute,MAT:MAT,CMP:CMP,OPS:OPS,KIND:KIND,opRate:opRate,taxGrossUp:taxGrossUp,TH:TH,applyCustom:applyCustom,
+             CUTBEND:CUTBEND,WELD_SS:WELD_SS,WELD_BLACK:WELD_BLACK,CUTBEND_TIERS:CUTBEND_TIERS,WELD_TIERS:WELD_TIERS};
 })(typeof window!=='undefined'?window:globalThis);
