@@ -155,6 +155,7 @@
         '<td><div class="stagewrap">'+stagesHtml(w.stages||[])+'</div></td>'+
         '<td style="text-align:center"><input type="checkbox" class="caninv"'+((w.can_invoice==1||w.can_invoice===true)?' checked':'')+' title="Может выставлять счёт на оплату"></td>'+
         '<td style="text-align:center"><input type="checkbox" class="cancost"'+((w.can_see_cost==1||w.can_see_cost===true)?' checked':'')+' title="Видит стоимость в калькуляторе"></td>'+
+        '<td style="text-align:center"><input type="checkbox" class="cansup"'+((w.can_supply==1||w.can_supply===true)?' checked':'')+' title="Снабженец: видит панель Снабжение (заявки, инструмент, наличные)"></td>'+
         '<td><select class="mem">'+memberOptionsHtml(w.trello_member_id||'')+'</select></td>'+
         '<td><div class="actions">'+
           '<button class="btn save" type="button">Сохранить</button>'+
@@ -190,6 +191,7 @@
       var memberId=tr.querySelector('.mem').value||'';
       var stages=[].map.call(tr.querySelectorAll('.stgcb:checked'), function(c){ return c.value; });
       var canInvoice=tr.querySelector('.caninv')?tr.querySelector('.caninv').checked:false;
+      var canSupply=tr.querySelector('.cansup')?tr.querySelector('.cansup').checked:false;
       var canSeeCost=tr.querySelector('.cancost')?tr.querySelector('.cancost').checked:false;
       if(!name){ setMsg('Введите имя.'); return; }
       if(!salary){ setMsg('Введите оклад.'); return; }
@@ -197,7 +199,7 @@
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; updateCount(); }

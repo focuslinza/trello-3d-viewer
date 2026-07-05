@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Заказать снабжение</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #app{max-width:640px;margin:0 auto;padding:16px 16px 70px}
+    h2{margin:0 0 6px;font-size:18px}
+    h3{margin:18px 0 8px;font-size:14px;color:#e6edf3}
+    .muted{color:var(--muted);font-size:12.5px}
+    input[type=text]{width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:10px 12px;font-size:14px;margin-top:6px}
+    label.f{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer}
+    .btn{background:#274469;border:1px solid var(--blue);border-radius:8px;color:#cfe1ff;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;margin-top:14px}
+    .btn:disabled{opacity:.5}
+    .req{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px}
+    .req .nm{font-weight:700}
+    .req .sub{font-size:12px;color:var(--muted);margin-top:2px}
+    .pill{display:inline-block;border-radius:10px;padding:2px 9px;font-size:11.5px;font-weight:700}
+    .pill.new{background:#2b3a55;color:#a9c2ff}
+    .pill.bought{background:#1c3329;color:var(--green)}
+    .pill.given{background:#223;color:var(--muted)}
+    .pill.rejected{background:#42221f;color:var(--red)}
+    .pill.urgent{background:#42221f;color:var(--red)}
+    #msg{font-size:13px;margin-left:10px}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end;z-index:50}
+    .btn2{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 14px;font-size:13px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2>Заказать снабжение</h2>
+    <div class="muted">Что нужно купить для работы — заявка сразу попадёт к снабженцу.</div>
+    <input type="text" id="fName" placeholder="Что нужно (например: диски отрезные 125мм)">
+    <input type="text" id="fQty" placeholder="Сколько (например: 20 шт)">
+    <input type="text" id="fComment" placeholder="Комментарий (для какого заказа, почему)">
+    <label class="f"><input type="checkbox" id="fUrgent"> 🔥 Срочно — работа стоит</label>
+    <button class="btn" id="send" type="button">Отправить заявку</button><span id="msg"></span>
+    <h3>Мои заявки</h3>
+    <div id="mine"><div class="muted">Загрузка…</div></div>
+  </div>
+  <div class="bar"><button class="btn2" id="close" type="button">Закрыть</button></div>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    var ME = { id:'', name:'' };
+    var STATUS_LBL = { new:'ждёт', bought:'куплено', given:'выдано', rejected:'отклонена' };
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    document.getElementById('close').onclick=function(){ t.closeModal(); };
+
+    function loadMine(){
+      return fetch(WORKER+'/supply-list?memberId='+encodeURIComponent(ME.id))
+        .then(function(r){return r.json();})
+        .then(function(j){
+          var el=document.getElementById('mine');
+          var list=(j&&j.ok&&j.requests)||[];
+          if(!list.length){ el.innerHTML='<div class="muted">Заявок пока нет.</div>'; return; }
+          var h='';
+          list.forEach(function(r){
+            h+='<div class="req"><div class="nm">'+esc(r.name)+(r.qty?(' · '+esc(r.qty)):'')+
+               (r.urgent?' <span class="pill urgent">срочно</span>':'')+
+               ' <span class="pill '+esc(r.status)+'">'+(STATUS_LBL[r.status]||r.status)+'</span></div>'+
+               '<div class="sub">'+esc((r.createdAt||'').slice(0,10))+(r.comment?(' · '+esc(r.comment)):'')+(r.note?(' · ответ: '+esc(r.note)):'')+'</div></div>';
+          });
+          el.innerHTML=h;
+        }).catch(function(){ document.getElementById('mine').innerHTML='<div class="muted">Не удалось загрузить.</div>'; });
+    }
+
+    document.getElementById('send').onclick=function(){
+      var name=document.getElementById('fName').value.trim();
+      if(!name){ alert('Напишите, что нужно купить.'); return; }
+      var btn=this; btn.disabled=true;
+      var msg=document.getElementById('msg'); msg.textContent='Отправка…'; msg.style.color='var(--muted)';
+      fetch(WORKER+'/supply-request',{ method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name:name, qty:document.getElementById('fQty').value.trim(),
+          comment:document.getElementById('fComment').value.trim(),
+          urgent:document.getElementById('fUrgent').checked?1:0,
+          byMemberId:ME.id, byName:ME.name })
+      }).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+        msg.textContent='Отправлено ✓'; msg.style.color='var(--green)';
+        document.getElementById('fName').value=''; document.getElementById('fQty').value='';
+        document.getElementById('fComment').value=''; document.getElementById('fUrgent').checked=false;
+        btn.disabled=false;
+        loadMine();
+      }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; btn.disabled=false; });
+    };
+
+    t.member('id','fullName','username').then(function(m){
+      ME.id=(m&&m.id)||''; ME.name=(m&&(m.fullName||m.username))||'';
+      loadMine();
+    }).catch(function(){ loadMine(); });
+  </script>
+</body>
+</html>

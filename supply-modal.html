@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Снабжение</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #app{max-width:1000px;margin:0 auto;padding:16px 16px 70px}
+    h2{margin:0 0 12px;font-size:18px}
+    h3{margin:14px 0 8px;font-size:14px;color:#e6edf3}
+    .muted{color:var(--muted);font-size:12.5px}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    .tab{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer}
+    .tab.active{border-color:var(--blue);color:#cfe1ff;background:#274469}
+    .tab .cnt{display:inline-block;background:#42221f;color:var(--red);border-radius:9px;padding:0 7px;font-size:11px;font-weight:700;margin-left:5px}
+    .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 13px;font-size:13px;cursor:pointer}
+    .btn:hover{border-color:var(--blue)}
+    .btn.primary{background:#274469;border-color:var(--blue);color:#cfe1ff}
+    .btn.danger{border-color:#7a3a32;color:#e8a59d}
+    input,select{background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:7px 9px;font-size:13px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:middle}
+    th{color:var(--muted);font-size:11px;text-transform:uppercase;white-space:nowrap}
+    td.num{text-align:right;white-space:nowrap}
+    .pill{display:inline-block;border-radius:10px;padding:2px 9px;font-size:11.5px;font-weight:700;white-space:nowrap}
+    .pill.new{background:#2b3a55;color:#a9c2ff}
+    .pill.bought{background:#1c3329;color:var(--green)}
+    .pill.given{background:#223;color:var(--muted)}
+    .pill.rejected{background:#42221f;color:var(--red)}
+    .pill.urgent{background:#42221f;color:var(--red)}
+    .pill.overdue{background:#42221f;color:var(--red)}
+    .pill.soon{background:#3d321c;color:var(--amber)}
+    .pill.ok{background:#1c3329;color:var(--green)}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 12px}
+    .kpi{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+    .kpi .k{font-size:11px;color:var(--muted);text-transform:uppercase}
+    .kpi .v{font-size:16px;font-weight:800;margin-top:4px}
+    .kpi.red .v{color:var(--red)} .kpi.amber .v{color:var(--amber)}
+    .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 14px;margin:8px 0}
+    .grid2 .lbl{color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:3px}
+    .grid2 input{width:100%;box-sizing:border-box}
+    .empty{color:var(--muted);padding:12px 4px}
+    .daterow td{background:var(--bg2);font-weight:700;color:#e6edf3}
+    .filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+    a{color:#8ab4ff;text-decoration:none} a:hover{text-decoration:underline}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end;z-index:50}
+  </style>
+</head>
+<body>
+  <div id="app"><div class="empty" id="boot">Загрузка…</div></div>
+  <div class="bar"><button class="btn" id="close" type="button">Закрыть</button></div>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    document.getElementById('close').onclick=function(){ t.closeModal(); };
+
+    var TAB='req', REQS=[], OPEN=0, TOOLS=[], DUE=0, CASH=null, TOOL_EDIT=null;
+    var now=new Date();
+    function pad(n){ return n<10?'0'+n:''+n; }
+    function fmtDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+    var CASH_RANGE={ from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now) };
+    function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    var STATUS_LBL = { new:'новая', bought:'куплено', given:'выдано', rejected:'отклонена' };
+
+    function isDirector(){
+      return Promise.all([ t.member('id'), t.board('memberships'), t.organization('memberships').catch(function(){return null;}) ])
+        .then(function(res){ var me=res[0]||{};
+          function adminIn(o){ var ms=((o&&o.memberships)||[]).filter(function(x){return x.idMember===me.id;})[0]; return !!(ms&&ms.memberType==='admin'); }
+          return adminIn(res[1])||adminIn(res[2]);
+        }).catch(function(){ return false; });
+    }
+    function canUse(){
+      return isDirector().then(function(admin){
+        if(admin) return true;
+        return t.member('id').then(function(me){
+          return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||''))
+            .then(function(r){return r.json();}).then(function(j){ return !!(j&&j.canSupply); })
+            .catch(function(){ return false; });
+        });
+      });
+    }
+
+    function loadAll(){
+      return Promise.all([
+        fetch(WORKER+'/supply-list').then(function(r){return r.json();}).catch(function(){return {};}),
+        fetch(WORKER+'/tools-list').then(function(r){return r.json();}).catch(function(){return {};}),
+        fetch(WORKER+'/cash-list?from='+CASH_RANGE.from+'&to='+CASH_RANGE.to).then(function(r){return r.json();}).catch(function(){return {};})
+      ]).then(function(res){
+        if(res[0]&&res[0].ok){ REQS=res[0].requests||[]; OPEN=res[0].openCount||0; }
+        if(res[1]&&res[1].ok){ TOOLS=res[1].tools||[]; DUE=res[1].dueCount||0; }
+        if(res[2]&&res[2].ok){ CASH=res[2]; }
+        render();
+      });
+    }
+
+    // ---------- ЗАЯВКИ ----------
+    function renderReq(){
+      if(!REQS.length) return '<div class="empty">Заявок нет.</div>';
+      var h='<table><thead><tr><th>Что</th><th>Кол-во</th><th>Кто просил</th><th>Дата</th><th>Статус</th><th>Действия</th></tr></thead><tbody>';
+      REQS.forEach(function(r){
+        h+='<tr><td>'+(r.urgent?'<span class="pill urgent">срочно</span> ':'')+esc(r.name)+
+           (r.comment?('<div class="muted">'+esc(r.comment)+'</div>'):'')+
+           (r.note?('<div class="muted">ответ: '+esc(r.note)+'</div>'):'')+'</td>'+
+           '<td>'+esc(r.qty)+'</td><td>'+esc(r.byName)+'</td><td class="muted">'+esc((r.createdAt||'').slice(0,10))+'</td>'+
+           '<td><span class="pill '+esc(r.status)+'">'+(STATUS_LBL[r.status]||r.status)+'</span></td>'+
+           '<td style="white-space:nowrap">';
+        if(r.status==='new') h+='<button class="btn rq" data-id="'+r.id+'" data-st="bought" type="button">Куплено</button> '+
+                                '<button class="btn danger rq" data-id="'+r.id+'" data-st="rejected" type="button">Отклонить</button>';
+        else if(r.status==='bought') h+='<button class="btn rq" data-id="'+r.id+'" data-st="given" type="button">Выдано</button>';
+        h+='</td></tr>';
+      });
+      return h+'</tbody></table>';
+    }
+
+    // ---------- ИНСТРУМЕНТ ----------
+    var TOOL_FIELDS=[
+      ['name','Наименование *','Болгарка Makita GA5030'],
+      ['serial','Серийный № / инв. №',''],
+      ['boughtAt','Дата покупки','',''],
+      ['warrantyUntil','Гарантия до',''],
+      ['serviceCompany','Сервисная компания','ТОО СервисПро'],
+      ['servicePhone','Телефон сервиса','+7 ...'],
+      ['serviceIntervalMonths','Интервал сервиса, мес','6'],
+      ['lastService','Последний сервис',''],
+      ['note','Заметка','']
+    ];
+    function isDateField(k){ return k==='boughtAt'||k==='warrantyUntil'||k==='lastService'; }
+    function renderTools(){
+      var h='';
+      if(TOOL_EDIT!==null){
+        var tv=TOOL_EDIT;
+        h+='<h3>'+(tv.id?'Редактировать':'Добавить')+' инструмент / станок</h3><div class="grid2">';
+        TOOL_FIELDS.forEach(function(f){
+          h+='<div><div class="lbl">'+esc(f[1])+'</div><input '+(isDateField(f[0])?'type="date"':'type="text"')+' id="tf_'+f[0]+'" value="'+esc(tv[f[0]]||'')+'" placeholder="'+esc(f[2]||'')+'"></div>';
+        });
+        h+='</div><button class="btn primary" id="tsave" type="button">💾 Сохранить</button> <button class="btn" id="tcancel" type="button">Отмена</button>';
+        if(tv.id){
+          h+='<h3>Чеки и документы</h3><div id="trec" class="muted">Загрузка…</div>'+
+             '<input type="file" id="tfile" accept="image/*" style="margin-top:8px">'+
+             '<div class="muted" style="margin-top:4px">Фото чека/гарантийника — сжимается автоматически.</div>';
+        } else {
+          h+='<div class="muted" style="margin-top:10px">Чеки можно будет прикрепить после сохранения.</div>';
+        }
+        return h;
+      }
+      if(!TOOLS.length) return '<div class="empty">Реестр пуст — добавьте первый инструмент.</div>'+
+        '<button class="btn primary" id="taddBtn" type="button">+ Добавить инструмент</button>';
+      h+='<button class="btn primary" id="taddBtn" type="button">+ Добавить инструмент</button>';
+      h+='<table style="margin-top:10px"><thead><tr><th>Инструмент</th><th>Куплен</th><th>Гарантия до</th><th>Сервис-компания</th><th>Следующий сервис</th><th></th></tr></thead><tbody>';
+      TOOLS.forEach(function(x){
+        var st = x.serviceState==='overdue' ? '<span class="pill overdue">⚠ просрочен: '+esc(x.nextService)+'</span>'
+               : x.serviceState==='soon' ? '<span class="pill soon">скоро: '+esc(x.nextService)+'</span>'
+               : x.serviceState==='ok' ? '<span class="pill ok">'+esc(x.nextService)+'</span>'
+               : '<span class="muted">—</span>';
+        h+='<tr><td><b>'+esc(x.name)+'</b>'+(x.serial?('<div class="muted">'+esc(x.serial)+'</div>'):'')+'</td>'+
+           '<td class="muted">'+esc(x.boughtAt||'—')+'</td><td class="muted">'+esc(x.warrantyUntil||'—')+'</td>'+
+           '<td>'+esc(x.serviceCompany||'—')+(x.servicePhone?('<div class="muted">'+esc(x.servicePhone)+'</div>'):'')+'</td>'+
+           '<td>'+st+'</td>'+
+           '<td style="white-space:nowrap"><button class="btn tedit" data-id="'+x.id+'" type="button">✎</button> <button class="btn danger tdel" data-id="'+x.id+'" type="button">✕</button></td></tr>';
+      });
+      return h+'</tbody></table>';
+    }
+
+    // ---------- НАЛИЧНЫЕ ----------
+    function renderCash(){
+      var h='<div class="filters">'+
+        '<input type="date" id="cfrom" value="'+CASH_RANGE.from+'"><span class="muted">—</span>'+
+        '<input type="date" id="cto" value="'+CASH_RANGE.to+'">'+
+        '<button class="btn" id="capply" type="button">Показать</button></div>';
+      h+='<div class="kpis"><div class="kpi"><div class="k">Итого за период</div><div class="v">'+money(CASH?CASH.total:0)+' ₸</div></div>'+
+         '<div class="kpi"><div class="k">Записей</div><div class="v">'+((CASH&&CASH.entries)?CASH.entries.length:0)+'</div></div></div>';
+      h+='<h3>Новый расход</h3><div class="grid2">'+
+         '<div><div class="lbl">Дата</div><input type="date" id="cdate" value="'+fmtDate(new Date())+'"></div>'+
+         '<div><div class="lbl">Сумма, ₸ *</div><input type="text" id="camount" placeholder="12500"></div>'+
+         '<div><div class="lbl">На что *</div><input type="text" id="cwhat" placeholder="Диски отрезные"></div>'+
+         '<div><div class="lbl">Заметка</div><input type="text" id="cnote" placeholder=""></div></div>'+
+         '<button class="btn primary" id="cadd" type="button">+ Записать расход</button><span id="cmsg" class="muted" style="margin-left:8px"></span>';
+      var entries=(CASH&&CASH.entries)||[];
+      if(!entries.length) return h+'<div class="empty">Расходов за период нет.</div>';
+      h+='<table style="margin-top:14px"><thead><tr><th>На что</th><th class="num">Сумма</th><th>Чеки</th><th></th></tr></thead><tbody>';
+      var lastDate=null;
+      entries.forEach(function(e0){
+        if(e0.date!==lastDate){
+          lastDate=e0.date;
+          h+='<tr class="daterow"><td>'+esc(e0.date)+'</td><td class="num">'+money(CASH.byDate[e0.date])+' ₸</td><td colspan="2"></td></tr>';
+        }
+        h+='<tr><td>'+esc(e0.what)+(e0.note?('<div class="muted">'+esc(e0.note)+'</div>'):'')+'</td>'+
+           '<td class="num">'+money(e0.amount)+' ₸</td>'+
+           '<td><span class="crec" data-id="'+e0.id+'">…</span> <label style="cursor:pointer;color:#8ab4ff">📎<input type="file" accept="image/*" class="cfile" data-id="'+e0.id+'" style="display:none"></label></td>'+
+           '<td><button class="btn danger cdel" data-id="'+e0.id+'" type="button">✕</button></td></tr>';
+      });
+      return h+'</tbody></table>';
+    }
+
+    // фото → сжатое JPEG base64 (без префикса)
+    function compressImage(file){
+      return new Promise(function(resolve,reject){
+        var fr=new FileReader();
+        fr.onload=function(){
+          var img=new Image();
+          img.onload=function(){
+            var maxSide=1280, w=img.width, hgt=img.height;
+            var k=Math.min(1, maxSide/Math.max(w,hgt));
+            var cnv=document.createElement('canvas');
+            cnv.width=Math.round(w*k); cnv.height=Math.round(hgt*k);
+            cnv.getContext('2d').drawImage(img,0,0,cnv.width,cnv.height);
+            var url=cnv.toDataURL('image/jpeg',0.72);
+            resolve(url.split(',')[1]);
+          };
+          img.onerror=reject;
+          img.src=fr.result;
+        };
+        fr.onerror=reject;
+        fr.readAsDataURL(file);
+      });
+    }
+    function uploadReceipt(kind, refId, file, done){
+      compressImage(file).then(function(b64){
+        return fetch(WORKER+'/receipt-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ kind:kind, refId:String(refId), filename:file.name||'чек.jpg', mime:'image/jpeg', dataB64:b64 }) });
+      }).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'не сохранилось');
+        done&&done(true);
+      }).catch(function(e){ alert('Чек не сохранился: '+(e&&e.message||e)); done&&done(false); });
+    }
+    function fillReceipts(kind, refId, el){
+      fetch(WORKER+'/receipts-list?kind='+kind+'&refId='+encodeURIComponent(refId))
+        .then(function(r){return r.json();}).then(function(j){
+          var list=(j&&j.receipts)||[];
+          el.innerHTML = list.length
+            ? list.map(function(r){ return '<a href="'+WORKER+'/receipt-get?id='+r.id+'" target="_blank">🧾</a>'; }).join(' ')
+            : '<span class="muted">нет</span>';
+        }).catch(function(){ el.innerHTML='<span class="muted">?</span>'; });
+    }
+
+    function render(){
+      var app=document.getElementById('app');
+      var h='<h2>Снабжение</h2><div class="tabs">';
+      [['req','Заявки'+(OPEN?'<span class="cnt">'+OPEN+'</span>':'')],
+       ['tools','Инструмент и сервис'+(DUE?'<span class="cnt">'+DUE+'</span>':'')],
+       ['cash','Наличные расходы']].forEach(function(x){
+        h+='<div class="tab'+(TAB===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
+      });
+      h+='</div>';
+      h+= TAB==='req' ? renderReq() : TAB==='tools' ? renderTools() : renderCash();
+      app.innerHTML=h;
+      [].forEach.call(document.querySelectorAll('.tab[data-tab]'), function(el){ el.onclick=function(){ TAB=this.getAttribute('data-tab'); TOOL_EDIT=null; render(); }; });
+
+      [].forEach.call(document.querySelectorAll('.rq'), function(b){
+        b.onclick=function(){
+          var id=+this.getAttribute('data-id'), st=this.getAttribute('data-st');
+          var note = st==='bought' ? (prompt('Заметка (где купили, цена) — можно пусто:','')||'') :
+                     st==='rejected' ? (prompt('Причина отказа:','')||'') : '';
+          fetch(WORKER+'/supply-set',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({id:id,status:st,note:note})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
+            .catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); });
+        };
+      });
+
+      var ta=document.getElementById('taddBtn'); if(ta) ta.onclick=function(){ TOOL_EDIT={}; render(); };
+      [].forEach.call(document.querySelectorAll('.tedit'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id'); TOOL_EDIT=JSON.parse(JSON.stringify(TOOLS.filter(function(x){return x.id===id;})[0]||{})); render(); };
+      });
+      [].forEach.call(document.querySelectorAll('.tdel'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id');
+          if(!confirm('Удалить из реестра вместе с чеками?')) return;
+          fetch(WORKER+'/tool-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+            .then(function(){ loadAll(); });
+        };
+      });
+      var ts=document.getElementById('tsave'); if(ts) ts.onclick=function(){
+        TOOL_FIELDS.forEach(function(f){ var el=document.getElementById('tf_'+f[0]); if(el) TOOL_EDIT[f[0]]=el.value.trim(); });
+        if(!TOOL_EDIT.name){ alert('Укажите наименование.'); return; }
+        fetch(WORKER+'/tool-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:TOOL_EDIT})})
+          .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); TOOL_EDIT=null; loadAll(); })
+          .catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); });
+      };
+      var tc=document.getElementById('tcancel'); if(tc) tc.onclick=function(){ TOOL_EDIT=null; render(); };
+      var trec=document.getElementById('trec'); if(trec && TOOL_EDIT && TOOL_EDIT.id) fillReceipts('tool', TOOL_EDIT.id, trec);
+      var tfile=document.getElementById('tfile'); if(tfile) tfile.onchange=function(){
+        if(this.files && this.files[0]) uploadReceipt('tool', TOOL_EDIT.id, this.files[0], function(){ render(); });
+      };
+
+      var capply=document.getElementById('capply'); if(capply) capply.onclick=function(){
+        var f=document.getElementById('cfrom').value, t2=document.getElementById('cto').value;
+        if(!f||!t2) return; if(f>t2){var tmp=f;f=t2;t2=tmp;}
+        CASH_RANGE.from=f; CASH_RANGE.to=t2; loadAll();
+      };
+      var cadd=document.getElementById('cadd'); if(cadd) cadd.onclick=function(){
+        var amount=+String(document.getElementById('camount').value).replace(/[^\d.]/g,'');
+        var what=document.getElementById('cwhat').value.trim();
+        var date=document.getElementById('cdate').value;
+        var msg=document.getElementById('cmsg');
+        if(!(amount>0)||!what||!date){ msg.textContent='Заполните дату, сумму и «на что».'; return; }
+        fetch(WORKER+'/cash-save',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({entry:{date:date,amount:amount,what:what,note:document.getElementById('cnote').value.trim()}})})
+          .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
+          .catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); });
+      };
+      [].forEach.call(document.querySelectorAll('.cdel'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id');
+          if(!confirm('Удалить запись вместе с чеками?')) return;
+          fetch(WORKER+'/cash-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+            .then(function(){ loadAll(); });
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.crec'), function(el){ fillReceipts('cash', el.getAttribute('data-id'), el); });
+      [].forEach.call(document.querySelectorAll('.cfile'), function(inp){
+        inp.onchange=function(){ if(this.files && this.files[0]) uploadReceipt('cash', this.getAttribute('data-id'), this.files[0], function(){ render(); }); };
+      });
+    }
+
+    canUse().then(function(allowed){
+      if(!allowed){
+        document.getElementById('boot').textContent='Раздел доступен руководителю и снабженцу (право включается в «Зарплата / Работники»).';
+        return;
+      }
+      return loadAll();
+    }).catch(function(e){ document.getElementById('boot').textContent='Ошибка: '+(e&&e.message||e); });
+  </script>
+</body>
+</html>

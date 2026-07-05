@@ -91,6 +91,28 @@
             });
           }
         };
+        var reqBtn = {
+          icon: { dark: t.signUrl('./ic-supplyreq.png'), light: t.signUrl('./ic-supplyreq.png') },
+          text: 'Заказать снабжение',
+          callback: function (t) {
+            return t.modal({
+              url: './supply-request-modal.html?t=' + Date.now(),
+              fullscreen: true,
+              title: 'Заказать снабжение'
+            });
+          }
+        };
+        var supBtn = {
+          icon: { dark: t.signUrl('./ic-supply.png'), light: t.signUrl('./ic-supply.png') },
+          text: 'Снабжение',
+          callback: function (t) {
+            return t.modal({
+              url: './supply-modal.html?t=' + Date.now(),
+              fullscreen: true,
+              title: 'Снабжение'
+            });
+          }
+        };
         var dashBtn = {
           icon: { dark: t.signUrl('./ic-dashboard.png'), light: t.signUrl('./ic-dashboard.png') },
           text: 'Панель руководителя',
@@ -102,18 +124,21 @@
             });
           }
         };
-        function canInvoice(){
+        function perms(){
           var W = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
           return t.member('id').then(function(me){
             return fetch(W + '/worker-perms?memberId=' + encodeURIComponent((me && me.id) || ''))
               .then(function(r){ return r.json(); })
-              .then(function(j){ return !!(j && j.canInvoice); });
-          }).catch(function(){ return false; });
+              .then(function(j){ return { canInvoice: !!(j && j.canInvoice), canSupply: !!(j && j.canSupply) }; });
+          }).catch(function(){ return { canInvoice:false, canSupply:false }; });
         }
         return isAdmin().then(function(admin){
-          if (admin) return [earnBtn, buhBtn, crmBtn, dashBtn];
-          return canInvoice().then(function(ci){
-            return ci ? [earnBtn, buhBtn] : [earnBtn];
+          if (admin) return [earnBtn, reqBtn, supBtn, buhBtn, crmBtn, dashBtn];
+          return perms().then(function(p){
+            var out = [earnBtn, reqBtn];             // заявку на снабжение может подать любой работник
+            if (p.canSupply) out.push(supBtn);       // панель снабжения — только снабженцу
+            if (p.canInvoice) out.push(buhBtn);
+            return out;
           });
         });
       }
