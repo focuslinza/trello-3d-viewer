@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>Калькулятор стоимости - Connector</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
 </head>
 <body>
   <script>
@@ -79,6 +80,17 @@
             });
           }
         };
+        var buhBtn = {
+          icon: { dark: t.signUrl('./ic-buh.png'), light: t.signUrl('./ic-buh.png') },
+          text: 'Бухгалтерия',
+          callback: function (t) {
+            return t.modal({
+              url: './buh-modal.html?t=' + Date.now(),
+              fullscreen: true,
+              title: 'Бухгалтерия'
+            });
+          }
+        };
         var dashBtn = {
           icon: { dark: t.signUrl('./ic-dashboard.png'), light: t.signUrl('./ic-dashboard.png') },
           text: 'Панель руководителя',
@@ -90,8 +102,19 @@
             });
           }
         };
+        function canInvoice(){
+          var W = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+          return t.member('id').then(function(me){
+            return fetch(W + '/worker-perms?memberId=' + encodeURIComponent((me && me.id) || ''))
+              .then(function(r){ return r.json(); })
+              .then(function(j){ return !!(j && j.canInvoice); });
+          }).catch(function(){ return false; });
+        }
         return isAdmin().then(function(admin){
-          return admin ? [earnBtn, crmBtn, dashBtn] : [earnBtn];
+          if (admin) return [earnBtn, buhBtn, crmBtn, dashBtn];
+          return canInvoice().then(function(ci){
+            return ci ? [earnBtn, buhBtn] : [earnBtn];
+          });
         });
       }
     });
