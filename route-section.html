@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Маршрут заказа</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    html[data-color-mode="light"] { --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --ok:#1f845a; --okbg:#e3fcef; --act:#0c66e4; --actbg:#e9f2ff; --blk:#c9372c; --blkbg:#ffeceb; }
+    html[data-color-mode="dark"]  { --txt:#c7d1db; --muted:#9fadbc; --chip:#2c333a; --line:#3a414a; --ok:#4bce97; --okbg:#1c3329; --act:#85b8ff; --actbg:#1c2b41; --blk:#f87168; --blkbg:#42221f; }
+    html { --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --ok:#1f845a; --okbg:#e3fcef; --act:#0c66e4; --actbg:#e9f2ff; --blk:#c9372c; --blkbg:#ffeceb; }
+    html,body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--txt);font-size:13px}
+    #wrap{padding:6px 4px}
+    .hdr{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 2px 8px;font-size:12px;color:var(--muted)}
+    .pill{background:var(--chip);border-radius:10px;padding:2px 9px;font-weight:600}
+    .pill.done{background:var(--okbg);color:var(--ok)}
+    .pill.blk{background:var(--blkbg);color:var(--blk)}
+    .oprow{display:flex;align-items:center;gap:8px;padding:5px 2px;flex-wrap:wrap}
+    .st{flex:0 0 auto;border:1px solid var(--line);background:var(--chip);border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;color:var(--muted);min-width:96px;text-align:center}
+    .st.active{background:var(--actbg);color:var(--act);border-color:var(--act)}
+    .st.done{background:var(--okbg);color:var(--ok);border-color:var(--ok)}
+    .nm{flex:1;min-width:110px;font-weight:600}
+    .nm .blkline{font-weight:400;font-size:11.5px;color:var(--blk);margin-top:1px}
+    select{background:var(--chip);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:4px 6px;font-size:12px;max-width:150px}
+    .blkbtn{flex:0 0 auto;border:1px solid var(--line);background:var(--chip);border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;color:var(--muted)}
+    .blkbtn.on{background:var(--blkbg);color:var(--blk);border-color:var(--blk)}
+    .btn{background:var(--act);color:#fff;border:none;border-radius:4px;padding:6px 14px;font-size:12.5px;font-weight:600;cursor:pointer}
+    .lnk{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;padding:2px 4px}
+    .chk{display:flex;align-items:center;gap:8px;padding:4px 2px}
+    .muted{color:var(--muted);font-size:12px}
+    #msg{font-size:12px;color:var(--ok);margin-left:8px}
+  </style>
+</head>
+<body>
+  <div id="wrap"><div class="muted">Загрузка…</div></div>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    var OPS = [
+      { key:'eng',     label:'Инженер' },
+      { key:'cut',     label:'Резка' },
+      { key:'bend',    label:'Гибка' },
+      { key:'weld',    label:'Сварка' },
+      { key:'shleif',  label:'Шлейфовка / сборка' },
+      { key:'paint',   label:'Покраска' },
+      { key:'montazh', label:'Монтаж' }
+    ];
+    var DEFAULT_CHECKED = { cut:1, bend:1, weld:1, shleif:1 };
+    var STATUS_NEXT = { queued:'active', active:'done', done:'queued' };
+    var STATUS_LBL  = { queued:'○ в очереди', active:'▶ в работе', done:'✓ готово' };
+    var ROUTE=null, WORKERS=[], CARD_ID=null, editing=false;
+
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function summaryOf(route){
+      var ops=(route&&route.ops)||[];
+      var d=ops.filter(function(o){return o.status==='done';}).length;
+      var blocked=ops.filter(function(o){return o.block&&o.block.reason;});
+      return { d:d, t:ops.length, b:blocked.length?1:0, r:blocked.length?String(blocked[0].block.reason).slice(0,60):'' };
+    }
+
+    function save(){
+      if(!ROUTE || !CARD_ID) return Promise.resolve();
+      ROUTE.updatedAt=Date.now();
+      var msg=document.getElementById('msg'); if(msg) msg.textContent='…';
+      return fetch(WORKER+'/route-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ cardId: CARD_ID, route: ROUTE })
+      }).then(function(r){ return r.json(); }).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+        // мини-сводка на карточке — из неё строится бейдж на лицевой стороне
+        return t.set('card','shared','routeSummary', summaryOf(ROUTE)).catch(function(){});
+      }).then(function(){ if(msg){ msg.textContent='Сохранено ✓'; setTimeout(function(){ if(msg) msg.textContent=''; },2500); } })
+      .catch(function(e){ if(msg){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--blk)'; } });
+    }
+
+    function renderEditor(){
+      var el=document.getElementById('wrap');
+      var existing={}; ((ROUTE&&ROUTE.ops)||[]).forEach(function(o){ existing[o.key]=o; });
+      var h='<div class="muted" style="margin-bottom:6px">Отметьте операции, нужные для этого заказа (порядок — как в списке):</div>';
+      OPS.forEach(function(op){
+        var on = ROUTE ? !!existing[op.key] : !!DEFAULT_CHECKED[op.key];
+        h+='<label class="chk"><input type="checkbox" data-k="'+op.key+'"'+(on?' checked':'')+'> '+esc(op.label)+'</label>';
+      });
+      h+='<div style="margin-top:8px"><button class="btn" id="mk" type="button">'+(ROUTE?'Обновить состав':'Создать маршрут')+'</button>'+(ROUTE?' <button class="lnk" id="cancel" type="button">Отмена</button>':'')+'<span id="msg"></span></div>';
+      el.innerHTML=h;
+      document.getElementById('mk').onclick=function(){
+        var ops=[];
+        [].forEach.call(document.querySelectorAll('input[data-k]'), function(cb){
+          if(!cb.checked) return;
+          var k=cb.getAttribute('data-k');
+          var meta=OPS.filter(function(o){return o.key===k;})[0];
+          ops.push(existing[k] || { key:k, label:meta.label, status:'queued', workerId:null, workerName:'', block:null });
+        });
+        if(!ops.length){ alert('Выберите хотя бы одну операцию.'); return; }
+        ROUTE = ROUTE || { createdAt: Date.now() };
+        ROUTE.ops = ops;
+        editing=false;
+        save().then(renderRoute);
+      };
+      var c=document.getElementById('cancel'); if(c) c.onclick=function(){ editing=false; renderRoute(); };
+      t.sizeTo('#wrap');
+    }
+
+    function renderRoute(){
+      var el=document.getElementById('wrap');
+      if(!ROUTE || !ROUTE.ops || !ROUTE.ops.length){ return renderEditor(); }
+      var s=summaryOf(ROUTE);
+      var h='<div class="hdr"><span class="pill'+(s.d===s.t?' done':'')+'">готово '+s.d+' из '+s.t+'</span>';
+      if(s.b) h+='<span class="pill blk">⛔ '+esc(s.r)+'</span>';
+      h+='<span style="flex:1"></span><button class="lnk" id="edit" type="button">✎ состав</button><span id="msg"></span></div>';
+      ROUTE.ops.forEach(function(o,i){
+        var wsel='<select data-i="'+i+'" class="wsel"><option value="">— исполнитель —</option>';
+        WORKERS.forEach(function(w){
+          wsel+='<option value="'+w.id+'"'+(String(o.workerId)===String(w.id)?' selected':'')+'>'+esc(w.name)+'</option>';
+        });
+        wsel+='</select>';
+        h+='<div class="oprow">'+
+           '<button class="st '+esc(o.status)+'" data-i="'+i+'" type="button">'+STATUS_LBL[o.status]+'</button>'+
+           '<div class="nm">'+esc(o.label)+(o.block&&o.block.reason?('<div class="blkline">⛔ '+esc(o.block.reason)+'</div>'):'')+'</div>'+
+           wsel+
+           '<button class="blkbtn'+(o.block?' on':'')+'" data-i="'+i+'" type="button" title="Блокировка: нет материала и т.п.">⛔</button>'+
+           '</div>';
+      });
+      el.innerHTML=h;
+      document.getElementById('edit').onclick=function(){ editing=true; renderEditor(); };
+      [].forEach.call(document.querySelectorAll('.st'), function(b){
+        b.onclick=function(){
+          var o=ROUTE.ops[+this.getAttribute('data-i')];
+          o.status=STATUS_NEXT[o.status]||'queued';
+          save().then(renderRoute);
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.wsel'), function(sel){
+        sel.onchange=function(){
+          var o=ROUTE.ops[+this.getAttribute('data-i')];
+          o.workerId=this.value||null;
+          var w=WORKERS.filter(function(x){return String(x.id)===String(sel.value);})[0];
+          o.workerName=w?w.name:'';
+          save();
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.blkbtn'), function(b){
+        b.onclick=function(){
+          var o=ROUTE.ops[+this.getAttribute('data-i')];
+          if(o.block){ o.block=null; }
+          else{
+            var r=prompt('Причина блокировки (например: нет материала, есть 8 из 16 шт):','нет материала');
+            if(r==null) return;
+            o.block={ reason: String(r).trim()||'блокировка' };
+          }
+          save().then(renderRoute);
+        };
+      });
+      t.sizeTo('#wrap');
+    }
+
+    var loading=false;
+    function loadAll(){
+      if(loading || editing) return Promise.resolve();
+      loading=true;
+      return t.card('id').then(function(c){
+        CARD_ID=c.id;
+        return Promise.all([
+          fetch(WORKER+'/route-get?cardId='+encodeURIComponent(CARD_ID)).then(function(r){return r.json();}).catch(function(){return {};}),
+          fetch(WORKER+'/workers-names').then(function(r){return r.json();}).catch(function(){return {};})
+        ]);
+      }).then(function(res){
+        ROUTE=(res[0]&&res[0].ok&&res[0].route)||ROUTE;
+        WORKERS=(res[1]&&res[1].ok&&res[1].workers)||WORKERS||[];
+        renderRoute();
+      }).catch(function(e){
+        document.getElementById('wrap').innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>';
+        t.sizeTo('#wrap');
+      }).then(function(){ loading=false; }, function(){ loading=false; });
+    }
+
+    t.render(loadAll);
+    setInterval(loadAll, 15000);
+    window.addEventListener('focus', loadAll);
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden) loadAll(); });
+  </script>
+</body>
+</html>

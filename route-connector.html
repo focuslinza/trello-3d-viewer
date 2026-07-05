@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Маршрут заказа - Connector</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+  <script>
+    // Отдельный Power-Up «Маршрут заказа»: технологический маршрут внутри карточки
+    // (операции, статусы, блокировки) + бейдж на лицевой стороне карточки.
+    // Бейдж читает мини-сводку из pluginData карточки (routeSummary) — её пишет
+    // route-section при каждом сохранении. Сетевых запросов на карточку нет,
+    // поэтому доска с сотнями карточек не создаёт нагрузку.
+    window.TrelloPowerUp.initialize({
+      'card-back-section': function (t, options) {
+        return {
+          title: 'Маршрут заказа',
+          icon: t.signUrl('./route-icon.svg'),
+          content: {
+            type: 'iframe',
+            url: t.signUrl('./route-section.html'),
+            height: 120
+          }
+        };
+      },
+      'card-badges': function (t, options) {
+        return t.get('card', 'shared', 'routeSummary', null).then(function (s) {
+          if (!s || !s.t) return [];
+          if (s.b) return [{ text: '⛔ ' + (s.r || 'блок'), color: 'red' }];
+          if (s.d === s.t) return [{ text: 'Маршрут ✓ ' + s.d + '/' + s.t, color: 'green' }];
+          return [{ text: 'Маршрут ' + s.d + '/' + s.t, color: null }];
+        }).catch(function () { return []; });
+      }
+    });
+  </script>
+</body>
+</html>
