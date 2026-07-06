@@ -43,6 +43,9 @@
         };
       },
       'board-buttons': function (t, options) {
+        // Иконки кнопок доски — прямыми ссылками, без t.signUrl: подписанные прокси-ссылки
+        // в новой шапке Trello не загружаются (официальный пример Trello тоже использует прямые URL)
+        var ICON_BASE = window.location.href.replace(/[^/]*(\?.*)?$/, '');
         // «Мой заработок» видят все; «CRM» и «Панель руководителя» — только руководитель (админ доски/пространства)
         function isAdmin(){
           return Promise.all([
@@ -59,7 +62,7 @@
           }).catch(function(){ return false; });
         }
         var earnBtn = {
-          icon: { dark: t.signUrl('./ic-earnings-w.png'), light: t.signUrl('./ic-earnings-b.png') },
+          icon: { dark: ICON_BASE + 'ic-earnings-w.png', light: ICON_BASE + 'ic-earnings-b.png' },
           text: 'Мой заработок',
           callback: function (t) {
             return t.modal({
@@ -70,7 +73,7 @@
           }
         };
         var crmBtn = {
-          icon: { dark: t.signUrl('./ic-crm-w.png'), light: t.signUrl('./ic-crm-b.png') },
+          icon: { dark: ICON_BASE + 'ic-crm-w.png', light: ICON_BASE + 'ic-crm-b.png' },
           text: 'CRM / Клиенты',
           callback: function (t) {
             return t.modal({
@@ -81,7 +84,7 @@
           }
         };
         var buhBtn = {
-          icon: { dark: t.signUrl('./ic-buh-w.png'), light: t.signUrl('./ic-buh-b.png') },
+          icon: { dark: ICON_BASE + 'ic-buh-w.png', light: ICON_BASE + 'ic-buh-b.png' },
           text: 'Бухгалтерия',
           callback: function (t) {
             return t.modal({
@@ -92,7 +95,7 @@
           }
         };
         var reqBtn = {
-          icon: { dark: t.signUrl('./ic-supplyreq-w.png'), light: t.signUrl('./ic-supplyreq-b.png') },
+          icon: { dark: ICON_BASE + 'ic-supplyreq-w.png', light: ICON_BASE + 'ic-supplyreq-b.png' },
           text: 'Заказать снабжение',
           callback: function (t) {
             return t.modal({
@@ -103,7 +106,7 @@
           }
         };
         var supBtn = {
-          icon: { dark: t.signUrl('./ic-supply-w.png'), light: t.signUrl('./ic-supply-b.png') },
+          icon: { dark: ICON_BASE + 'ic-supply-w.png', light: ICON_BASE + 'ic-supply-b.png' },
           text: 'Снабжение',
           callback: function (t) {
             return t.modal({
@@ -114,7 +117,7 @@
           }
         };
         var dashBtn = {
-          icon: { dark: t.signUrl('./ic-dashboard-w.png'), light: t.signUrl('./ic-dashboard-b.png') },
+          icon: { dark: ICON_BASE + 'ic-dashboard-w.png', light: ICON_BASE + 'ic-dashboard-b.png' },
           text: 'Панель руководителя',
           callback: function (t) {
             return t.modal({
