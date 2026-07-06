@@ -247,9 +247,20 @@
       }).catch(function(){ return false; });
     }
 
-    isDirector().then(function(admin){
-      if(!admin){
-        document.getElementById('boot').textContent='Раздел доступен только руководителю (администратору доски).';
+    function canUse(){
+      return isDirector().then(function(admin){
+        if(admin) return true;
+        return t.member('id').then(function(me){
+          var W=(window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+          return fetch(W+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
+            .then(function(r){return r.json();}).then(function(j){ return !!(j&&j.canCrm); })
+            .catch(function(){ return false; });
+        });
+      });
+    }
+    canUse().then(function(allowed){
+      if(!allowed){
+        document.getElementById('boot').textContent='Раздел доступен руководителю и менеджеру продаж (право «CRM» включается в «Зарплата / Работники»).';
         return;
       }
       return reload().then(render);

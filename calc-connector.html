@@ -132,8 +132,8 @@
           return t.member('id').then(function(me){
             return fetch(W + '/worker-perms?memberId=' + encodeURIComponent((me && me.id) || ''))
               .then(function(r){ return r.json(); })
-              .then(function(j){ return { canInvoice: !!(j && j.canInvoice), canSupply: !!(j && j.canSupply) }; });
-          }).catch(function(){ return { canInvoice:false, canSupply:false }; });
+              .then(function(j){ return { canInvoice: !!(j && j.canInvoice), canSupply: !!(j && j.canSupply), canCrm: !!(j && j.canCrm) }; });
+          }).catch(function(){ return { canInvoice:false, canSupply:false, canCrm:false }; });
         }
         return isAdmin().then(function(admin){
           if (admin) return [earnBtn, reqBtn, supBtn, buhBtn, crmBtn, dashBtn];
@@ -141,6 +141,7 @@
             var out = [earnBtn, reqBtn];             // заявку на снабжение может подать любой работник
             if (p.canSupply) out.push(supBtn);       // панель снабжения — только снабженцу
             if (p.canInvoice) out.push(buhBtn);
+            if (p.canCrm) out.push(crmBtn);          // CRM — менеджеру продаж
             return out;
           });
         });
