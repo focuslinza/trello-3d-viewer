@@ -26,10 +26,13 @@
       },
       'card-badges': function (t, options) {
         return t.get('card', 'shared', 'routeSummary', null).then(function (s) {
-          if (!s || !s.t) return [];
-          if (s.b) return [{ text: '⛔ ' + (s.r || 'блок'), color: 'red' }];
-          if (s.d === s.t) return [{ text: 'Маршрут ✓ ' + s.d + '/' + s.t, color: 'green' }];
-          return [{ text: 'Маршрут ' + s.d + '/' + s.t, color: null }];
+          if (!s || (!s.t && !s.w)) return [];
+          var out = [];
+          if (s.b) out.push({ text: '⛔ ' + (s.r || 'блок'), color: 'red' });
+          else if (s.t && s.d === s.t) out.push({ text: 'Маршрут ✓ ' + s.d + '/' + s.t, color: 'green' });
+          else if (s.t) out.push({ text: 'Маршрут ' + s.d + '/' + s.t, color: null });
+          if (s.w) out.push({ text: '⚠ проверьте: ' + s.w, color: 'yellow' });
+          return out;
         }).catch(function () { return []; });
       }
     });
