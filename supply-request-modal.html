@@ -37,6 +37,9 @@
     <input type="text" id="fName" placeholder="Что нужно (например: диски отрезные 125мм)">
     <input type="text" id="fQty" placeholder="Сколько (например: 20 шт)">
     <input type="text" id="fComment" placeholder="Комментарий (для какого заказа, почему)">
+    <input type="text" id="fLink" placeholder="Ссылка (пример товара в магазине, 2ГИС и т.п.)">
+    <label class="f" style="margin-top:12px">📷 Фото / PDF (чтобы снабженец сразу понял):
+      <input type="file" id="fFiles" accept="image/*,application/pdf" multiple></label>
     <label class="f"><input type="checkbox" id="fUrgent"> 🔥 Срочно — работа стоит</label>
     <button class="btn" id="send" type="button">Отправить заявку</button><span id="msg"></span>
     <h3>Мои заявки</h3>
@@ -45,6 +48,41 @@
   <div class="bar"><button class="btn2" id="close" type="button">Закрыть</button></div>
   <script>
     var t = window.TrelloPowerUp.iframe();
+    function fileToB64(file){
+      return new Promise(function(res,rej){
+        var fr=new FileReader();
+        fr.onload=function(){ res(String(fr.result).split(',')[1]); };
+        fr.onerror=rej; fr.readAsDataURL(file);
+      });
+    }
+    function compressImage(file){
+      return new Promise(function(resolve,reject){
+        var fr=new FileReader();
+        fr.onload=function(){
+          var img=new Image();
+          img.onload=function(){
+            var maxSide=1280, w=img.width, hgt=img.height;
+            var k=Math.min(1, maxSide/Math.max(w,hgt));
+            var cnv=document.createElement('canvas');
+            cnv.width=Math.round(w*k); cnv.height=Math.round(hgt*k);
+            cnv.getContext('2d').drawImage(img,0,0,cnv.width,cnv.height);
+            resolve(cnv.toDataURL('image/jpeg',0.72).split(',')[1]);
+          };
+          img.onerror=reject;
+          img.src=fr.result;
+        };
+        fr.onerror=reject;
+        fr.readAsDataURL(file);
+      });
+    }
+    // возвращает {b64, mime, filename} — фото жмём, PDF отправляем как есть
+    function prepFile(file){
+      if(file.type==='application/pdf'){
+        if(file.size > 650000) return Promise.reject(new Error('PDF «'+file.name+'» слишком большой (макс ~650 КБ)'));
+        return fileToB64(file).then(function(b64){ return { b64:b64, mime:'application/pdf', filename:file.name||'файл.pdf' }; });
+      }
+      return compressImage(file).then(function(b64){ return { b64:b64, mime:'image/jpeg', filename:file.name||'фото.jpg' }; });
+    }
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     var ME = { id:'', name:'' };
     var STATUS_LBL = { new:'ждёт', bought:'куплено', given:'выдано', rejected:'отклонена' };
@@ -63,9 +101,21 @@
             h+='<div class="req"><div class="nm">'+esc(r.name)+(r.qty?(' · '+esc(r.qty)):'')+
                (r.urgent?' <span class="pill urgent">срочно</span>':'')+
                ' <span class="pill '+esc(r.status)+'">'+(STATUS_LBL[r.status]||r.status)+'</span></div>'+
-               '<div class="sub">'+esc((r.createdAt||'').slice(0,10))+(r.comment?(' · '+esc(r.comment)):'')+(r.note?(' · ответ: '+esc(r.note)):'')+'</div></div>';
+               '<div class="sub">'+esc((r.createdAt||'').slice(0,10))+(r.comment?(' · '+esc(r.comment)):'')+(r.note?(' · ответ: '+esc(r.note)):'')+
+               (r.link?(' · <a href="'+esc(r.link)+'" target="_blank" style="color:#8ab4ff">ссылка ↗</a>'):'')+
+               ' <span class="rfiles" data-id="'+r.id+'"></span></div></div>';
           });
           el.innerHTML=h;
+          [].forEach.call(el.querySelectorAll('.rfiles'), function(sp){
+            fetch(WORKER+'/receipts-list?kind=req&refId='+encodeURIComponent(sp.getAttribute('data-id')))
+              .then(function(r){return r.json();}).then(function(j){
+                var list=(j&&j.receipts)||[];
+                sp.innerHTML=list.map(function(x){
+                  var pdf=/\.pdf$/i.test(x.filename||'');
+                  return '<a href="'+WORKER+'/receipt-get?id='+x.id+'" target="_blank" title="'+esc(x.filename)+'">'+(pdf?'📄':'📷')+'</a>';
+                }).join(' ');
+              }).catch(function(){});
+          });
         }).catch(function(){ document.getElementById('mine').innerHTML='<div class="muted">Не удалось загрузить.</div>'; });
     }
 
@@ -74,16 +124,36 @@
       if(!name){ alert('Напишите, что нужно купить.'); return; }
       var btn=this; btn.disabled=true;
       var msg=document.getElementById('msg'); msg.textContent='Отправка…'; msg.style.color='var(--muted)';
+      var files=[].slice.call((document.getElementById('fFiles')||{}).files||[]);
       fetch(WORKER+'/supply-request',{ method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ name:name, qty:document.getElementById('fQty').value.trim(),
           comment:document.getElementById('fComment').value.trim(),
+          link:document.getElementById('fLink').value.trim(),
           urgent:document.getElementById('fUrgent').checked?1:0,
           byMemberId:ME.id, byName:ME.name })
       }).then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+        var reqId=j.id;
+        // файлы — по одному, с прогрессом
+        var chain=Promise.resolve();
+        files.forEach(function(f,i){
+          chain=chain.then(function(){
+            msg.textContent='Файл '+(i+1)+' из '+files.length+'…'; msg.style.color='var(--muted)';
+            return prepFile(f).then(function(p){
+              return fetch(WORKER+'/receipt-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ kind:'req', refId:String(reqId), filename:p.filename, mime:p.mime, dataB64:p.b64 }) })
+                .then(function(r){return r.json();})
+                .then(function(jr){ if(!jr||!jr.ok) throw new Error((jr&&jr.error)||'файл не сохранился'); });
+            });
+          });
+        });
+        return chain;
+      }).then(function(){
         msg.textContent='Отправлено ✓'; msg.style.color='var(--green)';
         document.getElementById('fName').value=''; document.getElementById('fQty').value='';
-        document.getElementById('fComment').value=''; document.getElementById('fUrgent').checked=false;
+        document.getElementById('fComment').value=''; document.getElementById('fLink').value='';
+        document.getElementById('fUrgent').checked=false;
+        var ff=document.getElementById('fFiles'); if(ff) ff.value='';
         btn.disabled=false;
         loadMine();
       }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; btn.disabled=false; });

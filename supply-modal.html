@@ -104,6 +104,8 @@
       REQS.forEach(function(r){
         h+='<tr><td>'+(r.urgent?'<span class="pill urgent">срочно</span> ':'')+esc(r.name)+
            (r.comment?('<div class="muted">'+esc(r.comment)+'</div>'):'')+
+           (r.link?('<div><a href="'+esc(r.link)+'" target="_blank">ссылка от работника ↗</a></div>'):'')+
+           '<div class="rqfiles" data-id="'+r.id+'"></div>'+
            (r.note?('<div class="muted">ответ: '+esc(r.note)+'</div>'):'')+'</td>'+
            '<td>'+esc(r.qty)+'</td><td>'+esc(r.byName)+'</td><td class="muted">'+esc((r.createdAt||'').slice(0,10))+'</td>'+
            '<td><span class="pill '+esc(r.status)+'">'+(STATUS_LBL[r.status]||r.status)+'</span></td>'+
@@ -140,8 +142,8 @@
         h+='</div><button class="btn primary" id="tsave" type="button">💾 Сохранить</button> <button class="btn" id="tcancel" type="button">Отмена</button>';
         if(tv.id){
           h+='<h3>Чеки и документы</h3><div id="trec" class="muted">Загрузка…</div>'+
-             '<input type="file" id="tfile" accept="image/*" style="margin-top:8px">'+
-             '<div class="muted" style="margin-top:4px">Фото чека/гарантийника — сжимается автоматически.</div>';
+             '<input type="file" id="tfile" accept="image/*,application/pdf" style="margin-top:8px">'+
+             '<div class="muted" style="margin-top:4px">Фото чека/гарантийника (сжимается само) или PDF до ~650 КБ.</div>';
         } else {
           h+='<div class="muted" style="margin-top:10px">Чеки можно будет прикрепить после сохранения.</div>';
         }
@@ -190,7 +192,7 @@
         }
         h+='<tr><td>'+esc(e0.what)+(e0.note?('<div class="muted">'+esc(e0.note)+'</div>'):'')+'</td>'+
            '<td class="num">'+money(e0.amount)+' ₸</td>'+
-           '<td><span class="crec" data-id="'+e0.id+'">…</span> <label style="cursor:pointer;color:#8ab4ff">📎<input type="file" accept="image/*" class="cfile" data-id="'+e0.id+'" style="display:none"></label></td>'+
+           '<td><span class="crec" data-id="'+e0.id+'">…</span> <label style="cursor:pointer;color:#8ab4ff">📎<input type="file" accept="image/*,application/pdf" class="cfile" data-id="'+e0.id+'" style="display:none"></label></td>'+
            '<td><button class="btn danger cdel" data-id="'+e0.id+'" type="button">✕</button></td></tr>';
       });
       return h+'</tbody></table>';
@@ -218,21 +220,35 @@
         fr.readAsDataURL(file);
       });
     }
+    function fileToB64(file){
+      return new Promise(function(res,rej){
+        var fr=new FileReader();
+        fr.onload=function(){ res(String(fr.result).split(',')[1]); };
+        fr.onerror=rej; fr.readAsDataURL(file);
+      });
+    }
+    function prepFile(file){
+      if(file.type==='application/pdf'){
+        if(file.size > 650000) return Promise.reject(new Error('PDF «'+(file.name||'')+'» слишком большой (макс ~650 КБ)'));
+        return fileToB64(file).then(function(b64){ return { b64:b64, mime:'application/pdf', filename:file.name||'документ.pdf' }; });
+      }
+      return compressImage(file).then(function(b64){ return { b64:b64, mime:'image/jpeg', filename:file.name||'чек.jpg' }; });
+    }
     function uploadReceipt(kind, refId, file, done){
-      compressImage(file).then(function(b64){
+      prepFile(file).then(function(p){
         return fetch(WORKER+'/receipt-save',{ method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ kind:kind, refId:String(refId), filename:file.name||'чек.jpg', mime:'image/jpeg', dataB64:b64 }) });
+          body: JSON.stringify({ kind:kind, refId:String(refId), filename:p.filename, mime:p.mime, dataB64:p.b64 }) });
       }).then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok) throw new Error((j&&j.error)||'не сохранилось');
         done&&done(true);
-      }).catch(function(e){ alert('Чек не сохранился: '+(e&&e.message||e)); done&&done(false); });
+      }).catch(function(e){ alert('Файл не сохранился: '+(e&&e.message||e)); done&&done(false); });
     }
     function fillReceipts(kind, refId, el){
       fetch(WORKER+'/receipts-list?kind='+kind+'&refId='+encodeURIComponent(refId))
         .then(function(r){return r.json();}).then(function(j){
           var list=(j&&j.receipts)||[];
           el.innerHTML = list.length
-            ? list.map(function(r){ return '<a href="'+WORKER+'/receipt-get?id='+r.id+'" target="_blank">🧾</a>'; }).join(' ')
+            ? list.map(function(r){ var pdf=/\.pdf$/i.test(r.filename||''); return '<a href="'+WORKER+'/receipt-get?id='+r.id+'" target="_blank" title="'+(r.filename||'')+'">'+(pdf?'📄':'🧾')+'</a>'; }).join(' ')
             : '<span class="muted">нет</span>';
         }).catch(function(){ el.innerHTML='<span class="muted">?</span>'; });
     }
@@ -250,6 +266,14 @@
       app.innerHTML=h;
       [].forEach.call(document.querySelectorAll('.tab[data-tab]'), function(el){ el.onclick=function(){ TAB=this.getAttribute('data-tab'); TOOL_EDIT=null; render(); }; });
 
+      [].forEach.call(document.querySelectorAll('.rqfiles'), function(el){
+        fetch(WORKER+'/receipts-list?kind=req&refId='+encodeURIComponent(el.getAttribute('data-id')))
+          .then(function(r){return r.json();}).then(function(j){
+            var list=(j&&j.receipts)||[];
+            if(!list.length){ el.style.display='none'; return; }
+            el.innerHTML=list.map(function(r){ var pdf=/\.pdf$/i.test(r.filename||''); return '<a href="'+WORKER+'/receipt-get?id='+r.id+'" target="_blank" title="'+(r.filename||'')+'">'+(pdf?'📄':'📷')+'</a>'; }).join(' ');
+          }).catch(function(){ el.style.display='none'; });
+      });
       [].forEach.call(document.querySelectorAll('.rq'), function(b){
         b.onclick=function(){
           var id=+this.getAttribute('data-id'), st=this.getAttribute('data-st');
