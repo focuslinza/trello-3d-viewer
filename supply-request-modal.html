@@ -38,8 +38,14 @@
     <input type="text" id="fQty" placeholder="Сколько (например: 20 шт)">
     <input type="text" id="fComment" placeholder="Комментарий (для какого заказа, почему)">
     <input type="text" id="fLink" placeholder="Ссылка (пример товара в магазине, 2ГИС и т.п.)">
-    <label class="f" style="margin-top:12px">📷 Фото / PDF (чтобы снабженец сразу понял):
-      <input type="file" id="fFiles" accept="image/*,application/pdf" multiple></label>
+    <div style="margin-top:12px">
+      <div class="muted" style="margin-bottom:6px">📷 Фото / PDF (чтобы снабженец сразу понял):</div>
+      <button type="button" class="btn2" id="pCam" style="margin:0">📷 Камера</button>
+      <button type="button" class="btn2" id="pGal" style="margin:0 0 0 6px">📁 Файл</button>
+      <input type="file" id="pCamI" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="pGalI" accept="image/*,application/pdf" multiple style="display:none">
+      <div id="pList" class="muted" style="margin-top:6px"></div>
+    </div>
     <label class="f"><input type="checkbox" id="fUrgent"> 🔥 Срочно — работа стоит</label>
     <button class="btn" id="send" type="button">Отправить заявку</button><span id="msg"></span>
     <h3>Мои заявки</h3>
@@ -85,6 +91,24 @@
     }
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     var ME = { id:'', name:'' };
+    var PFILES = [];
+    function drawPend(){
+      var el=document.getElementById('pList');
+      el.innerHTML = PFILES.length
+        ? PFILES.map(function(f,i){ return '<span style="margin-right:10px">'+(f.type==='application/pdf'?'📄':'📷')+' '+String(f.name||'файл').replace(/[<>&"]/g,'')+' <a href="#" data-rm="'+i+'" style="color:#f28b82;text-decoration:none">✕</a></span>'; }).join('')
+        : '';
+      [].forEach.call(el.querySelectorAll('[data-rm]'), function(a){
+        a.onclick=function(ev){ ev.preventDefault(); PFILES.splice(+this.getAttribute('data-rm'),1); drawPend(); };
+      });
+    }
+    (function(){
+      var camI=document.getElementById('pCamI'), galI=document.getElementById('pGalI');
+      document.getElementById('pCam').onclick=function(){ camI.click(); };
+      document.getElementById('pGal').onclick=function(){ galI.click(); };
+      function add(inp){ [].forEach.call(inp.files||[], function(f){ PFILES.push(f); }); inp.value=''; drawPend(); }
+      camI.onchange=function(){ add(this); };
+      galI.onchange=function(){ add(this); };
+    })();
     var STATUS_LBL = { new:'ждёт', bought:'куплено', given:'выдано', rejected:'отклонена' };
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     document.getElementById('close').onclick=function(){ t.closeModal(); };
@@ -124,7 +148,7 @@
       if(!name){ alert('Напишите, что нужно купить.'); return; }
       var btn=this; btn.disabled=true;
       var msg=document.getElementById('msg'); msg.textContent='Отправка…'; msg.style.color='var(--muted)';
-      var files=[].slice.call((document.getElementById('fFiles')||{}).files||[]);
+      var files=PFILES.slice();
       fetch(WORKER+'/supply-request',{ method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ name:name, qty:document.getElementById('fQty').value.trim(),
           comment:document.getElementById('fComment').value.trim(),
@@ -153,7 +177,7 @@
         document.getElementById('fName').value=''; document.getElementById('fQty').value='';
         document.getElementById('fComment').value=''; document.getElementById('fLink').value='';
         document.getElementById('fUrgent').checked=false;
-        var ff=document.getElementById('fFiles'); if(ff) ff.value='';
+        PFILES=[]; drawPend();
         btn.disabled=false;
         loadMine();
       }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; btn.disabled=false; });

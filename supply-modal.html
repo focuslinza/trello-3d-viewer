@@ -140,13 +140,10 @@
           h+='<div><div class="lbl">'+esc(f[1])+'</div><input '+(isDateField(f[0])?'type="date"':'type="text"')+' id="tf_'+f[0]+'" value="'+esc(tv[f[0]]||'')+'" placeholder="'+esc(f[2]||'')+'"></div>';
         });
         h+='</div><button class="btn primary" id="tsave" type="button">💾 Сохранить</button> <button class="btn" id="tcancel" type="button">Отмена</button>';
-        if(tv.id){
-          h+='<h3>Чеки и документы</h3><div id="trec" class="muted">Загрузка…</div>'+
-             '<input type="file" id="tfile" accept="image/*,application/pdf" style="margin-top:8px">'+
-             '<div class="muted" style="margin-top:4px">Фото чека/гарантийника (сжимается само) или PDF до ~650 КБ.</div>';
-        } else {
-          h+='<div class="muted" style="margin-top:10px">Чеки можно будет прикрепить после сохранения.</div>';
-        }
+        h+='<h3>Чеки и документы</h3>';
+        if(tv.id) h+='<div id="trec" class="muted">Загрузка…</div>';
+        h+='<div style="margin-top:8px">'+pickerHtml('tp')+'</div>'+
+           '<div class="muted" style="margin-top:4px">Фото (сжимается само) или PDF до ~650 КБ. Выбранные файлы загрузятся при нажатии «Сохранить».</div>';
         return h;
       }
       if(!TOOLS.length) return '<div class="empty">Реестр пуст — добавьте первый инструмент.</div>'+
@@ -179,7 +176,8 @@
          '<div><div class="lbl">Дата</div><input type="date" id="cdate" value="'+fmtDate(new Date())+'"></div>'+
          '<div><div class="lbl">Сумма, ₸ *</div><input type="text" id="camount" placeholder="12500"></div>'+
          '<div><div class="lbl">На что *</div><input type="text" id="cwhat" placeholder="Диски отрезные"></div>'+
-         '<div><div class="lbl">Заметка</div><input type="text" id="cnote" placeholder=""></div></div>'+
+         '<div><div class="lbl">Заметка</div><input type="text" id="cnote" placeholder=""></div>'+
+         '<div><div class="lbl">Чек: фото или PDF</div>'+pickerHtml('cp')+'</div></div>'+
          '<button class="btn primary" id="cadd" type="button">+ Записать расход</button><span id="cmsg" class="muted" style="margin-left:8px"></span>';
       var entries=(CASH&&CASH.entries)||[];
       if(!entries.length) return h+'<div class="empty">Расходов за период нет.</div>';
@@ -219,6 +217,52 @@
         fr.onerror=reject;
         fr.readAsDataURL(file);
       });
+    }
+    // Файлы, выбранные ДО сохранения (по разделам): tp — инструмент, cp — наличные
+    var PEND = { tp: [], cp: [] };
+    function pickerHtml(p){
+      return '<button type="button" class="btn" id="'+p+'Cam">📷 Камера</button> '+
+             '<button type="button" class="btn" id="'+p+'Gal">📁 Файл</button>'+
+             '<input type="file" id="'+p+'CamI" accept="image/*" capture="environment" style="display:none">'+
+             '<input type="file" id="'+p+'GalI" accept="image/*,application/pdf" multiple style="display:none">'+
+             '<div id="'+p+'List" class="muted" style="margin-top:6px"></div>';
+    }
+    function drawPend(p){
+      var el=document.getElementById(p+'List'); if(!el) return;
+      el.innerHTML = PEND[p].length
+        ? PEND[p].map(function(f,i){ return '<span style="margin-right:10px">'+(f.type==='application/pdf'?'📄':'📷')+' '+String(f.name||'файл').replace(/[<>&"]/g,'')+' <a href="#" data-rm="'+i+'" style="color:#e8a59d;text-decoration:none">✕</a></span>'; }).join('')
+        : '';
+      [].forEach.call(el.querySelectorAll('[data-rm]'), function(a){
+        a.onclick=function(ev){ ev.preventDefault(); PEND[p].splice(+this.getAttribute('data-rm'),1); drawPend(p); };
+      });
+    }
+    function wirePicker(p){
+      var cam=document.getElementById(p+'Cam'), gal=document.getElementById(p+'Gal');
+      var camI=document.getElementById(p+'CamI'), galI=document.getElementById(p+'GalI');
+      if(!cam||!camI) return;
+      cam.onclick=function(){ camI.click(); };
+      gal.onclick=function(){ galI.click(); };
+      function add(inp){ [].forEach.call(inp.files||[], function(f){ PEND[p].push(f); }); inp.value=''; drawPend(p); }
+      camI.onchange=function(){ add(this); };
+      galI.onchange=function(){ add(this); };
+      drawPend(p);
+    }
+    // последовательная загрузка выбранных файлов к записи id; msgEl — куда писать прогресс
+    function uploadPending(kind, refId, p, msgEl){
+      var files=PEND[p].slice();
+      var chain=Promise.resolve();
+      files.forEach(function(f,i){
+        chain=chain.then(function(){
+          if(msgEl) msgEl.textContent='Файл '+(i+1)+' из '+files.length+'…';
+          return prepFile(f).then(function(pf){
+            return fetch(WORKER+'/receipt-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ kind:kind, refId:String(refId), filename:pf.filename, mime:pf.mime, dataB64:pf.b64 }) })
+              .then(function(r){return r.json();})
+              .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'файл не сохранился'); });
+          });
+        });
+      });
+      return chain.then(function(){ PEND[p]=[]; });
     }
     function fileToB64(file){
       return new Promise(function(res,rej){
@@ -300,16 +344,19 @@
       var ts=document.getElementById('tsave'); if(ts) ts.onclick=function(){
         TOOL_FIELDS.forEach(function(f){ var el=document.getElementById('tf_'+f[0]); if(el) TOOL_EDIT[f[0]]=el.value.trim(); });
         if(!TOOL_EDIT.name){ alert('Укажите наименование.'); return; }
+        var btn=this; btn.disabled=true;
         fetch(WORKER+'/tool-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:TOOL_EDIT})})
-          .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); TOOL_EDIT=null; loadAll(); })
-          .catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); });
+          .then(function(r){return r.json();}).then(function(j){
+            if(!j.ok) throw new Error(j.error);
+            return uploadPending('tool', j.id, 'tp', btn);
+          }).then(function(){ TOOL_EDIT=null; loadAll(); })
+          .catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); btn.disabled=false; btn.textContent='💾 Сохранить'; });
       };
       var tc=document.getElementById('tcancel'); if(tc) tc.onclick=function(){ TOOL_EDIT=null; render(); };
       var trec=document.getElementById('trec'); if(trec && TOOL_EDIT && TOOL_EDIT.id) fillReceipts('tool', TOOL_EDIT.id, trec);
-      var tfile=document.getElementById('tfile'); if(tfile) tfile.onchange=function(){
-        if(this.files && this.files[0]) uploadReceipt('tool', TOOL_EDIT.id, this.files[0], function(){ render(); });
-      };
+      wirePicker('tp');
 
+      wirePicker('cp');
       var capply=document.getElementById('capply'); if(capply) capply.onclick=function(){
         var f=document.getElementById('cfrom').value, t2=document.getElementById('cto').value;
         if(!f||!t2) return; if(f>t2){var tmp=f;f=t2;t2=tmp;}
@@ -321,10 +368,14 @@
         var date=document.getElementById('cdate').value;
         var msg=document.getElementById('cmsg');
         if(!(amount>0)||!what||!date){ msg.textContent='Заполните дату, сумму и «на что».'; return; }
+        var btn=this; btn.disabled=true;
         fetch(WORKER+'/cash-save',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({entry:{date:date,amount:amount,what:what,note:document.getElementById('cnote').value.trim()}})})
-          .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
-          .catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); });
+          .then(function(r){return r.json();}).then(function(j){
+            if(!j.ok) throw new Error(j.error);
+            return uploadPending('cash', j.id, 'cp', msg);
+          }).then(function(){ btn.disabled=false; loadAll(); })
+          .catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); btn.disabled=false; });
       };
       [].forEach.call(document.querySelectorAll('.cdel'), function(b){
         b.onclick=function(){ var id=+this.getAttribute('data-id');
