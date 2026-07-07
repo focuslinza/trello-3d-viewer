@@ -161,7 +161,7 @@
         html += '<div class="muted" style="margin:8px 0 12px;">Ничего не найдено. Можно добавить нового клиента.</div>';
       } else {
         matches.forEach(function (c) {
-          var isP = c.kind === 'person';
+          var isP = (c.type || c.kind) === 'person';
           html += '<div class="list-item" data-id="' + c.id + '">' +
             '<div><div class="ttl">' + CRM.esc(c.name) + (isP ? ' <span class="muted" style="font-size:12px">· физлицо</span>' : '') + '</div>' +
             '<div class="sub">' + (c.bin ? (isP ? 'ИИН ' : 'БИН ') + CRM.esc(c.bin) : '') +
@@ -194,7 +194,7 @@
       if (state.nearFull) {
         html += '<div class="warn">Справочник почти заполнен (лимит хранилища Trello). Скоро стоит перенести его в Cloudflare — скажите разработчику.</div>';
       }
-      var isPerson = company.kind === 'person';
+      var isPerson = (company.type || company.kind) === 'person';
       html += '<div class="company-head"><div class="nm">' + CRM.esc(company.name) + (isPerson ? ' <span class="muted" style="font-weight:normal;font-size:13px">· физлицо</span>' : '') + '</div><div class="req-grid">';
       if (company.bin) html += (isPerson ? 'ИИН: ' : 'БИН/ИИН: ') + CRM.esc(company.bin) + '<br>';
       if (company.addr) html += 'Адрес: ' + CRM.esc(company.addr) + '<br>';
@@ -320,36 +320,23 @@
     }
 
     // ---------- COMPANY FORM ----------
-    function labelFor(key, kind){
-      if(kind==='person'){
-        if(key==='name') return 'ФИО';
-        if(key==='bin') return 'ИИН';
-        if(key==='phone') return 'Телефон';
-        if(key==='addr') return 'Адрес (если нужен в счёте)';
-      }
-      return null; // use default from COMPANY_FIELDS
-    }
+    // Единый источник правды о полях по типу клиента — CRM.fieldsForType/CRM.CLIENT_TYPES
+    // (тот же самый, что использует окно CRM на доске). Раньше здесь была своя, отдельная
+    // копия этой логики с именем поля «kind» вместо «type» — из-за расхождения имени клиент,
+    // заведённый как физлицо в карточке, не распознавался как физлицо в окне CRM, и наоборот.
     function renderCompanyForm(company) {
       var isNew = !company;
       company = company || {};
-      var kind = company.kind || 'company';
+      var kind = company.type || company.kind || 'company';
       var html = '<h2>' + (isNew ? 'Новый клиент' : 'Реквизиты клиента') + '</h2>';
       html += '<div class="row"><label class="fld">Тип клиента</label>' +
-        '<select id="f_kind">' +
-        '<option value="company"' + (kind === 'company' ? ' selected' : '') + '>Компания (ТОО / ИП)</option>' +
-        '<option value="person"' + (kind === 'person' ? ' selected' : '') + '>Физлицо (частное лицо)</option>' +
-        '</select></div>';
-      CRM.COMPANY_FIELDS.forEach(function (f) {
-        if (f.type === 'checkbox') {
-          html += '<div class="row" id="wrap_' + f.key + '"><label class="check"><input type="checkbox" id="f_' + f.key + '" ' +
-            (company[f.key] ? 'checked' : '') + '/> ' + f.label + '</label></div>';
-        } else {
-          var lbl = labelFor(f.key, kind) || f.label;
-          html += '<div class="row" id="wrap_' + f.key + '"><label class="fld" id="lbl_' + f.key + '" for="f_' + f.key + '">' + lbl +
-            (f.required ? ' *' : '') + '</label>' +
-            '<input type="text" id="f_' + f.key + '" value="' + CRM.esc(company[f.key] || '') + '" placeholder="' + CRM.esc(f.placeholder || '') + '" /></div>';
-        }
+        '<select id="f_kind">';
+      CRM.CLIENT_TYPES.forEach(function(tp){
+        var extra = tp.key==='company' ? ' (ТОО / ИП)' : ' (частное лицо)';
+        html += '<option value="' + tp.key + '"' + (kind === tp.key ? ' selected' : '') + '>' + CRM.esc(tp.label + extra) + '</option>';
       });
+      html += '</select></div>';
+      html += '<div id="fieldsBox"></div>';
       html += '<div class="req-note">Эти данные потом подставятся в счёт на оплату автоматически.</div>';
       html += '<div class="btnbar">' +
         '<button class="btn" id="saveCompany">Сохранить</button>' +
@@ -358,23 +345,30 @@
       html += '</div>';
       app.innerHTML = html;
 
-      function applyKind(){
-        var k = document.getElementById('f_kind').value;
-        ['name','bin','phone','addr'].forEach(function(key){
-          var lblEl = document.getElementById('lbl_'+key);
-          if(!lblEl) return;
-          var f = CRM.COMPANY_FIELDS.filter(function(x){return x.key===key;})[0]||{};
-          var lbl = labelFor(key, k) || f.label;
-          lblEl.textContent = lbl + (f.required ? ' *' : '');
+      function drawFields(){
+        var box = document.getElementById('fieldsBox'); var fh = '';
+        CRM.fieldsForType(document.getElementById('f_kind').value).forEach(function (f) {
+          if (f.type === 'checkbox') {
+            fh += '<div class="row"><label class="check"><input type="checkbox" id="f_' + f.key + '" ' +
+              (company[f.key] ? 'checked' : '') + '/> ' + CRM.esc(f.label) + '</label></div>';
+          } else {
+            fh += '<div class="row"><label class="fld" for="f_' + f.key + '">' + CRM.esc(f.label) +
+              (f.required ? ' *' : '') + '</label>' +
+              '<input type="text" id="f_' + f.key + '" value="' + CRM.esc(company[f.key] || '') + '" placeholder="' + CRM.esc(f.placeholder || '') + '" /></div>';
+          }
         });
-        // company-only banking fields are hidden for a private person
-        ['iban','bank','bik','nds'].forEach(function(key){
-          var w = document.getElementById('wrap_'+key);
-          if(w) w.style.display = (k==='person') ? 'none' : '';
-        });
+        box.innerHTML = fh;
       }
-      document.getElementById('f_kind').addEventListener('change', applyKind);
-      applyKind();
+      drawFields();
+      document.getElementById('f_kind').addEventListener('change', function(){
+        // переносим уже введённые общие поля, лишние для нового типа — не сохраняем
+        var oldFields = CRM.fieldsForType(kind);
+        oldFields.forEach(function(f){ var el=document.getElementById('f_'+f.key); if(el) company[f.key]=(f.type==='checkbox')?el.checked:el.value; });
+        var newKeys = CRM.fieldsForType(this.value).map(function(f){return f.key;});
+        oldFields.forEach(function(f){ if(newKeys.indexOf(f.key)<0) delete company[f.key]; });
+        kind = this.value;
+        drawFields();
+      });
 
       document.getElementById('saveCompany').addEventListener('click', function () { saveCompany(company); });
       document.getElementById('cancel').addEventListener('click', function () { renderHome(); });
@@ -386,14 +380,14 @@
     function saveCompany(existing) {
       var company = { id: existing.id || CRM.newId(), contacts: existing.contacts || [], objects: existing.objects || [] };
       var kindEl = document.getElementById('f_kind');
-      company.kind = (kindEl && kindEl.value) || 'company';
-      CRM.COMPANY_FIELDS.forEach(function (f) {
+      company.type = (kindEl && kindEl.value) || 'company';
+      CRM.fieldsForType(company.type).forEach(function (f) {
         var el = document.getElementById('f_' + f.key);
         if (!el) return;
         if (f.type === 'checkbox') company[f.key] = !!el.checked;
         else company[f.key] = (el.value || '').trim();
       });
-      if (!company.name) { alert(company.kind === 'person' ? 'Укажите ФИО.' : 'Укажите название компании.'); return; }
+      if (!company.name) { alert(company.type === 'person' ? 'Укажите ФИО.' : 'Укажите название компании.'); return; }
 
       CRM.upsertCompany(t, company).then(function (r) {
         state.nearFull = r.info && r.info.nearFull;

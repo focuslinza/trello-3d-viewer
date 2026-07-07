@@ -89,7 +89,7 @@
         var st=ORDERS_CACHE[c.id];
         var stats = (st && st.totals) ? ('<div class="rev">'+money(st.totals.revenue)+' ₸ · '+st.totals.orders+' зак.</div>'+
           (st.totals.unpaidRev>0?('<div class="debt">долг '+money(st.totals.unpaidRev)+' ₸</div>'):'<div class="ok">долгов нет</div>')) : '<div class="muted">…</div>';
-        var isPerson = c.type==='person';
+        var isPerson = (c.type||c.kind)==='person';
         h+='<div class="crow" data-id="'+esc(c.id)+'"><div><div class="nm">'+esc(c.name||'(без названия)')+
            (isPerson?' <span class="muted" style="font-weight:400;font-size:11.5px;border:1px solid var(--line);border-radius:8px;padding:1px 7px">частное лицо</span>':'')+'</div>'+
            '<div class="sub">'+esc([c.bin?((isPerson?'ИИН ':'БИН ')+c.bin):'', c.phone||''].filter(Boolean).join(' · '))+'</div></div>'+
@@ -115,11 +115,11 @@
       if(!c){ VIEW.mode='list'; return renderList(); }
       var app=document.getElementById('app');
       var h='<h2>'+esc(c.name||'(без названия)')+
-        (c.type==='person'?' <span class="muted" style="font-weight:400;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:2px 9px">частное лицо</span>':'')+'</h2>';
+        ((c.type||c.kind)==='person'?' <span class="muted" style="font-weight:400;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:2px 9px">частное лицо</span>':'')+'</h2>';
       h+='<div id="ordersBlock"><div class="muted">Загружаю заказы…</div></div>';
       // реквизиты — набор полей зависит от типа клиента
       h+='<h3>Реквизиты</h3><div class="grid2">';
-      CRM.fieldsForType(c.type).forEach(function(f){
+      CRM.fieldsForType(c.type||c.kind).forEach(function(f){
         if(f.type==='checkbox'){ h+='<div><div class="lbl">'+esc(f.label)+'</div>'+(c[f.key]?'Да':'Нет')+'</div>'; }
         else if(c[f.key]){ h+='<div><div class="lbl">'+esc(f.label)+'</div>'+esc(c[f.key])+'</div>'; }
       });
@@ -183,7 +183,8 @@
     function openEdit(c){
       var isNew=!c;
       c = c ? JSON.parse(JSON.stringify(c)) : { id: CRM.newId(), type:'company', contacts: [], objects: [] };
-      if(!c.type) c.type='company'; // старые записи без типа — по умолчанию юрлицо
+      if(!c.type) c.type = c.kind || 'company'; // подхватываем тип и из старого поля kind (карточка), и по умолчанию юрлицо
+      delete c.kind; // впредь пишем только в type — единое поле для карточки и окна CRM
       var app=document.getElementById('app');
       var h='<h2>'+(isNew?'Новый клиент':'Редактировать клиента')+'</h2>';
       h+='<div class="lbl">Тип клиента</div><div style="display:flex;gap:8px;margin:4px 0 14px">';

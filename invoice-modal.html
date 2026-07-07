@@ -106,14 +106,21 @@
     });
   }
 
-  // pull the full company directory + this card's linked company via the worker bridge
+  // Привязка «эта карточка -> этот клиент» — по-прежнему маленькая метка в pluginData карточки
+  // (не переносилась в D1, там нет проблемы объёма). А вот САМ справочник клиентов теперь
+  // живёт в D1 (см. CRM) — берём его оттуда тем же способом, что окно CRM и карточка «Компания
+  // и контакты», а не из старого board-pluginData /plugindata, которое CRM очищает при переносе.
   function loadDirectory(){
     var u = WORKER+'/plugindata?cardId='+encodeURIComponent(ctx.cardId)+(ctx.boardId?'&boardId='+encodeURIComponent(ctx.boardId):'');
-    return fetch(u).then(function(r){ ctx._http=r.status; return r.json(); }).then(function(j){
-      var cd=(j&&j.cardData)||{}, bd=(j&&j.boardData)||{};
+    return Promise.all([
+      fetch(u).then(function(r){ ctx._http=r.status; return r.json(); }).catch(function(e){ return { _err:(e&&e.message||'сеть') }; }),
+      fetch(WORKER+'/companies-list').then(function(r){return r.json();}).catch(function(e){ return { ok:false, _err:(e&&e.message||'сеть') }; })
+    ]).then(function(res){
+      var j=res[0], j2=res[1];
+      var cd=(j&&j.cardData)||{};
       ctx.cardCompanyId = cd.companyId||null;
-      ctx.allCompanies = (Array.isArray(bd.companies)?bd.companies:[]).slice().sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||'')); });
-      ctx._diag = { http:ctx._http, ok:!!(j&&j.ok), companyId:ctx.cardCompanyId, companies:ctx.allCompanies.length };
+      ctx.allCompanies = ((j2&&j2.ok&&j2.companies)||[]).slice().sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||'')); });
+      ctx._diag = { http:ctx._http, ok:!!(j&&j.ok), d1ok:!!(j2&&j2.ok), companyId:ctx.cardCompanyId, companies:ctx.allCompanies.length };
       // default selected = card's company if it exists in the directory
       if(ctx.cardCompanyId && ctx.allCompanies.some(function(c){return c.id===ctx.cardCompanyId;})) selectedCompanyId=ctx.cardCompanyId;
       else if(ctx.allCompanies.length) selectedCompanyId=ctx.allCompanies[0].id;
@@ -123,7 +130,7 @@
   function companyById(id){ return ctx.allCompanies.filter(function(c){return c.id===id;})[0]||null; }
   function setBuyerFromSelected(){
     var co=companyById(selectedCompanyId);
-    ctx.buyer = co ? { name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'', kind:co.kind||'company' } : null;
+    ctx.buyer = co ? { name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'', kind:(co.type||co.kind||'company') } : null;
   }
 
   // load ALL saved calculations once; we split them into "this client" vs "unlinked"
@@ -186,7 +193,7 @@
     if(ctx.allCompanies.length){
       html+='<div class="fld" style="max-width:520px"><label>Клиент-плательщик (из «Компания и контакты»)</label>'+
             '<select id="buyerSel">'+ctx.allCompanies.map(function(c){
-              return '<option value="'+esc(c.id)+'"'+(c.id===selectedCompanyId?' selected':'')+'>'+esc(c.name||'(без имени)')+(c.kind==='person'?' — физлицо':'')+'</option>';
+              return '<option value="'+esc(c.id)+'"'+(c.id===selectedCompanyId?' selected':'')+'>'+esc(c.name||'(без имени)')+((c.type||c.kind)==='person'?' — физлицо':'')+'</option>';
             }).join('')+'</select></div>';
       if(ctx.buyer){
         var isP = ctx.buyer.kind==='person';
