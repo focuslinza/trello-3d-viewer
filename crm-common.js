@@ -148,6 +148,8 @@ window.CRM = (function () {
   }
 
   // ---- field labels (for the company form / invoice later) ----
+  // Поля клиента зависят от типа: «Юрлицо» (компания) или «Частное лицо».
+  // Реквизиты для расчётов (IBAN/банк/БИК/НДС) есть только у юрлиц — у частных лиц их нет и не просят.
   var COMPANY_FIELDS = [
     { key: 'name', label: 'Название компании', placeholder: 'ТОО «Альфа»', required: true },
     { key: 'bin', label: 'БИН / ИИН', placeholder: '123456789012' },
@@ -158,6 +160,15 @@ window.CRM = (function () {
     { key: 'bik', label: 'БИК', placeholder: 'CASPKZKA' },
     { key: 'nds', label: 'Плательщик НДС', type: 'checkbox' }
   ];
+  var PERSON_FIELDS = [
+    { key: 'name', label: 'ФИО', placeholder: 'Иванов Иван Иванович', required: true },
+    { key: 'bin', label: 'ИИН', placeholder: '123456789012' },
+    { key: 'addr', label: 'Адрес', placeholder: 'г. Алматы, ул. ...' },
+    { key: 'phone', label: 'Телефон', placeholder: '+7 701 123 45 67' }
+  ];
+  var CLIENT_TYPES = [ { key:'company', label:'Юрлицо' }, { key:'person', label:'Частное лицо' } ];
+  function fieldsForType(type){ return type === 'person' ? PERSON_FIELDS : COMPANY_FIELDS; }
+  function typeLabel(type){ return type === 'person' ? 'Частное лицо' : 'Юрлицо'; }
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -184,6 +195,10 @@ window.CRM = (function () {
     telLink: telLink,
     mapUrls: mapUrls,
     COMPANY_FIELDS: COMPANY_FIELDS,
+    PERSON_FIELDS: PERSON_FIELDS,
+    CLIENT_TYPES: CLIENT_TYPES,
+    fieldsForType: fieldsForType,
+    typeLabel: typeLabel,
     esc: esc
   };
 })();

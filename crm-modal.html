@@ -89,8 +89,10 @@
         var st=ORDERS_CACHE[c.id];
         var stats = (st && st.totals) ? ('<div class="rev">'+money(st.totals.revenue)+' ₸ · '+st.totals.orders+' зак.</div>'+
           (st.totals.unpaidRev>0?('<div class="debt">долг '+money(st.totals.unpaidRev)+' ₸</div>'):'<div class="ok">долгов нет</div>')) : '<div class="muted">…</div>';
-        h+='<div class="crow" data-id="'+esc(c.id)+'"><div><div class="nm">'+esc(c.name||'(без названия)')+'</div>'+
-           '<div class="sub">'+esc([c.bin?('БИН '+c.bin):'', c.phone||''].filter(Boolean).join(' · '))+'</div></div>'+
+        var isPerson = c.type==='person';
+        h+='<div class="crow" data-id="'+esc(c.id)+'"><div><div class="nm">'+esc(c.name||'(без названия)')+
+           (isPerson?' <span class="muted" style="font-weight:400;font-size:11.5px;border:1px solid var(--line);border-radius:8px;padding:1px 7px">частное лицо</span>':'')+'</div>'+
+           '<div class="sub">'+esc([c.bin?((isPerson?'ИИН ':'БИН ')+c.bin):'', c.phone||''].filter(Boolean).join(' · '))+'</div></div>'+
            '<div class="stats">'+stats+'</div></div>';
       });
       h+='</div>';
@@ -112,11 +114,12 @@
       var c=LIST.filter(function(x){return x.id===VIEW.companyId;})[0];
       if(!c){ VIEW.mode='list'; return renderList(); }
       var app=document.getElementById('app');
-      var h='<h2>'+esc(c.name||'(без названия)')+'</h2>';
+      var h='<h2>'+esc(c.name||'(без названия)')+
+        (c.type==='person'?' <span class="muted" style="font-weight:400;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:2px 9px">частное лицо</span>':'')+'</h2>';
       h+='<div id="ordersBlock"><div class="muted">Загружаю заказы…</div></div>';
-      // реквизиты
+      // реквизиты — набор полей зависит от типа клиента
       h+='<h3>Реквизиты</h3><div class="grid2">';
-      CRM.COMPANY_FIELDS.forEach(function(f){
+      CRM.fieldsForType(c.type).forEach(function(f){
         if(f.type==='checkbox'){ h+='<div><div class="lbl">'+esc(f.label)+'</div>'+(c[f.key]?'Да':'Нет')+'</div>'; }
         else if(c[f.key]){ h+='<div><div class="lbl">'+esc(f.label)+'</div>'+esc(c[f.key])+'</div>'; }
       });
@@ -179,21 +182,47 @@
     // редактирование: простая форма по COMPANY_FIELDS + контакты
     function openEdit(c){
       var isNew=!c;
-      c = c ? JSON.parse(JSON.stringify(c)) : { id: CRM.newId(), contacts: [], objects: [] };
+      c = c ? JSON.parse(JSON.stringify(c)) : { id: CRM.newId(), type:'company', contacts: [], objects: [] };
+      if(!c.type) c.type='company'; // старые записи без типа — по умолчанию юрлицо
       var app=document.getElementById('app');
-      var h='<h2>'+(isNew?'Новый клиент':'Редактировать клиента')+'</h2><div class="grid2">';
-      CRM.COMPANY_FIELDS.forEach(function(f){
-        if(f.type==='checkbox'){
-          h+='<div><div class="lbl">'+esc(f.label)+'</div><label><input type="checkbox" id="f_'+f.key+'"'+(c[f.key]?' checked':'')+'> Да</label></div>';
-        } else {
-          h+='<div><div class="lbl">'+esc(f.label)+(f.required?' *':'')+'</div><input class="search" style="margin:0" type="text" id="f_'+f.key+'" value="'+esc(c[f.key]||'')+'" placeholder="'+esc(f.placeholder||'')+'"></div>';
-        }
+      var h='<h2>'+(isNew?'Новый клиент':'Редактировать клиента')+'</h2>';
+      h+='<div class="lbl">Тип клиента</div><div style="display:flex;gap:8px;margin:4px 0 14px">';
+      CRM.CLIENT_TYPES.forEach(function(tp){
+        h+='<label style="display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer">'+
+           '<input type="radio" name="ctype" value="'+tp.key+'"'+(c.type===tp.key?' checked':'')+'> '+esc(tp.label)+'</label>';
       });
-      h+='</div>';
-      h+='<h3>Контактные лица</h3><div id="cts"></div><button class="btn" id="addP" type="button">+ Контакт</button>';
-      h+='<div style="margin-top:18px"><button class="btn primary" id="saveC" type="button">💾 Сохранить</button> <button class="btn" id="cancelC" type="button">Отмена</button></div>';
+      h+='</div><div id="fieldsBox" class="grid2"></div>';
       app.innerHTML=h;
       document.getElementById('back').style.display='';
+
+      function drawFields(){
+        var box=document.getElementById('fieldsBox'); var fh='';
+        CRM.fieldsForType(c.type).forEach(function(f){
+          if(f.type==='checkbox'){
+            fh+='<div><div class="lbl">'+esc(f.label)+'</div><label><input type="checkbox" id="f_'+f.key+'"'+(c[f.key]?' checked':'')+'> Да</label></div>';
+          } else {
+            fh+='<div><div class="lbl">'+esc(f.label)+(f.required?' *':'')+'</div><input class="search" style="margin:0" type="text" id="f_'+f.key+'" value="'+esc(c[f.key]||'')+'" placeholder="'+esc(f.placeholder||'')+'"></div>';
+          }
+        });
+        box.innerHTML=fh;
+      }
+      drawFields();
+      [].forEach.call(document.querySelectorAll('input[name="ctype"]'), function(r){
+        r.onchange=function(){
+          // сохраняем то, что уже ввели в общих полях (имя/адрес/телефон)…
+          var oldFields=CRM.fieldsForType(c.type);
+          oldFields.forEach(function(f){ var el=document.getElementById('f_'+f.key); if(el) c[f.key]=(f.type==='checkbox')?el.checked:el.value; });
+          var newType=this.value, newKeys=CRM.fieldsForType(newType).map(function(f){return f.key;});
+          // …а поля, которых нет у нового типа (например IBAN/банк/БИК/НДС у частного лица), удаляем совсем,
+          // чтобы «пустой хвост» от юрлица не сохранился в записи частного лица
+          oldFields.forEach(function(f){ if(newKeys.indexOf(f.key)<0) delete c[f.key]; });
+          c.type=newType;
+          drawFields();
+        };
+      });
+      var ctsHtml = '<h3>Контактные лица</h3><div id="cts"></div><button class="btn" id="addP" type="button">+ Контакт</button>'+
+        '<div style="margin-top:18px"><button class="btn primary" id="saveC" type="button">💾 Сохранить</button> <button class="btn" id="cancelC" type="button">Отмена</button></div>';
+      document.getElementById('app').insertAdjacentHTML('beforeend', ctsHtml);
       function drawContacts(){
         var el=document.getElementById('cts'); var ch='';
         (c.contacts||[]).forEach(function(p,i){
@@ -215,11 +244,11 @@
       document.getElementById('addP').onclick=function(){ (c.contacts=c.contacts||[]).push({id:CRM.newId(),name:'',role:'',phone:''}); drawContacts(); };
       document.getElementById('cancelC').onclick=function(){ render(); };
       document.getElementById('saveC').onclick=function(){
-        CRM.COMPANY_FIELDS.forEach(function(f){
+        CRM.fieldsForType(c.type).forEach(function(f){
           var el=document.getElementById('f_'+f.key); if(!el) return;
           c[f.key]=(f.type==='checkbox')?el.checked:el.value.trim();
         });
-        if(!c.name){ alert('Укажите название компании.'); return; }
+        if(!c.name){ alert(c.type==='person' ? 'Укажите ФИО.' : 'Укажите название компании.'); return; }
         c.contacts=(c.contacts||[]).filter(function(p){ return (p.name||p.phone); });
         var btn=this; btn.disabled=true; btn.textContent='Сохранение…';
         CRM.upsertCompany(t, c).then(function(){ return reload(); }).then(function(){
