@@ -391,13 +391,29 @@
         if(res.j.cardNumber) ctx.cardNumber = res.j.cardNumber;  // from "Card Number" field
         dxfMetrics = cd.dxfMetrics || {};
         var cid=cd.companyId;
-        if(cid && Array.isArray(bd.companies)){
-          var co=bd.companies.filter(function(x){return x.id===cid;})[0];
-          if(co){
-            ctx.companyId=cid; ctx.companyName=co.name||'';
-            var oid=cd.objectId;
-            if(oid && co.objects){ var o=co.objects.filter(function(x){return x.id===oid;})[0]; if(o) ctx.objectName=o.name||''; }
-          }
+        if(cid){
+          // Справочник клиентов теперь живёт в D1 (см. CRM) — старое board-pluginData
+          // (bd.companies) CRM очищает после переноса, поэтому там компанию больше не
+          // найти. Раньше расчёт из-за этого сохранялся БЕЗ привязки к клиенту вообще,
+          // даже если клиент был явно выбран на карточке — заказ уходил в "без привязки".
+          return fetch(WORKER+'/companies-list').then(function(r){return r.json();}).then(function(j2){
+            var list = (j2&&j2.ok&&j2.companies) || (Array.isArray(bd.companies)?bd.companies:[]);
+            var co = list.filter(function(x){return x.id===cid;})[0];
+            if(co){
+              ctx.companyId=cid; ctx.companyName=co.name||'';
+              var oid=cd.objectId;
+              if(oid && co.objects){ var o=co.objects.filter(function(x){return x.id===oid;})[0]; if(o) ctx.objectName=o.name||''; }
+            }
+          }).catch(function(){
+            // D1 недоступна (сеть) — используем старый список с доски как последний резерв
+            var list = Array.isArray(bd.companies) ? bd.companies : [];
+            var co = list.filter(function(x){return x.id===cid;})[0];
+            if(co){
+              ctx.companyId=cid; ctx.companyName=co.name||'';
+              var oid=cd.objectId;
+              if(oid && co.objects){ var o=co.objects.filter(function(x){return x.id===oid;})[0]; if(o) ctx.objectName=o.name||''; }
+            }
+          });
         }
       } else if(res.netErr){
         ctx._diag='Не удалось обратиться к Worker /plugindata: '+res.netErr+'. Проверьте, что Worker задеплоен.';
