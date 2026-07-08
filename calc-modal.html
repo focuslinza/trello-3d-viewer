@@ -35,6 +35,8 @@
     .chk { display:flex; align-items:center; gap:6px; height:32px; }
     .pull { background:#0c66e4; color:#fff; border:none; border-radius:4px; padding:7px 14px; font-size:12px; font-weight:600; cursor:pointer; height:34px; }
     .resetBtn { background:transparent; color:#e8a59d; border:1px solid #7a3a32; border-radius:4px; padding:7px 14px; font-size:12px; font-weight:600; cursor:pointer; height:34px; }
+    .resetAutoBtn { color:#e8c07d; border-color:#6b5620; }
+    .resetAutoBtn:hover { background:#3a3020; }
     .resetBtn:hover { background:#3a2320; }
     .pull:hover { background:#0055cc; }
     .pull.ghost { background:transparent; color:#0c66e4; border:1px solid #0c66e4; }
@@ -81,6 +83,7 @@
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
       <button class="resetBtn" id="resetAll" type="button" title="Удалить все строки работ/материалов/компонентов и начать заново">↺ Сбросить расчёт</button>
+      <button class="resetBtn resetAutoBtn" id="resetAuto" type="button" title="Удалить только строки, добавленные автоматически из DXF — ручные строки и компоненты не трогает">↺ Сбросить автоматическое</button>
       <span class="hint" id="dxfHint"></span>
     </div>
     <div id="dxfBreakdown"></div>
@@ -593,6 +596,18 @@
       [].slice.call(matLines.children).forEach(function(r){ r.remove(); });
       [].slice.call(cmpLines.children).forEach(function(r){ r.remove(); });
       document.getElementById('dxfHint').textContent='Расчёт очищен. Нажмите «Загрузить из DXF» или добавьте строки вручную.';
+      recompute();
+    };
+    document.getElementById('resetAuto').onclick=function(){
+      var autoOp = opLines.querySelectorAll('[data-dxf]').length;
+      var autoMat = matLines.querySelectorAll('[data-dxf]').length;
+      var n = autoOp + autoMat;
+      if(!n){ document.getElementById('dxfHint').textContent='Автоматических строк нет — сбрасывать нечего (возможно, они были внесены ещё до появления этой метки — тогда используйте «Сбросить расчёт» целиком).'; return; }
+      if(!confirm('Удалить строки, добавленные автоматически из DXF ('+n+' шт.)? Ручные строки и компоненты останутся нетронутыми. Это не сохранится, пока вы не нажмёте «Сохранить».')) return;
+      [].slice.call(opLines.querySelectorAll('[data-dxf]')).forEach(function(r){ r.remove(); });
+      [].slice.call(matLines.querySelectorAll('[data-dxf]')).forEach(function(r){ r.remove(); });
+      document.getElementById('dxfBreakdown').innerHTML='';
+      document.getElementById('dxfHint').textContent='Автоматические строки удалены ('+n+' шт.). Нажмите «Загрузить из DXF», чтобы добавить их заново.';
       recompute();
     };
     function nearestTh(th){ var best=TH[0],bd=1e9; TH.forEach(function(x){var d=Math.abs(x-th); if(d<bd){bd=d;best=x;}}); return best; }
