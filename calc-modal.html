@@ -48,6 +48,9 @@
     .breakdown td.new { color:#c7d1db; font-weight:600; }
     .breakdown .fn { max-width:220px; overflow:hidden; text-overflow:ellipsis; }
     .breakdown .savings { padding:8px 10px; background:#1c3329; color:#4bce97; font-size:12.5px; font-weight:600; }
+    .ratenote { font-size:11.5px; color:#9fadbc; background:#20262b; border:1px solid #3a414a; border-radius:6px; padding:7px 10px; margin-bottom:6px; line-height:1.5; }
+    .ratenote b { color:#e8c07d; }
+    .samepill { display:inline-block; background:#2c333a; color:#9fadbc; border-radius:8px; padding:0 6px; font-size:10px; font-weight:700; cursor:help; }
     /* sticky total bar */
     #bar { position:fixed; left:0; right:0; bottom:0; background:var(--bg); border-top:1px solid var(--line); padding:10px 16px; }
     #bar .inner { max-width:1000px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:14px; }
@@ -448,6 +451,20 @@
       (bulkRes.lineItems||[]).forEach(function(li){ if(li.group==='op') bulkTotalByKey[li.kind+'|'+li.thickness]=li.lineTotal; });
       groupOps.forEach(function(o){ qtyByKey[o.kind+'|'+o.thickness]=o.qty; });
 
+      // Единый тариф ₸/ед по каждой группе (вид+толщина) — именно ОДНА эта ставка
+      // применяется к КАЖДОМУ файлу группы в столбце "по опту". Если у файла своя
+      // цена не изменилась — значит его СОБСТВЕННЫЙ объём уже и так давал такую же
+      // (лучшую) ставку сам по себе, объединять было незачем; показываем это явно,
+      // чтобы не приходилось пересчитывать вручную, откуда взялась экономия.
+      var rateByKey={};
+      Object.keys(qtyByKey).forEach(function(key){ var q=qtyByKey[key]; if(q>0) rateByKey[key]=CALC.opRate('CB', +key.split('|')[1], q); });
+      var legend='';
+      Object.keys(qtyByKey).forEach(function(key){
+        var parts=key.split('|'); var kind=parts[0], th=+parts[1];
+        var lbl=(CALC.KIND[kind]&&CALC.KIND[kind].lbl)||kind;
+        legend += '<div class="ratenote">Тариф по опту — '+escHtml(lbl)+' '+th+' мм: <b>'+fmt(rateByKey[key])+' ₸/ед</b> (общий объём '+fmt2(qtyByKey[key])+', порог «'+tierLabel(+key.split('|')[1], qtyByKey[key])+'»). Эта ставка одна и та же для каждого файла ниже — если цена файла не изменилась, значит его собственный объём уже и сам по себе давал такую ставку.</div>';
+      });
+
       var rows='', sumNaive=0, sumBulk=0;
       perFileOps.forEach(function(o,i){
         var key=o.kind+'|'+o.thickness;
@@ -456,15 +473,22 @@
         var bulkShare = groupQty>0 ? (o.qty/groupQty)*groupTotal : 0;
         sumNaive+=naive; sumBulk+=bulkShare;
         var lbl = (CALC.KIND[o.kind]&&CALC.KIND[o.kind].lbl) || o.kind;
+        var changed = Math.abs(naive-bulkShare) > 0.5;
         rows += '<tr><td class="fn" title="'+escHtml(o.fileName)+'">'+escHtml(o.fileName)+'</td><td>'+escHtml(lbl)+'</td>'+
           '<td class="num">'+o.thickness+' мм</td><td class="num">'+o.qty+'</td>'+
-          '<td class="num old">'+fmt(naive)+' ₸</td><td class="num new">'+fmt(bulkShare)+' ₸</td></tr>';
+          '<td class="num old">'+fmt(naive)+' ₸</td><td class="num new">'+fmt(bulkShare)+' ₸'+(changed?'':' <span class="samepill" title="Этот файл сам по себе уже был в лучшем тарифе — объединение ему ничего не изменило">=</span>')+'</td></tr>';
       });
       var savings = sumNaive-sumBulk;
       var pct = sumNaive>0 ? (savings/sumNaive*100) : 0;
-      box.innerHTML = '<div class="breakdown"><table><thead><tr><th>Файл</th><th>Операция</th><th>Толщина</th><th>Кол-во</th>'+
+      box.innerHTML = legend+'<div class="breakdown"><table><thead><tr><th>Файл</th><th>Операция</th><th>Толщина</th><th>Кол-во</th>'+
         '<th>Цена поштучно (было)</th><th>Цена по опту (сейчас)</th></tr></thead><tbody>'+rows+'</tbody></table>'+
         '<div class="savings">Экономия за счёт объединения партий в опт: '+fmt(savings)+' ₸ ('+pct.toFixed(1)+'%) — именно на эту сумму раньше был бы завышен счёт и заработок резчика/гибщика.</div></div>';
+    }
+
+    function tierLabel(th, qty){
+      var tiers=[1,20,100,500], labels=['до 20','от 20 до 100','от 100 до 500','от 500'];
+      var idx=0; for(var i=0;i<tiers.length;i++) if(qty>=tiers[i]) idx=i;
+      return labels[idx];
     }
 
     function doPullFromMetrics(){
