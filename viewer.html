@@ -2,9 +2,10 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>3D Model Viewer</title>
+  <title>3D Просмотр STEP</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/occt-import-js.js"></script>
+  <script src="./step-geom.js"></script>
   <script type="importmap">
   {
     "imports": {
@@ -17,16 +18,12 @@
     html, body {
       margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      /* light studio gradient */
       background: linear-gradient(180deg, #f6f9fc 0%, #dde5ee 60%, #cdd6e1 100%);
     }
     #viewer-root { position: fixed; inset: 0; }
     #canvas-holder { position: absolute; inset: 0; }
     canvas { display: block; width: 100%; height: 100%; }
-
-    #toolbar {
-      position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 5; flex-wrap: wrap;
-    }
+    #toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 5; flex-wrap: wrap; }
     .tb-btn {
       background: rgba(23,43,77,0.92); color: #fff; border: 1px solid rgba(255,255,255,0.18);
       border-radius: 5px; padding: 7px 11px; font-size: 12px; cursor: pointer; user-select: none;
@@ -36,38 +33,29 @@
     .tb-btn:active { background: #0a4fb0; color: #fff; }
     .tb-btn.active { background: #0c66e4; border-color: #0c66e4; color: #fff; }
     .tb-btn.active:hover, .tb-btn.active:focus { background: #1d74f0; color: #fff; }
-    .tb-btn[hidden] { display: none; }
-
-    #legend {
-      position: absolute; top: 10px; right: 10px; z-index: 5;
-      background: rgba(255,255,255,0.92); border: 1px solid #d4dce6; border-radius: 6px;
-      padding: 6px 9px; font-size: 11px; color: #243b53; display: none; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
-    }
-    #legend .row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
-    #legend .swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
-
     #measure-readout {
       position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 6;
       background: rgba(23,43,77,0.92); color: #fff; border-radius: 8px; padding: 8px 14px;
       font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); display: none; text-align: center;
     }
     #measure-readout .big { font-size: 17px; font-weight: 700; }
+    #measure-readout .sub { font-size: 12.5px; opacity: 0.85; margin-top: 2px; }
     #measure-readout .hint { font-size: 11px; opacity: 0.8; margin-top: 2px; }
-
-    #info {
-      position: absolute; bottom: 10px; left: 10px; color: #5b6b7f; font-size: 11px; z-index: 5; pointer-events: none;
+    #measure-readout .warn { font-size: 11px; color: #ffd580; margin-top: 4px; }
+    #info { position: absolute; bottom: 10px; left: 10px; color: #5b6b7f; font-size: 11px; z-index: 5; pointer-events: none; }
+    #hoverHint {
+      position: absolute; top: 10px; right: 10px; z-index: 5;
+      background: rgba(255,255,255,0.92); border: 1px solid #d4dce6; border-radius: 6px;
+      padding: 6px 10px; font-size: 11px; color: #243b53; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+      display: none; pointer-events: none;
     }
-
     #overlay {
       position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
       flex-direction: column; gap: 10px; color: #243b53; text-align: center; padding: 24px;
       box-sizing: border-box; z-index: 10; background: rgba(246,249,252,0.82);
     }
     #overlay.hidden { display: none; }
-    .spinner {
-      width: 34px; height: 34px; border-radius: 50%;
-      border: 3px solid rgba(12,102,228,0.25); border-top-color: #0c66e4; animation: spin 0.8s linear infinite;
-    }
+    .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(12,102,228,0.25); border-top-color: #0c66e4; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     #overlay-text { font-size: 13px; color: #46586e; max-width: 480px; }
     #overlay-title { font-size: 15px; font-weight: 600; }
@@ -76,23 +64,17 @@
 <body>
   <div id="viewer-root">
     <div id="canvas-holder"></div>
-
     <div id="toolbar" style="display:none;">
       <button class="tb-btn" id="btn-reset">Сбросить вид</button>
-      <button class="tb-btn" id="btn-measure">Измерить</button>
+      <button class="tb-btn" id="btn-measure">Расстояние</button>
+      <button class="tb-btn" id="btn-angle">Угол</button>
+      <button class="tb-btn" id="btn-radius">Радиус</button>
       <button class="tb-btn" id="btn-wireframe">Каркас</button>
       <button class="tb-btn active" id="btn-grid">Сетка</button>
-      <button class="tb-btn active" id="btn-travel" hidden>Холостые ходы</button>
     </div>
-
-    <div id="legend">
-      <div class="row"><span class="swatch" style="background:#d2691e;"></span>Рез / рабочий ход</div>
-      <div class="row"><span class="swatch" style="background:#3b5bdb;"></span>Холостой ход</div>
-    </div>
-
+    <div id="hoverHint"></div>
     <div id="measure-readout"></div>
     <div id="info"></div>
-
     <div id="overlay">
       <div class="spinner" id="spinner"></div>
       <div id="overlay-title">Загрузка модели…</div>
@@ -103,10 +85,10 @@
   <script src="./config.js"></script>
   <script type="module">
     import * as THREE from 'three';
-    import { STLLoader } from 'three/addons/loaders/STLLoader.js';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
     var t = window.TrelloPowerUp.iframe();
+    var GEOM = window.STEPGEOM;
 
     var overlayEl = document.getElementById('overlay');
     var overlayTitleEl = document.getElementById('overlay-title');
@@ -114,7 +96,7 @@
     var spinnerEl = document.getElementById('spinner');
     var toolbarEl = document.getElementById('toolbar');
     var infoEl = document.getElementById('info');
-    var legendEl = document.getElementById('legend');
+    var hoverHintEl = document.getElementById('hoverHint');
     var canvasHolder = document.getElementById('canvas-holder');
     var readoutEl = document.getElementById('measure-readout');
 
@@ -137,9 +119,6 @@
       return m ? m[0] : '';
     }
 
-    var MESH_EXTENSIONS = ['.stl', '.step', '.stp'];
-    var GCODE_EXTENSIONS = ['.gcode', '.gco', '.nc', '.tap', '.cnc', '.ngc', '.g'];
-
     var cardId = t.arg('cardId');
     var attachmentId = t.arg('attachmentId');
     var fileName = t.arg('fileName');
@@ -153,14 +132,16 @@
       showError('Недостаточно данных', 'Просмотрщику не передали карточку, вложение или имя файла.');
       throw new Error('Missing required arguments');
     }
+    if (ext !== '.step' && ext !== '.stp') {
+      showError('Формат не поддерживается', 'Этот просмотрщик открывает только STEP-файлы (.step, .stp). Файл «' + fileName + '» — другого типа.');
+      throw new Error('Unsupported extension: ' + ext);
+    }
 
-    // ---- Scene ----
     var scene = new THREE.Scene();
     var camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100000);
-
     var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setClearColor(0x000000, 0); // transparent -> CSS gradient shows through
+    renderer.setClearColor(0x000000, 0);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     canvasHolder.appendChild(renderer.domElement);
@@ -169,10 +150,8 @@
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
 
-    // Lighting tuned for a bright studio look
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    var hemi = new THREE.HemisphereLight(0xffffff, 0xb9c4d0, 0.7);
-    scene.add(hemi);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xb9c4d0, 0.7));
     var keyLight = new THREE.DirectionalLight(0xffffff, 1.15);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(2048, 2048);
@@ -186,7 +165,6 @@
     var groundPlane = null;
     var modelGroup = new THREE.Group();
     scene.add(modelGroup);
-    var travelLines = null;
 
     function resize() {
       var w = canvasHolder.clientWidth || window.innerWidth;
@@ -215,7 +193,6 @@
       var center = box.getCenter(new THREE.Vector3());
       var maxDim = Math.max(size.x, size.y, size.z) || 1;
       modelMaxDim = maxDim;
-
       var fov = camera.fov * (Math.PI / 180);
       var dist = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * offset;
       camera.near = Math.max(maxDim / 1000, 0.001);
@@ -224,8 +201,6 @@
       camera.updateProjectionMatrix();
       controls.target.copy(center);
       controls.update();
-
-      // key light + shadow camera sized to the model
       keyLight.position.set(center.x + maxDim, center.y + maxDim * 1.6, center.z + maxDim);
       keyLight.target.position.copy(center);
       scene.add(keyLight.target);
@@ -235,13 +210,10 @@
       keyLight.shadow.camera.near = 0.01; keyLight.shadow.camera.far = maxDim * 8;
       keyLight.shadow.camera.updateProjectionMatrix();
       fillLight.position.set(center.x - maxDim, center.y + maxDim * 0.5, center.z - maxDim);
-
-      // grid + soft shadow ground at the model's base
       if (gridHelper) scene.remove(gridHelper);
       gridHelper = new THREE.GridHelper(maxDim * 2.5, 20, 0xb6c2d1, 0xd2dae4);
       gridHelper.position.set(center.x, box.min.y, center.z);
       scene.add(gridHelper);
-
       if (groundPlane) scene.remove(groundPlane);
       var gmat = new THREE.ShadowMaterial({ opacity: 0.22 });
       groundPlane = new THREE.Mesh(new THREE.PlaneGeometry(maxDim * 6, maxDim * 6), gmat);
@@ -249,11 +221,9 @@
       groundPlane.position.set(center.x, box.min.y, center.z);
       groundPlane.receiveShadow = true;
       scene.add(groundPlane);
-
       window.__lastFit = { object: object, offset: offset };
     }
 
-    // ---- Toolbar ----
     document.getElementById('btn-reset').addEventListener('click', function () {
       if (window.__lastFit) fitCameraToObject(window.__lastFit.object, window.__lastFit.offset);
     });
@@ -268,135 +238,199 @@
       gridHelper.visible = !gridHelper.visible;
       e.target.classList.toggle('active', gridHelper.visible);
     });
-    document.getElementById('btn-travel').addEventListener('click', function (e) {
-      if (!travelLines) return;
-      travelLines.visible = !travelLines.visible;
-      e.target.classList.toggle('active', travelLines.visible);
-    });
 
-    // ---- Measurement ----
-    var measureMode = false;
-    var measurePoints = [];
-    var measureGroup = new THREE.Group();
-    scene.add(measureGroup);
     var raycaster = new THREE.Raycaster();
+    var hoverHighlight = new THREE.Mesh(
+      new THREE.BufferGeometry(),
+      new THREE.MeshBasicMaterial({ color: 0xffd93d, transparent: true, opacity: 0.55, depthTest: false, side: THREE.DoubleSide })
+    );
+    hoverHighlight.renderOrder = 999;
+    hoverHighlight.visible = false;
+    scene.add(hoverHighlight);
+    var hoveredFace = null;
 
-    function clearMeasure() {
-      while (measureGroup.children.length) {
-        var ch = measureGroup.children.pop();
+    function clearHover() {
+      hoveredFace = null;
+      hoverHighlight.visible = false;
+      hoverHintEl.style.display = 'none';
+    }
+
+    function pickFaceAt(clientX, clientY) {
+      var rect = renderer.domElement.getBoundingClientRect();
+      var ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      raycaster.setFromCamera(ndc, camera);
+      var hits = raycaster.intersectObjects(modelGroup.children, true);
+      if (!hits.length) return null;
+      var hit = hits[0];
+      var mesh = hit.object;
+      var ud = mesh.userData;
+      if (!ud || !ud.triToFace || hit.faceIndex == null) return { mesh: mesh, faceIndex: null, first: 0, last: 0, point: hit.point };
+      var faceIdx = ud.triToFace[hit.faceIndex];
+      if (faceIdx < 0 || !ud.brepFaces[faceIdx]) return { mesh: mesh, faceIndex: null, first: 0, last: 0, point: hit.point };
+      var bf = ud.brepFaces[faceIdx];
+      return { mesh: mesh, faceIndex: faceIdx, first: bf.first, last: bf.last, point: hit.point };
+    }
+
+    function buildHighlightGeometry(mesh, first, last) {
+      var srcPos = mesh.geometry.attributes.position.array;
+      var srcIdx = mesh.geometry.index.array;
+      var n = (last - first + 1) * 3;
+      var idxOut = new Uint32Array(n);
+      for (var i = 0; i < n; i++) idxOut[i] = srcIdx[first * 3 + i];
+      var geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(srcPos, 3));
+      geom.setIndex(new THREE.BufferAttribute(idxOut, 1));
+      return geom;
+    }
+
+    function setHoverHighlight(pick) {
+      if (!pick || pick.faceIndex == null) { clearHover(); return; }
+      if (hoveredFace && hoveredFace.mesh === pick.mesh && hoveredFace.faceIndex === pick.faceIndex) return;
+      hoveredFace = pick;
+      if (hoverHighlight.geometry) hoverHighlight.geometry.dispose();
+      hoverHighlight.geometry = buildHighlightGeometry(pick.mesh, pick.first, pick.last);
+      hoverHighlight.position.copy(pick.mesh.position);
+      hoverHighlight.quaternion.copy(pick.mesh.quaternion);
+      hoverHighlight.scale.copy(pick.mesh.scale);
+      hoverHighlight.visible = true;
+      hoverHintEl.textContent = 'Грань выделена — можно кликать';
+      hoverHintEl.style.display = 'block';
+    }
+
+    renderer.domElement.addEventListener('pointermove', function (e) {
+      setHoverHighlight(pickFaceAt(e.clientX, e.clientY));
+    });
+    renderer.domElement.addEventListener('pointerleave', clearHover);
+
+    var mode = 'none';
+    var pickGroup = new THREE.Group();
+    scene.add(pickGroup);
+    var pickedPoints = [];
+    var pickedFaces = [];
+
+    function clearPicks() {
+      while (pickGroup.children.length) {
+        var ch = pickGroup.children.pop();
         if (ch.geometry) ch.geometry.dispose();
         if (ch.material) ch.material.dispose();
       }
-      measurePoints = [];
+      pickedPoints = []; pickedFaces = [];
     }
+    function setReadout(html, show) { readoutEl.innerHTML = html; readoutEl.style.display = show ? 'block' : 'none'; }
 
-    function setMeasureReadout(html, show) {
-      readoutEl.innerHTML = html;
-      readoutEl.style.display = show ? 'block' : 'none';
+    function setMode(next) {
+      mode = (mode === next) ? 'none' : next;
+      ['measure','angle','radius'].forEach(function (m) { document.getElementById('btn-' + m).classList.toggle('active', mode === m); });
+      clearPicks();
+      if (mode === 'none') { setReadout('', false); return; }
+      if (mode === 'measure') setReadout('<div class="hint">Кликните две точки на модели, чтобы измерить расстояние (мм)</div>', true);
+      if (mode === 'angle') setReadout('<div class="hint">Кликните первую грань, затем вторую — покажу угол между ними</div>', true);
+      if (mode === 'radius') setReadout('<div class="hint">Кликните на скруглённую грань (сгиб) — оценю радиус</div>', true);
     }
+    document.getElementById('btn-measure').addEventListener('click', function () { setMode('measure'); });
+    document.getElementById('btn-angle').addEventListener('click', function () { setMode('angle'); });
+    document.getElementById('btn-radius').addEventListener('click', function () { setMode('radius'); });
 
-    document.getElementById('btn-measure').addEventListener('click', function (e) {
-      measureMode = !measureMode;
-      e.target.classList.toggle('active', measureMode);
-      if (measureMode) {
-        clearMeasure();
-        setMeasureReadout('<div class="hint">Кликните две точки на модели, чтобы измерить расстояние (мм)</div>', true);
-      } else {
-        clearMeasure();
-        setMeasureReadout('', false);
-      }
-    });
-
-    function addMarker(point) {
+    function addMarker(point, color) {
       var r = Math.max(modelMaxDim * 0.012, 0.0001);
-      var m = new THREE.Mesh(
-        new THREE.SphereGeometry(r, 16, 16),
-        new THREE.MeshBasicMaterial({ color: 0xe8590c })
-      );
+      var m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 16), new THREE.MeshBasicMaterial({ color: color || 0xe8590c }));
       m.position.copy(point);
-      measureGroup.add(m);
+      pickGroup.add(m);
     }
-
-    function addLine(a, b) {
+    function addLine(a, b, color) {
       var geom = new THREE.BufferGeometry().setFromPoints([a, b]);
-      var line = new THREE.Line(geom, new THREE.LineBasicMaterial({ color: 0xe8590c }));
-      measureGroup.add(line);
+      pickGroup.add(new THREE.Line(geom, new THREE.LineBasicMaterial({ color: color || 0xe8590c })));
+    }
+    function addFaceMarker(mesh, first, last, color) {
+      var geom = buildHighlightGeometry(mesh, first, last);
+      var m = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide }));
+      m.renderOrder = 998;
+      m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale);
+      pickGroup.add(m);
     }
 
     function formatMm(v) {
-      // model units are assumed to be millimetres (typical for STL/STEP from CAD)
       if (v >= 1000) return (v / 1000).toFixed(2) + ' м  (' + v.toFixed(1) + ' мм)';
       return v.toFixed(2) + ' мм';
     }
 
-    function handleMeasureClick(clientX, clientY) {
-      var rect = renderer.domElement.getBoundingClientRect();
-      var ndc = new THREE.Vector2(
-        ((clientX - rect.left) / rect.width) * 2 - 1,
-        -((clientY - rect.top) / rect.height) * 2 + 1
-      );
-      raycaster.setFromCamera(ndc, camera);
-      raycaster.params.Line.threshold = modelMaxDim * 0.01;
-      var hits = raycaster.intersectObjects(modelGroup.children, true);
-      if (!hits.length) {
-        setMeasureReadout('<div class="hint">Точка мимо модели — наведитесь прямо на деталь и кликните</div>', true);
-        return;
-      }
-      var p = hits[0].point.clone();
-
-      if (measurePoints.length >= 2) clearMeasure(); // start a new measurement
-
-      measurePoints.push(p);
+    function handleMeasureClick(pick) {
+      if (!pick) { setReadout('<div class="hint">Точка мимо модели — наведитесь прямо на деталь и кликните</div>', true); return; }
+      var p = pick.point.clone();
+      if (pickedPoints.length >= 2) clearPicks();
+      pickedPoints.push(p);
       addMarker(p);
-
-      if (measurePoints.length === 1) {
-        setMeasureReadout('<div class="hint">Первая точка поставлена. Кликните вторую точку.</div>', true);
-      } else if (measurePoints.length === 2) {
-        addLine(measurePoints[0], measurePoints[1]);
-        var d = measurePoints[0].distanceTo(measurePoints[1]);
-        setMeasureReadout(
-          '<div class="big">' + formatMm(d) + '</div>' +
-          '<div class="hint">Кликните ещё раз, чтобы начать новое измерение</div>', true
-        );
+      if (pickedPoints.length === 1) {
+        setReadout('<div class="hint">Первая точка поставлена. Кликните вторую точку.</div>', true);
+      } else {
+        addLine(pickedPoints[0], pickedPoints[1]);
+        var d = pickedPoints[0].distanceTo(pickedPoints[1]);
+        setReadout('<div class="big">' + formatMm(d) + '</div><div class="hint">Кликните ещё раз, чтобы начать новое измерение</div>', true);
       }
     }
 
-    // distinguish a click (place point) from a drag (rotate)
+    function handleAngleClick(pick) {
+      if (!pick || pick.faceIndex == null) { setReadout('<div class="hint">Не попали на грань — кликните прямо на поверхность детали</div>', true); return; }
+      if (pickedFaces.length >= 2) clearPicks();
+      var pos = pick.mesh.geometry.attributes.position.array;
+      var idx = pick.mesh.geometry.index.array;
+      var normal = GEOM.averageFaceNormal(pos, idx, pick.first, pick.last);
+      var color = pickedFaces.length === 0 ? 0x4f7cff : 0xe8590c;
+      addFaceMarker(pick.mesh, pick.first, pick.last, color);
+      pickedFaces.push({ mesh: pick.mesh, first: pick.first, last: pick.last, normal: normal });
+      if (pickedFaces.length === 1) {
+        setReadout('<div class="hint">Первая грань отмечена. Кликните вторую грань сгиба.</div>', true);
+      } else {
+        var res = GEOM.dihedralAngle(pickedFaces[0].normal, pickedFaces[1].normal);
+        setReadout(
+          '<div class="big">' + res.includedAngle.toFixed(1) + '°</div>' +
+          '<div class="sub">включённый угол между гранями (плоский лист = 180°)</div>' +
+          '<div class="sub">угол между нормалями: ' + res.angleBetweenNormals.toFixed(1) + '°</div>' +
+          '<div class="hint">Кликните ещё раз, чтобы начать новое измерение</div>', true);
+      }
+    }
+
+    function handleRadiusClick(pick) {
+      if (!pick || pick.faceIndex == null) { setReadout('<div class="hint">Не попали на грань — кликните прямо на скруглённый участок</div>', true); return; }
+      clearPicks();
+      addFaceMarker(pick.mesh, pick.first, pick.last, 0x2ea043);
+      var pos = pick.mesh.geometry.attributes.position.array;
+      var idx = pick.mesh.geometry.index.array;
+      var est = GEOM.estimateFaceRadius(pos, idx, pick.first, pick.last);
+      if (!est || !isFinite(est.radius) || est.radius > modelMaxDim * 5) {
+        setReadout('<div class="hint">Эта грань похожа на плоскую — радиус не определить. Кликните на скруглённый сгиб.</div>', true);
+        return;
+      }
+      setReadout(
+        '<div class="big">≈ ' + est.radius.toFixed(2) + ' мм</div>' +
+        '<div class="sub">оценка по сетке треугольников грани (не точный CAD-параметр)</div>' +
+        '<div class="warn">Надёжнее всего на вытянутых сгибах; на коротких скруглениях — грубее</div>', true);
+    }
+
     var downPos = null;
-    renderer.domElement.addEventListener('pointerdown', function (e) {
-      downPos = { x: e.clientX, y: e.clientY, time: Date.now() };
-    });
+    renderer.domElement.addEventListener('pointerdown', function (e) { downPos = { x: e.clientX, y: e.clientY, time: Date.now() }; });
     renderer.domElement.addEventListener('pointerup', function (e) {
-      if (!measureMode || !downPos) { downPos = null; return; }
+      if (mode === 'none' || !downPos) { downPos = null; return; }
       var moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
       var dt = Date.now() - downPos.time;
       downPos = null;
-      if (moved < 6 && dt < 400) handleMeasureClick(e.clientX, e.clientY);
+      if (moved >= 6 || dt >= 400) return;
+      var pick = pickFaceAt(e.clientX, e.clientY);
+      if (mode === 'measure') handleMeasureClick(pick);
+      else if (mode === 'angle') handleAngleClick(pick);
+      else if (mode === 'radius') handleRadiusClick(pick);
     });
 
-    // ---- Download via worker ----
     function downloadUrl() {
       var params = new URLSearchParams({ cardId: cardId, attachmentId: attachmentId, fileName: fileName });
       return window.WORKER_URL.replace(/\/$/, '') + '/download?' + params.toString();
     }
-
     function buildMeshMaterial(colorArray) {
-      var color = 0x5b86c5; // pleasant, clearly visible blue for files without their own colour
+      var color = 0x5b86c5;
       if (colorArray && colorArray.length === 3) color = new THREE.Color(colorArray[0], colorArray[1], colorArray[2]);
       return new THREE.MeshStandardMaterial({ color: color, metalness: 0.18, roughness: 0.55, side: THREE.DoubleSide });
     }
-
-    function addMesh(mesh) {
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      modelGroup.add(mesh);
-    }
-
-    function loadStl(arrayBuffer) {
-      var geometry = new STLLoader().parse(arrayBuffer);
-      geometry.computeVertexNormals();
-      addMesh(new THREE.Mesh(geometry, buildMeshMaterial()));
-    }
+    function addMesh(mesh) { mesh.castShadow = true; mesh.receiveShadow = true; modelGroup.add(mesh); }
 
     function loadStep(arrayBuffer) {
       return window.occtimportjs({
@@ -412,135 +446,30 @@
           if (meshData.attributes.normal) geometry.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.attributes.normal.array, 3));
           geometry.setIndex(meshData.index.array);
           if (!meshData.attributes.normal) geometry.computeVertexNormals();
-          addMesh(new THREE.Mesh(geometry, buildMeshMaterial(meshData.color)));
+          var mesh = new THREE.Mesh(geometry, buildMeshMaterial(meshData.color));
+          var brepFaces = meshData.brep_faces || [];
+          var triCount = (meshData.index.array.length / 3) | 0;
+          mesh.userData.brepFaces = brepFaces;
+          mesh.userData.triToFace = GEOM.buildTriToFaceMap(brepFaces, triCount);
+          addMesh(mesh);
         });
       });
     }
-
-    // ---- G-code (parser unchanged in behaviour) ----
-    function parseGcode(text, options) {
-      options = options || {};
-      var arcSegLen = options.arcSegmentLength || 0.2;
-      var maxSegments = options.maxSegments || 2000000;
-      var motion = 0, absolute = true, plane = 17, inches = false;
-      var pos = { x: 0, y: 0, z: 0 };
-      var travel = [], cut = [];
-      var min = { x: Infinity, y: Infinity, z: Infinity };
-      var max = { x: -Infinity, y: -Infinity, z: -Infinity };
-      var segCount = 0, moveCount = 0;
-      function track(p){ if(p.x<min.x)min.x=p.x; if(p.x>max.x)max.x=p.x; if(p.y<min.y)min.y=p.y; if(p.y>max.y)max.y=p.y; if(p.z<min.z)min.z=p.z; if(p.z>max.z)max.z=p.z; }
-      function pushSeg(arr,a,b){ if(segCount>=maxSegments)return; if(a.x===b.x&&a.y===b.y&&a.z===b.z)return; arr.push(a.x,a.y,a.z,b.x,b.y,b.z); track(a); track(b); segCount++; }
-      function stripComments(line){ var out='',inParen=false; for(var i=0;i<line.length;i++){var c=line[i]; if(c==='('){inParen=true;continue;} if(c===')'){inParen=false;continue;} if(c===';')break; if(!inParen)out+=c;} return out; }
-      var wordRe = /([A-Za-z])\s*([+-]?[0-9]*\.?[0-9]+)/g;
-      var lines = text.split(/\r?\n/);
-      for (var li=0; li<lines.length; li++) {
-        var clean = stripComments(lines[li]);
-        if (!clean.trim()) continue;
-        var words={}, gCodes=[], m;
-        wordRe.lastIndex = 0;
-        while ((m = wordRe.exec(clean)) !== null) {
-          var letter=m[1].toUpperCase(), value=parseFloat(m[2]);
-          if (letter==='G') gCodes.push(value); else words[letter]=value;
-        }
-        for (var gi=0; gi<gCodes.length; gi++) {
-          var g=gCodes[gi];
-          if(g===90)absolute=true; else if(g===91)absolute=false;
-          else if(g===20)inches=true; else if(g===21)inches=false;
-          else if(g===17)plane=17; else if(g===18)plane=18; else if(g===19)plane=19;
-          else if(g===0||g===1||g===2||g===3)motion=g;
-        }
-        var hasAxis=('X' in words)||('Y' in words)||('Z' in words);
-        var hasArc=('I' in words)||('J' in words)||('K' in words)||('R' in words);
-        if(!hasAxis&&!hasArc)continue;
-        var target={x:pos.x,y:pos.y,z:pos.z};
-        if('X' in words)target.x=absolute?words.X:pos.x+words.X;
-        if('Y' in words)target.y=absolute?words.Y:pos.y+words.Y;
-        if('Z' in words)target.z=absolute?words.Z:pos.z+words.Z;
-        if(motion===0||motion===1){ pushSeg(motion===0?travel:cut,pos,target); moveCount++; pos=target; }
-        else if(motion===2||motion===3){ tessellateArc(pos,target,words,motion===2,plane,arcSegLen,function(a,b){pushSeg(cut,a,b);}); moveCount++; pos=target; }
-      }
-      var empty = !isFinite(min.x);
-      return { travel:new Float32Array(travel), cut:new Float32Array(cut), bounds: empty?null:{min:min,max:max}, units: inches?'inch':'mm', stats:{moves:moveCount,segments:segCount} };
-    }
-    function tessellateArc(start,end,words,clockwise,plane,segLen,emit){
-      var aKey,bKey,cKey,iKey,jKey;
-      if(plane===17){aKey='x';bKey='y';cKey='z';iKey='I';jKey='J';}
-      else if(plane===18){aKey='x';bKey='z';cKey='y';iKey='I';jKey='K';}
-      else {aKey='y';bKey='z';cKey='x';iKey='J';jKey='K';}
-      var sa=start[aKey],sb=start[bKey],ea=end[aKey],eb=end[bKey],ca,cb;
-      if('R' in words){
-        var r=words.R, mxa=(sa+ea)/2, mxb=(sb+eb)/2, da=ea-sa, db=eb-sb, chord=Math.hypot(da,db);
-        if(chord===0)return; var hsq=r*r-(chord/2)*(chord/2); if(hsq<0)hsq=0; var h=Math.sqrt(hsq);
-        var pa=-db/chord, pb=da/chord, sign;
-        if(clockwise)sign=(r>0)?-1:1; else sign=(r>0)?1:-1;
-        ca=mxa+sign*h*pa; cb=mxb+sign*h*pb;
-      } else { var i=(iKey in words)?words[iKey]:0, j=(jKey in words)?words[jKey]:0; ca=sa+i; cb=sb+j; }
-      var radius=Math.hypot(sa-ca,sb-cb); if(radius===0)return;
-      var a0=Math.atan2(sb-cb,sa-ca), a1=Math.atan2(eb-cb,ea-ca), TAU=Math.PI*2;
-      if(clockwise){ while(a1>=a0)a1-=TAU; if(Math.abs(a1-a0)<1e-9)a1=a0-TAU; }
-      else { while(a1<=a0)a1+=TAU; if(Math.abs(a1-a0)<1e-9)a1=a0+TAU; }
-      var sweep=a1-a0, arcLen=Math.abs(sweep)*radius, nSeg=Math.max(2,Math.ceil(arcLen/segLen));
-      if(nSeg>4000)nSeg=4000;
-      var sc=start[cKey], ec=end[cKey], prev={x:start.x,y:start.y,z:start.z};
-      for(var s=1;s<=nSeg;s++){
-        var tt=s/nSeg, ang=a0+sweep*tt;
-        var pa2=ca+radius*Math.cos(ang), pb2=cb+radius*Math.sin(ang), pc2=sc+(ec-sc)*tt;
-        var pt={x:0,y:0,z:0}; pt[aKey]=pa2; pt[bKey]=pb2; pt[cKey]=pc2; emit(prev,pt); prev=pt;
-      }
-    }
-
-    function loadGcode(arrayBuffer) {
-      var text = new TextDecoder('utf-8').decode(new Uint8Array(arrayBuffer));
-      var quick = parseGcode(text, { arcSegmentLength: 1, maxSegments: 50000 }).bounds;
-      var span = 100;
-      if (quick) span = Math.max(quick.max.x-quick.min.x, quick.max.y-quick.min.y, quick.max.z-quick.min.z) || 100;
-      var result = parseGcode(text, { arcSegmentLength: Math.max(span/800, 0.05) });
-      if (result.cut.length===0 && result.travel.length===0) throw new Error('В G-коде не найдено перемещений (G0/G1/G2/G3).');
-      if (result.cut.length>0) {
-        var cg = new THREE.BufferGeometry();
-        cg.setAttribute('position', new THREE.BufferAttribute(result.cut, 3));
-        modelGroup.add(new THREE.LineSegments(cg, new THREE.LineBasicMaterial({ color: 0xd2691e })));
-      }
-      if (result.travel.length>0) {
-        var tg = new THREE.BufferGeometry();
-        tg.setAttribute('position', new THREE.BufferAttribute(result.travel, 3));
-        travelLines = new THREE.LineSegments(tg, new THREE.LineBasicMaterial({ color: 0x3b5bdb, transparent: true, opacity: 0.6 }));
-        modelGroup.add(travelLines);
-      }
-      window.__gcodeInfo = result.stats.moves + ' перемещений · ' + result.units;
-    }
-
-    // ---- Kick off ----
-    var isGcode = GCODE_EXTENSIONS.indexOf(ext) !== -1;
-    var isMesh = MESH_EXTENSIONS.indexOf(ext) !== -1;
 
     showLoading('Скачивание файла из Trello…');
     fetch(downloadUrl())
       .then(function (response) {
         if (!response.ok) return response.text().then(function (txt) { throw new Error('Не удалось скачать файл (' + response.status + '). ' + txt); });
-        showLoading(isGcode ? 'Чтение траектории…' : 'Разбор геометрии…');
+        showLoading('Разбор геометрии…');
         return response.arrayBuffer();
       })
-      .then(function (arrayBuffer) {
-        if (ext === '.stl') { loadStl(arrayBuffer); return null; }
-        if (ext === '.step' || ext === '.stp') { return loadStep(arrayBuffer); }
-        if (isGcode) { loadGcode(arrayBuffer); return null; }
-        throw new Error('Неподдерживаемый тип файла: ' + ext);
-      })
+      .then(function (arrayBuffer) { return loadStep(arrayBuffer); })
       .then(function () {
         if (modelGroup.children.length === 0) throw new Error('В файле не найдено видимой геометрии.');
         fitCameraToObject(modelGroup);
         hideOverlay();
         toolbarEl.style.display = 'flex';
-        document.getElementById('btn-wireframe').hidden = !isMesh;
-        document.getElementById('btn-measure').hidden = false;
-        document.getElementById('btn-travel').hidden = !(isGcode && travelLines);
-        if (isGcode) {
-          legendEl.style.display = 'block';
-          infoEl.textContent = fileName + (window.__gcodeInfo ? '  —  ' + window.__gcodeInfo : '');
-        } else {
-          infoEl.textContent = fileName;
-        }
+        infoEl.textContent = fileName;
       })
       .catch(function (err) {
         console.error(err);

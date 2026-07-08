@@ -71,7 +71,7 @@
 
   <script src="./config.js"></script>
   <script>
-    var SUPPORTED_EXTENSIONS = ['.stl', '.step', '.stp', '.gcode', '.gco', '.nc', '.tap', '.cnc', '.ngc', '.g'];
+    var SUPPORTED_EXTENSIONS = ['.step', '.stp']; // просмотрщик теперь показывает только STEP — см. viewer.html
 
     function getExtension(name) {
       var match = /\.[^.]+$/.exec((name || '').toLowerCase());
