@@ -173,8 +173,8 @@
   function kpi(k,v,cls){ return '<div class="kpi '+(cls||'')+'"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>'; }
 
   function ci(f,ph,val,w){ return '<input data-f="'+f+'" placeholder="'+esc(ph)+'" value="'+esc(val==null?'':val)+'" style="width:'+(w||90)+'px">'; }
-  function custRow(t, it){
-    it=it||{};
+  function custRow(t, it, knownSections){
+    it=it||{}; knownSections=knownSections||[];
     var pct=function(v,def){ return (v!=null&&v!=='')?Math.round(+v*1000)/10:def; };
     var IST='background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px';
     // fld = a stacked field: tiny caption above the input
@@ -184,10 +184,23 @@
     }
     function txt(f,val,w){ return '<input data-f="'+f+'" value="'+esc(val==null?'':val)+'" style="'+IST+';'+(w||'')+'">'; }
     function num(f,val,w){ return '<input data-f="'+f+'" type="number" step="any" value="'+(val==null||val===''?'':val)+'" style="'+IST+';text-align:right;'+(w||'width:80px')+'">'; }
+    // Раздел выбирается из уже существующих (чтобы "Другие компоненты" и "другие
+    // компоненты" не разъезжались в два разных раздела) — либо, если ни один не
+    // подходит, выбирается "+ новый раздел…" и рядом появляется поле для ввода.
+    function secPicker(val, known){
+      var match = known.indexOf(val) >= 0;
+      var isNew = !match; // текущее значение не входит в список — либо совсем новое, либо ранее свободно введённое
+      var selHtml = '<select class="secsel" style="'+IST+';width:100%">';
+      known.forEach(function(s){ selHtml += '<option value="'+esc(s)+'"'+(match&&s===val?' selected':'')+'>'+esc(s)+'</option>'; });
+      selHtml += '<option value="__new__"'+(isNew||!known.length?' selected':'')+'>+ новый раздел…</option>';
+      selHtml += '</select>';
+      var txtHtml = '<input data-f="sec" value="'+esc(val||'')+'" placeholder="Название раздела" style="'+IST+';width:100%;margin-top:4px;'+((isNew||!known.length)?'':'display:none')+'">';
+      return '<div class="secwrap">'+selHtml+txtHtml+'</div>';
+    }
 
     var h='<div class="custrow" data-t="'+t+'" data-code="'+esc(it.code||'')+'" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px">';
     h+=fld('Название', txt('lbl', it.lbl, 'width:100%'), 'flex:1;min-width:170px');
-    h+=fld('Раздел', txt('sec', it.sec, 'width:100%'), 'width:150px');
+    h+=fld('Раздел', secPicker(it.sec, knownSections), 'width:190px');
     if(t==='op'){
       h+=fld('Ставка, ₸/ед', num('rate', it.rate, 'width:100px'));
     } else if(t==='mat'){
@@ -322,17 +335,24 @@
 
     // --- custom (added) items ---
     var cm=P.customMat||[], cc=P.customCmp||[], co=P.customOp||[];
+    // известные разделы = разделы из заводского каталога + уже введённые пользователем
+    // свои разделы этого же типа (чтобы предлагать то, что реально используется)
+    function uniq(list){ var seen={}, out=[]; list.forEach(function(s){ if(s&&!seen[s]){ seen[s]=1; out.push(s); } }); return out; }
+    var matSections = uniq(sectionsOf(MAT).map(function(s){return s.sec;}).concat(cm.map(function(it){return it.sec;})));
+    var cmpSections = uniq(sectionsOf(CMP).map(function(s){return s.sec;}).concat(cc.map(function(it){return it.sec;})));
+    var opSections = uniq(co.map(function(it){return it.sec;}));
+
     h+='<h3 style="margin-top:18px">Свои материалы</h3>';
     h+='<div class="small muted" style="margin-bottom:6px">Добавляйте материалы, которых нет выше — они появятся в калькуляторе. «Отходы %» — надбавка на обрезки (обычно 15, для труб/профилей 20). «Расходники %» — сопутствующие затраты (обычно 4). Итог = цена × кол-во × (1+отходы) × (1+расходники).</div>';
-    cm.forEach(function(it){ h+=custRow('mat', it); });
+    cm.forEach(function(it){ h+=custRow('mat', it, matSections); });
     h+='<button class="btnp ghost" data-add="mat" type="button" style="margin-top:4px">+ материал</button>';
 
     h+='<h3 style="margin-top:16px">Свои компоненты</h3>';
-    cc.forEach(function(it){ h+=custRow('cmp', it); });
+    cc.forEach(function(it){ h+=custRow('cmp', it, cmpSections); });
     h+='<button class="btnp ghost" data-add="cmp" type="button" style="margin-top:4px">+ компонент</button>';
 
     h+='<h3 style="margin-top:16px">Свои работы (фиксированная ставка за единицу)</h3>';
-    co.forEach(function(it){ h+=custRow('op', it); });
+    co.forEach(function(it){ h+=custRow('op', it, opSections); });
     h+='<button class="btnp ghost" data-add="op" type="button" style="margin-top:4px">+ работа</button>';
 
     h+='<div class="savebar"><button class="btnp" id="prSave" type="button">Сохранить цены</button><button class="btnp ghost" id="prReset" type="button">Сбросить к заводским</button><span id="prmsg"></span></div>';
@@ -455,6 +475,14 @@
     var pr=document.getElementById('prReset'); if(pr) pr.onclick=resetPricing;
     [].forEach.call(document.querySelectorAll('[data-add]'), function(b){ b.onclick=function(){ addCustom(this.getAttribute('data-add')); }; });
     [].forEach.call(document.querySelectorAll('.delcust'), function(b){ b.onclick=function(){ delCustom(this.getAttribute('data-t'), this.getAttribute('data-code')); }; });
+    [].forEach.call(document.querySelectorAll('.secsel'), function(sel){
+      var txt = sel.parentElement.querySelector('[data-f="sec"]');
+      if(!txt) return;
+      sel.onchange=function(){
+        if(sel.value==='__new__'){ txt.style.display=''; txt.value=''; txt.focus(); }
+        else { txt.style.display='none'; txt.value=sel.value; }
+      };
+    });
   }
 
   function barCell(val,max){ var w=max>0?Math.round(100*val/max):0; return '<div class="barw"><div class="barf" style="width:'+w+'%"></div></div>'; }
