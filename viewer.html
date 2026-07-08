@@ -148,6 +148,25 @@
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
 
+    // Поворот камеры стрелками — вращаем позицию камеры вокруг текущей точки
+    // обзора (controls.target) в сферических координатах, как при обычном
+    // вращении мышью, только по шагам с клавиатуры.
+    var KEY_ROTATE_STEP = 0.06;
+    window.addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      var offset = new THREE.Vector3().subVectors(camera.position, controls.target);
+      var spherical = new THREE.Spherical().setFromVector3(offset);
+      if (e.key === 'ArrowLeft') spherical.theta -= KEY_ROTATE_STEP;
+      if (e.key === 'ArrowRight') spherical.theta += KEY_ROTATE_STEP;
+      if (e.key === 'ArrowUp') spherical.phi = Math.max(0.03, spherical.phi - KEY_ROTATE_STEP);
+      if (e.key === 'ArrowDown') spherical.phi = Math.min(Math.PI - 0.03, spherical.phi + KEY_ROTATE_STEP);
+      offset.setFromSpherical(spherical);
+      camera.position.copy(controls.target).add(offset);
+      camera.lookAt(controls.target);
+      controls.update();
+    });
+
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     scene.add(new THREE.HemisphereLight(0xffffff, 0xb9c4d0, 0.7));
     var keyLight = new THREE.DirectionalLight(0xffffff, 1.15);
@@ -174,14 +193,37 @@
     window.addEventListener('resize', resize);
     resize();
 
+    // ---- маркеры постоянного экранного размера (не раздуваются/не мельчают при зуме) ----
+    var pixelSizedMarkers = []; // { obj, anchor, px }
+    function registerPixelSized(obj, anchor, px) { pixelSizedMarkers.push({ obj: obj, anchor: anchor, px: px }); }
+    function unregisterPixelSized(obj) { pixelSizedMarkers = pixelSizedMarkers.filter(function (r) { return r.obj !== obj; }); }
+    function updatePixelSizedMarkers() {
+      pixelSizedMarkers.forEach(function (r) {
+        if (!r.obj.visible) return;
+        r.obj.scale.setScalar(pixelsToWorldRadius(r.anchor, r.px));
+      });
+    }
+
     function animate() {
       requestAnimationFrame(animate);
       controls.update();
+      updatePixelSizedMarkers();
       renderer.render(scene, camera);
     }
     animate();
 
     var modelMaxDim = 1;
+
+    // Постоянный размер маркеров в ПИКСЕЛЯХ, а не в мировых единицах — иначе
+    // при сильном зуме в мелкую деталь маркер (изначально рассчитанный от
+    // габаритов всей детали) раздувается на экране до нелепых размеров.
+    function pixelsToWorldRadius(worldPoint, desiredPixels) {
+      var dist = camera.position.distanceTo(worldPoint);
+      var fovRad = camera.fov * Math.PI / 180;
+      var viewportH = renderer.domElement.clientHeight || 800;
+      var worldHeightAtDist = 2 * dist * Math.tan(fovRad / 2);
+      return desiredPixels * (worldHeightAtDist / viewportH);
+    }
 
     function fitCameraToObject(object, offset) {
       offset = offset || 1.6;
@@ -366,8 +408,8 @@
       clearHoverVisuals();
       hoverKind = pick.kind;
       if (pick.kind === 'point') {
-        hoverPointMesh.scale.setScalar(Math.max(modelMaxDim * 0.012, 0.0001));
         hoverPointMesh.position.copy(pick.point);
+        hoverPointMesh.scale.setScalar(pixelsToWorldRadius(pick.point, 6));
         hoverPointMesh.visible = true;
         hoverHintEl.textContent = 'Точка — можно кликать';
       } else if (pick.kind === 'edge') {
@@ -397,6 +439,7 @@
     function clearPicks() {
       while (pickGroup.children.length) {
         var ch = pickGroup.children.pop();
+        unregisterPixelSized(ch);
         if (ch.geometry) ch.geometry.dispose();
         if (ch.material) ch.material.dispose();
       }
@@ -408,13 +451,27 @@
     function markPick(pick, colorIndex) {
       var color = colorIndex === 0 ? 0x4f7cff : 0xe8590c;
       if (pick.kind === 'point') {
-        var m = new THREE.Mesh(new THREE.SphereGeometry(Math.max(modelMaxDim * 0.012, 0.0001), 16, 16), new THREE.MeshBasicMaterial({ color: color }));
+        var m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 16), new THREE.MeshBasicMaterial({ color: color }));
         m.position.copy(pick.point);
+        m.scale.setScalar(pixelsToWorldRadius(pick.point, 9));
+        registerPixelSized(m, pick.point, 9);
         pickGroup.add(m);
       } else if (pick.kind === 'edge') {
-        var l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pick.points), new THREE.LineBasicMaterial({ color: color }));
+        var l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pick.points), new THREE.LineBasicMaterial({ color: color, depthTest: false }));
+        l.renderOrder = 997;
         l.position.copy(pick.mesh.position); l.quaternion.copy(pick.mesh.quaternion); l.scale.copy(pick.mesh.scale);
         pickGroup.add(l);
+        // GL-линии в браузере не удаётся сделать по-настоящему толще (ограничение
+        // WebGL) — вместо этого явно отмечаем оба конца ребра точками того же
+        // цвета, чтобы выбор было видно даже на тонкой линии.
+        [pick.points[0], pick.points[pick.points.length - 1]].forEach(function (endPt) {
+          var dot = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 12), new THREE.MeshBasicMaterial({ color: color, depthTest: false }));
+          dot.renderOrder = 997;
+          dot.position.copy(endPt);
+          dot.scale.setScalar(pixelsToWorldRadius(endPt, 6));
+          registerPixelSized(dot, endPt, 6);
+          pickGroup.add(dot);
+        });
       } else if (pick.kind === 'face') {
         var geom = buildHighlightGeometry(pick.mesh, pick.first, pick.last);
         var fm = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.45, depthTest: false, side: THREE.DoubleSide }));
