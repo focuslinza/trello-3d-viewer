@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Ремонт</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #app{max-width:1000px;margin:0 auto;padding:16px 16px 70px}
+    h2{margin:0 0 12px;font-size:18px}
+    h3{margin:14px 0 8px;font-size:14px;color:#e6edf3}
+    .muted{color:var(--muted);font-size:12.5px}
+    .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 13px;font-size:13px;cursor:pointer}
+    .btn:hover{border-color:var(--blue)}
+    .btn.primary{background:#274469;border-color:var(--blue);color:#cfe1ff}
+    .btn.danger{border-color:#7a3a32;color:#e8a59d}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:top}
+    th{color:var(--muted);font-size:11px;text-transform:uppercase}
+    td.num{text-align:right;white-space:nowrap}
+    .pill{display:inline-block;border-radius:10px;padding:2px 9px;font-size:11.5px;font-weight:700;white-space:nowrap}
+    .pill.new{background:#2b3a55;color:#a9c2ff}
+    .pill.done{background:#1c3329;color:var(--green)}
+    .pill.rejected{background:#42221f;color:var(--red)}
+    .pill.urgent{background:#42221f;color:var(--red)}
+    .num-badge{display:inline-block;background:#2b1f45;color:#c9a8ff;border-radius:6px;padding:1px 8px;font-size:11.5px;font-weight:800;letter-spacing:.3px}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 12px}
+    .kpi{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+    .kpi .k{font-size:11px;color:var(--muted);text-transform:uppercase}
+    .kpi .v{font-size:16px;font-weight:800;margin-top:4px}
+    .chip{display:inline-block;border:1px solid var(--line);background:var(--bg2);color:var(--muted);border-radius:12px;padding:3px 10px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap}
+    .chip.on{background:#1c3329;color:var(--green);border-color:#2e5c44}
+    input[type=text]{background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px;font-size:13px;width:100px}
+    .empty{color:var(--muted);padding:14px 4px}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;z-index:50}
+    a{color:#8ab4ff;text-decoration:none} a:hover{text-decoration:underline}
+    .opline{font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div id="app"><div class="empty" id="boot">Загрузка…</div></div>
+  <div class="bar">
+    <a href="#" id="analyticsLink" target="_blank">📊 Аналитика по категориям</a>
+    <button class="btn" id="close" type="button">Закрыть</button>
+  </div>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    document.getElementById('close').onclick=function(){ t.closeModal(); };
+    document.getElementById('analyticsLink').href = WORKER+'/repair-analytics?from=2020-01-01&to=2100-01-01';
+
+    var ROWS = [], ONLY_OPEN = false;
+
+    function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+    function isDirector(){
+      return Promise.all([ t.member('id'), t.board('memberships'), t.organization('memberships').catch(function(){return null;}) ])
+        .then(function(res){ var me=res[0]||{};
+          function adminIn(o){ var ms=((o&&o.memberships)||[]).filter(function(x){return x.idMember===me.id;})[0]; return !!(ms&&ms.memberType==='admin'); }
+          return adminIn(res[1])||adminIn(res[2]);
+        }).catch(function(){ return false; });
+    }
+
+    function load(){
+      var b=document.getElementById('boot'); if(b) b.textContent='Загружаю заявки…';
+      fetch(WORKER+'/repair-list?full=1').then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+        ROWS=j.requests||[]; render();
+      }).catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+    }
+
+    function opsSummary(ops){
+      var LBL={cut:'Резка',cutTube:'Резка трубы',bend:'Гибка',bendTube:'Гибка трубы',bendRod:'Гибка прута',weld:'Сварка'};
+      if(!ops||!ops.length) return '';
+      return ops.map(function(o){
+        var lbl=LBL[o.kind]||o.kind;
+        return lbl+' '+(o.thickness?o.thickness+'мм ':'')+(o.material?(o.material==='ss'?'нерж ':'чёрн '):'')+o.qty;
+      }).join(', ');
+    }
+
+    function render(){
+      var app=document.getElementById('app');
+      var visible = ONLY_OPEN ? ROWS.filter(function(r){return r.status==='new';}) : ROWS;
+      var T={orders:ROWS.length, revenue:0, paidRev:0, unpaidRev:0, open:0};
+      ROWS.forEach(function(r){
+        var rev=r.clientTotal||0;
+        T.revenue+=rev; if(r.paid) T.paidRev+=rev; else T.unpaidRev+=rev;
+        if(r.status==='new') T.open++;
+      });
+      var h='<h2>Ремонт</h2>';
+      h+='<div class="kpis">';
+      h+='<div class="kpi"><div class="k">Всего заявок</div><div class="v">'+T.orders+'</div></div>';
+      h+='<div class="kpi"><div class="k">Открытых</div><div class="v">'+T.open+'</div></div>';
+      h+='<div class="kpi"><div class="k">Выручка</div><div class="v">'+money(T.revenue)+' ₸</div></div>';
+      h+='<div class="kpi"><div class="k">Долг</div><div class="v" style="color:var(--red)">'+money(T.unpaidRev)+' ₸</div></div>';
+      h+='</div>';
+      h+='<label class="muted" style="display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer"><input type="checkbox" id="onlyOpen"'+(ONLY_OPEN?' checked':'')+'> только открытые</label>';
+
+      if(!visible.length){ h+='<div class="empty">Заявок нет.</div>'; app.innerHTML=h; wire(); return; }
+
+      h+='<table><thead><tr><th>№</th><th>Заявка</th><th>Клиент</th><th>Статус</th><th>Сделано</th><th class="num">Цена клиенту</th><th>Счёт/оплата</th></tr></thead><tbody>';
+      visible.forEach(function(r){
+        h+='<tr data-id="'+r.id+'">';
+        h+='<td><span class="num-badge">'+esc(r.number)+'</span></td>';
+        h+='<td>'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'<div class="opline">'+esc(r.category||'')+'</div></td>';
+        h+='<td>'+esc(r.companyName||'—')+(r.objectName?('<div class="opline">'+esc(r.objectName)+'</div>'):'')+'</td>';
+        h+='<td><span class="pill '+esc(r.status)+'">'+(r.status==='new'?'новая':r.status==='done'?'сделано':'отклонена')+'</span></td>';
+        h+='<td>'+(r.doneByName?esc(r.doneByName):'—')+'<div class="opline">'+esc(opsSummary(r.doneOperations))+'</div></td>';
+        h+='<td class="num"><input type="text" class="priceInp" data-id="'+r.id+'" value="'+(r.clientTotal!=null?r.clientTotal:'')+'" placeholder="сумма"></td>';
+        h+='<td>'+chip(r,'invoiceSent','счёт')+' '+chip(r,'paid','оплачен')+'</td>';
+        h+='</tr>';
+      });
+      h+='</tbody></table>';
+      app.innerHTML=h;
+      wire();
+    }
+
+    function chip(r, field, label){
+      var on=r[field];
+      return '<span class="chip'+(on?' on':'')+'" data-id="'+r.id+'" data-f="'+field+'">'+(on?'✓ ':'')+label+'</span>';
+    }
+
+    function wire(){
+      var oo=document.getElementById('onlyOpen'); if(oo) oo.onchange=function(){ ONLY_OPEN=this.checked; render(); };
+      [].forEach.call(document.querySelectorAll('.priceInp'), function(inp){
+        inp.onblur=function(){
+          var id=+this.getAttribute('data-id'); var val=+this.value.replace(/[^\d.]/g,'')||0;
+          fetch(WORKER+'/repair-price',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,clientTotal:val,materialsTotal:0})})
+            .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ var r0=ROWS.find(function(x){return x.id===id;}); if(r0) r0.clientTotal=val; render(); } });
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.chip'), function(c){
+        c.onclick=function(){
+          var id=+this.getAttribute('data-id'), field=this.getAttribute('data-f');
+          var r0=ROWS.find(function(x){return x.id===id;}); if(!r0) return;
+          var newVal=!r0[field];
+          fetch(WORKER+'/repair-flags',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,field:field,value:newVal})})
+            .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ r0[field]=newVal; render(); } });
+        };
+      });
+    }
+
+    isDirector().then(function(ok){
+      if(!ok){ document.getElementById('boot').textContent='Раздел доступен руководителю/начальнику цеха.'; return; }
+      load();
+    }).catch(function(e){ document.getElementById('boot').textContent='Ошибка: '+(e&&e.message||e); });
+  </script>
+</body>
+</html>

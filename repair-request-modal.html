@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Заявка на ремонт</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #app{max-width:680px;margin:0 auto;padding:16px 16px 70px}
+    h2{margin:0 0 6px;font-size:18px}
+    h3{margin:18px 0 8px;font-size:14px;color:#e6edf3}
+    .muted{color:var(--muted);font-size:12.5px}
+    input[type=text],select{width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:9px 11px;font-size:14px;margin-top:6px}
+    label.f{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer}
+    label.f input{width:auto;margin:0}
+    .btn{background:#274469;border:1px solid var(--blue);border-radius:8px;color:#cfe1ff;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;margin-top:12px}
+    .btn:disabled{opacity:.5}
+    .btn2{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 13px;font-size:12.5px;cursor:pointer}
+    .card{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px}
+    .card .nm{font-weight:700}
+    .card .sub{font-size:12px;color:var(--muted);margin-top:2px}
+    .pill{display:inline-block;border-radius:10px;padding:2px 9px;font-size:11.5px;font-weight:700}
+    .pill.urgent{background:#42221f;color:var(--red)}
+    .num-badge{display:inline-block;background:#2b1f45;color:#c9a8ff;border-radius:6px;padding:1px 8px;font-size:11.5px;font-weight:800;letter-spacing:.3px;margin-right:6px}
+    #msg{font-size:13px;margin-left:8px}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end;z-index:50}
+    .opRow{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+    .opRow .fld{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);text-transform:uppercase}
+    .opRow select,.opRow input{margin:0;padding:6px 8px;font-size:13px;width:auto}
+    .earnbox{background:#1c3329;border:1px solid #2e5c44;border-radius:10px;padding:16px;text-align:center;margin-top:12px}
+    .earnbox .big{font-size:28px;font-weight:800;color:var(--green)}
+    .doneForm{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:8px}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2>Заявка на ремонт</h2>
+    <div class="muted">Что сломалось — сфотографируйте и опишите, заявка сразу попадёт в цех.</div>
+    <input type="text" id="fTitle" placeholder="Что нужно починить (например: тележка, погнуто колесо)">
+    <select id="fCat"></select>
+    <input type="text" id="fCatNew" placeholder="Название категории" style="display:none;margin-top:6px">
+    <select id="fCompany"><option value="">— клиент (если знаете) —</option></select>
+    <select id="fObject" style="display:none"><option value="">— объект —</option></select>
+    <label class="f"><input type="checkbox" id="fUrgent"> 🔥 Срочно</label>
+    <label class="f">📷 Фото <input type="file" id="fFile" accept="image/*" capture="environment" style="width:auto"></label>
+    <button class="btn" id="send" type="button">Отправить заявку</button><span id="msg"></span>
+
+    <h3>Открытые заявки — можно отметить «Готово»</h3>
+    <div id="openList"><div class="muted">Загрузка…</div></div>
+
+    <h3>Мои заявки</h3>
+    <div id="mineList"><div class="muted">Загрузка…</div></div>
+  </div>
+  <div class="bar"><button class="btn2" id="close" type="button">Закрыть</button></div>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    var ME = { id:'', name:'' };
+    var COMPANIES = [];
+    var CATEGORIES_SEED = ['Тележка','Стеллаж','Шкаф','Стол','Полка','Дверь/дверца','Мотор/электрика','Прочее'];
+    var OPEN = [], MINE = [];
+
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    document.getElementById('close').onclick=function(){ t.closeModal(); };
+
+    function fillCategorySelect(){
+      var sel=document.getElementById('fCat');
+      var h='';
+      CATEGORIES_SEED.forEach(function(c){ h+='<option value="'+esc(c)+'">'+esc(c)+'</option>'; });
+      h+='<option value="__new__">+ новая категория…</option>';
+      sel.innerHTML=h;
+      sel.onchange=function(){
+        var txt=document.getElementById('fCatNew');
+        if(sel.value==='__new__'){ txt.style.display=''; txt.value=''; txt.focus(); }
+        else txt.style.display='none';
+      };
+    }
+    function currentCategory(){
+      var sel=document.getElementById('fCat');
+      if(sel.value==='__new__') return document.getElementById('fCatNew').value.trim();
+      return sel.value;
+    }
+
+    function fillCompanySelect(){
+      var sel=document.getElementById('fCompany');
+      var h='<option value="">— клиент (если знаете) —</option>';
+      COMPANIES.forEach(function(c){ h+='<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>'; });
+      sel.innerHTML=h;
+      sel.onchange=function(){
+        var co=COMPANIES.filter(function(x){return x.id===sel.value;})[0];
+        var objSel=document.getElementById('fObject');
+        if(co && co.objects && co.objects.length){
+          var oh='<option value="">— объект —</option>';
+          co.objects.forEach(function(o){ oh+='<option value="'+esc(o.name)+'">'+esc(o.name)+'</option>'; });
+          objSel.innerHTML=oh; objSel.style.display='';
+        } else { objSel.style.display='none'; objSel.value=''; }
+      };
+    }
+
+    function loadCompanies(){
+      return fetch(WORKER+'/companies-list').then(function(r){return r.json();}).then(function(j){
+        COMPANIES=(j&&j.ok&&j.companies)||[]; fillCompanySelect();
+      }).catch(function(){});
+    }
+
+    function loadLists(){
+      return fetch(WORKER+'/repair-list').then(function(r){return r.json();}).then(function(j){
+        var all=(j&&j.ok&&j.requests)||[];
+        OPEN = all.filter(function(r){ return r.status==='new'; });
+        MINE = all.filter(function(r){ return r.byName===ME.name; });
+        renderOpen(); renderMine();
+      }).catch(function(){
+        document.getElementById('openList').innerHTML='<div class="muted">Не удалось загрузить.</div>';
+        document.getElementById('mineList').innerHTML='<div class="muted">Не удалось загрузить.</div>';
+      });
+    }
+
+    function renderMine(){
+      var el=document.getElementById('mineList');
+      if(!MINE.length){ el.innerHTML='<div class="muted">Заявок пока нет.</div>'; return; }
+      var h='';
+      MINE.forEach(function(r){
+        h+='<div class="card"><div class="nm"><span class="num-badge">'+esc(r.number)+'</span>'+esc(r.title)+
+           (r.urgent?' <span class="pill urgent">срочно</span>':'')+'</div>'+
+           '<div class="sub">'+esc(r.category||'')+(r.companyName?(' · '+esc(r.companyName)):'')+' · '+
+           (r.status==='done'?('готово · '+esc(r.doneByName||'')):'ждёт') +'</div></div>';
+      });
+      el.innerHTML=h;
+    }
+
+    var OP_KINDS = [
+      {value:'cut', label:'Резка листа', unit:'м', qtyLabel:'Длина реза, м', needsThickness:true},
+      {value:'cutTube', label:'Резка трубы/профиля', unit:'м', qtyLabel:'Длина реза, м', needsThickness:true},
+      {value:'bend', label:'Гибка листа', unit:'шт', qtyLabel:'Количество, шт', needsThickness:true},
+      {value:'bendTube', label:'Гибка трубы', unit:'шт', qtyLabel:'Количество, шт', needsThickness:true},
+      {value:'bendRod', label:'Гибка прута', unit:'шт', qtyLabel:'Количество, шт', needsThickness:true},
+      {value:'weld', label:'Сварка', unit:'см', qtyLabel:'Длина шва, см', needsThickness:true, needsMaterial:true}
+    ];
+    var TH_LIST=[0.5,0.8,1,1.5,2,3,4,5,8,10,12,16];
+
+    function renderOpen(){
+      var el=document.getElementById('openList');
+      if(!OPEN.length){ el.innerHTML='<div class="muted">Открытых заявок нет.</div>'; return; }
+      var h='';
+      OPEN.forEach(function(r){
+        h+='<div class="card" data-id="'+r.id+'"><div class="nm"><span class="num-badge">'+esc(r.number)+'</span>'+esc(r.title)+
+           (r.urgent?' <span class="pill urgent">срочно</span>':'')+'</div>'+
+           '<div class="sub">'+esc(r.category||'')+(r.companyName?(' · '+esc(r.companyName)+(r.objectName?(', '+esc(r.objectName)):'')):'')+
+           (r.byName?(' · заявил: '+esc(r.byName)):'')+'</div>'+
+           '<button class="btn2" data-done="'+r.id+'" type="button" style="margin-top:8px">✓ Отметить «Готово»</button>'+
+           '<div class="doneForm" id="doneForm_'+r.id+'" style="display:none"></div></div>';
+      });
+      el.innerHTML=h;
+      [].forEach.call(el.querySelectorAll('[data-done]'), function(b){
+        b.onclick=function(){ toggleDoneForm(this.getAttribute('data-done')); };
+      });
+    }
+
+    var opRowsState = {};
+
+    function toggleDoneForm(id){
+      var box=document.getElementById('doneForm_'+id);
+      if(box.style.display==='none'){
+        opRowsState[id]=opRowsState[id]||[{}];
+        box.style.display='';
+        drawDoneForm(id);
+      } else { box.style.display='none'; }
+    }
+
+    function drawDoneForm(id){
+      var box=document.getElementById('doneForm_'+id);
+      var rows=opRowsState[id];
+      var h='<div class="muted" style="margin-bottom:4px">Что вы сделали:</div>';
+      rows.forEach(function(row,i){
+        var kind=row.kind||'cut';
+        var meta=OP_KINDS.filter(function(k){return k.value===kind;})[0]||OP_KINDS[0];
+        h+='<div class="opRow" data-row="'+i+'">';
+        h+='<div class="fld">Работа<select class="opKind" data-i="'+i+'">';
+        OP_KINDS.forEach(function(k){ h+='<option value="'+k.value+'"'+(k.value===kind?' selected':'')+'>'+k.label+'</option>'; });
+        h+='</select></div>';
+        if(meta.needsMaterial){
+          h+='<div class="fld">Материал<select class="opMat" data-i="'+i+'">'+
+             '<option value="black"'+(row.material==='ss'?'':' selected')+'>Чёрный металл</option>'+
+             '<option value="ss"'+(row.material==='ss'?' selected':'')+'>Нержавейка</option></select></div>';
+        }
+        if(meta.needsThickness){
+          h+='<div class="fld">Толщина, мм<select class="opTh" data-i="'+i+'">';
+          TH_LIST.forEach(function(v){ h+='<option value="'+v+'"'+(String(row.thickness)===String(v)?' selected':'')+'>'+v+'</option>'; });
+          h+='</select></div>';
+        }
+        h+='<div class="fld">'+meta.qtyLabel+'<input type="text" class="opQty" data-i="'+i+'" value="'+(row.qty||'')+'" style="width:80px"></div>';
+        if(rows.length>1) h+='<button type="button" class="btn2 opDel" data-i="'+i+'">✕</button>';
+        h+='</div>';
+      });
+      h+='<button type="button" class="btn2" id="opAdd_'+id+'" style="margin-top:6px">+ ещё операция</button>';
+      h+='<label class="f">Комментарий <input type="text" class="doneNote" placeholder="Что сделали (кратко)" style="width:auto;flex:1"></label>';
+      h+='<label class="f">📷 Фото <input type="file" class="doneFile" accept="image/*" capture="environment" style="width:auto"></label>';
+      h+='<button class="btn" id="opSubmit_'+id+'" type="button" style="margin-top:8px">Готово — посчитать мой заработок</button>';
+      h+='<div id="earnResult_'+id+'"></div>';
+      box.innerHTML=h;
+
+      [].forEach.call(box.querySelectorAll('.opKind'), function(s){ s.onchange=function(){ rows[+this.getAttribute('data-i')].kind=this.value; drawDoneForm(id); }; });
+      [].forEach.call(box.querySelectorAll('.opMat'), function(s){ s.onchange=function(){ rows[+this.getAttribute('data-i')].material=this.value; }; });
+      [].forEach.call(box.querySelectorAll('.opTh'), function(s){ s.onchange=function(){ rows[+this.getAttribute('data-i')].thickness=+this.value; }; rows[+s.getAttribute('data-i')].thickness=+s.value; });
+      [].forEach.call(box.querySelectorAll('.opQty'), function(inp){ inp.oninput=function(){ rows[+this.getAttribute('data-i')].qty=this.value; }; });
+      [].forEach.call(box.querySelectorAll('.opDel'), function(b){ b.onclick=function(){ rows.splice(+this.getAttribute('data-i'),1); drawDoneForm(id); }; });
+      document.getElementById('opAdd_'+id).onclick=function(){ rows.push({}); drawDoneForm(id); };
+      document.getElementById('opSubmit_'+id).onclick=function(){ submitDone(id); };
+    }
+
+    function fileToB64(file){
+      return new Promise(function(res,rej){
+        var fr=new FileReader();
+        fr.onload=function(){ res(String(fr.result).split(',')[1]); };
+        fr.onerror=rej; fr.readAsDataURL(file);
+      });
+    }
+    function compressImage(file){
+      return new Promise(function(resolve,reject){
+        var fr=new FileReader();
+        fr.onload=function(){
+          var img=new Image();
+          img.onload=function(){
+            var maxSide=1280, w=img.width, hgt=img.height;
+            var k=Math.min(1, maxSide/Math.max(w,hgt));
+            var cnv=document.createElement('canvas');
+            cnv.width=Math.round(w*k); cnv.height=Math.round(hgt*k);
+            cnv.getContext('2d').drawImage(img,0,0,cnv.width,cnv.height);
+            resolve(cnv.toDataURL('image/jpeg',0.72).split(',')[1]);
+          };
+          img.onerror=reject; img.src=fr.result;
+        };
+        fr.onerror=reject; fr.readAsDataURL(file);
+      });
+    }
+
+    function submitDone(id){
+      var rows=(opRowsState[id]||[]).filter(function(r){ return r.kind && +r.qty>0; });
+      var box=document.getElementById('doneForm_'+id);
+      var note=box.querySelector('.doneNote').value.trim();
+      var fileInp=box.querySelector('.doneFile');
+      var btn=document.getElementById('opSubmit_'+id); btn.disabled=true; btn.textContent='Считаю…';
+      fetch(WORKER+'/repair-mark-done', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ id:id, byMemberId:ME.id, byName:ME.name, note:note, operations:rows })
+      }).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'не удалось сохранить');
+        var resEl=document.getElementById('earnResult_'+id);
+        resEl.innerHTML='<div class="earnbox">Ваш заработок за эту работу<br><span class="big">'+Math.round(j.earned).toLocaleString('ru-RU')+' ₸</span></div>';
+        if(fileInp.files && fileInp.files[0]){
+          return compressImage(fileInp.files[0]).then(function(b64){
+            return fetch(WORKER+'/receipt-save',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({kind:'repair',refId:String(id),filename:'ремонт.jpg',mime:'image/jpeg',dataB64:b64})});
+          });
+        }
+      }).then(function(){ setTimeout(loadLists, 4000); }).catch(function(e){
+        btn.disabled=false; btn.textContent='Готово — посчитать мой заработок';
+        alert('Не удалось сохранить: '+(e&&e.message||e));
+      });
+    }
+
+    document.getElementById('send').onclick=function(){
+      var title=document.getElementById('fTitle').value.trim();
+      if(!title){ alert('Опишите, что нужно починить.'); return; }
+      var btn=this; btn.disabled=true;
+      var msg=document.getElementById('msg'); msg.textContent='Отправка…'; msg.style.color='var(--muted)';
+      var companyId=document.getElementById('fCompany').value;
+      var co=COMPANIES.filter(function(c){return c.id===companyId;})[0];
+      var fileInp=document.getElementById('fFile');
+      var payload={ title:title, category:currentCategory(), companyId:companyId||null,
+        companyName:co?co.name:'', objectName:document.getElementById('fObject').value,
+        urgent:document.getElementById('fUrgent').checked, byMemberId:ME.id, byName:ME.name };
+      fetch(WORKER+'/repair-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+        .then(function(r){return r.json();}).then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+          var chain=Promise.resolve();
+          if(fileInp.files && fileInp.files[0]){
+            chain=compressImage(fileInp.files[0]).then(function(b64){
+              return fetch(WORKER+'/receipt-save',{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({kind:'repair',refId:String(j.id),filename:'заявка.jpg',mime:'image/jpeg',dataB64:b64})});
+            });
+          }
+          return chain.then(function(){ return j; });
+        }).then(function(j){
+          msg.textContent='Отправлено: '+j.number+' ✓'; msg.style.color='var(--green)';
+          document.getElementById('fTitle').value='';
+          document.getElementById('fUrgent').checked=false;
+          fileInp.value='';
+          btn.disabled=false;
+          loadLists();
+        }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; btn.disabled=false; });
+    };
+
+    fillCategorySelect();
+    t.member('id','fullName','username').then(function(m){
+      ME.id=(m&&m.id)||''; ME.name=(m&&(m.fullName||m.username))||'';
+      return Promise.all([loadCompanies(), loadLists()]);
+    }).catch(function(){ loadLists(); });
+  </script>
+</body>
+</html>

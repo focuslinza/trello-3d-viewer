@@ -94,6 +94,28 @@
             });
           }
         };
+        var repairReqBtn = {
+          icon: { dark: ICON_BASE + 'ic-repairreq-w.png', light: ICON_BASE + 'ic-repairreq-b.png' },
+          text: 'Заявка на ремонт',
+          callback: function (t) {
+            return t.modal({
+              url: './repair-request-modal.html?t=' + Date.now(),
+              fullscreen: true,
+              title: 'Заявка на ремонт'
+            });
+          }
+        };
+        var repairBtn = {
+          icon: { dark: ICON_BASE + 'ic-repair-w.png', light: ICON_BASE + 'ic-repair-b.png' },
+          text: 'Ремонт',
+          callback: function (t) {
+            return t.modal({
+              url: './repair-modal.html?t=' + Date.now(),
+              fullscreen: true,
+              title: 'Ремонт'
+            });
+          }
+        };
         var reqBtn = {
           icon: { dark: ICON_BASE + 'ic-supplyreq-w.png', light: ICON_BASE + 'ic-supplyreq-b.png' },
           text: 'Заказать снабжение',
@@ -136,12 +158,12 @@
           }).catch(function(){ return { canInvoice:false, canSupply:false, canCrm:false }; });
         }
         return isAdmin().then(function(admin){
-          if (admin) return [earnBtn, reqBtn, supBtn, buhBtn, crmBtn, dashBtn];
+          if (admin) return [earnBtn, repairReqBtn, repairBtn, reqBtn, supBtn, buhBtn, crmBtn, dashBtn];
           return perms().then(function(p){
-            var out = [earnBtn, reqBtn];             // заявку на снабжение может подать любой работник
-            if (p.canSupply) out.push(supBtn);       // панель снабжения — только снабженцу
+            var out = [earnBtn, repairReqBtn, reqBtn]; // заявки на ремонт/снабжение — любой работник
+            if (p.canSupply) out.push(supBtn);
             if (p.canInvoice) out.push(buhBtn);
-            if (p.canCrm) out.push(crmBtn);          // CRM — менеджеру продаж
+            if (p.canCrm) out.push(crmBtn);
             return out;
           });
         });
