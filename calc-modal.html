@@ -427,22 +427,35 @@
       function addOp(o){ var sig='op|'+o.kind+'|'+o.thickness+'|'+round3(o.qty); if(seen[sig]) return false; seen[sig]=1; var row=makeOpRow(o); row.setAttribute('data-dxf','1'); opLines.appendChild(row); return true; }
       function addMat(code,qty){ var sig='mat|'+code+'|'+round3(qty); if(seen[sig]) return false; seen[sig]=1; var row=makeCatRow(MATG,{code:code||'',qty:qty},'м²'); row.setAttribute('data-dxf','1'); matLines.appendChild(row); return true; }
 
-      var added=0, missingTh=0;
+      // Сначала СУММИРУЕМ метры реза / количество гибов по всем DXF-файлам заявки
+      // (сгруппировав по виду операции + толщине), и только потом создаём строки —
+      // иначе тарифная сетка (1/20/100/500) применяется к метражу КАЖДОГО файла в
+      // отдельности вместо общего объёма всей партии, и цена выходит не той, что в
+      // прайсе за настоящий опт (баг: 16 файлов = 16 мелких партий вместо одной на 250 шт).
+      var cutAgg={}, bendAgg={}, matAgg={};
+      var missingTh=0;
       keys.forEach(function(k){
         var m=dxfMetrics[k]||{}; var q=+m.quantity||1; var th=+m.thicknessMm||0;
         if(m.cutLenM>0){
-          if(m.tube){ if(addOp({kind:'cutTube', thickness:(nearestTh(th)||th||1.5), qty:round3(m.cutLenM*q)})) added++; }
-          else if(th>0){ if(addOp({kind:'cut', thickness:nearestTh(th), qty:round3(m.cutLenM*q)})) added++; }
+          if(m.tube){ var thb=nearestTh(th)||th||1.5; var kb='cutTube|'+thb; cutAgg[kb]=(cutAgg[kb]||{kind:'cutTube',thickness:thb,qty:0}); cutAgg[kb].qty+=m.cutLenM*q; }
+          else if(th>0){ var thn=nearestTh(th); var kc='cut|'+thn; cutAgg[kc]=(cutAgg[kc]||{kind:'cut',thickness:thn,qty:0}); cutAgg[kc].qty+=m.cutLenM*q; }
           else missingTh++;
         }
-        if(m.bendCount>0){ if(th>0){ if(addOp({kind:(m.tube?'bendTube':'bend'), thickness:nearestTh(th), qty:Math.round(m.bendCount*q)})) added++; } else missingTh++; }
+        if(m.bendCount>0){
+          if(th>0){ var thbd=nearestTh(th); var kind=(m.tube?'bendTube':'bend'); var kbnd=kind+'|'+thbd; bendAgg[kbnd]=(bendAgg[kbnd]||{kind:kind,thickness:thbd,qty:0}); bendAgg[kbnd].qty+=m.bendCount*q; }
+          else missingTh++;
+        }
         if(m.partAreaM2>0){
           var code = m.materialCode || guessSheetCode(m.material, nearestTh(th));
-          if(addMat(code, round3(m.partAreaM2*q))) added++;
+          var km = 'mat|'+(code||''); matAgg[km]=(matAgg[km]||{code:code,qty:0}); matAgg[km].qty += m.partAreaM2*q;
         }
       });
+      var added=0;
+      Object.keys(cutAgg).forEach(function(k){ var o=cutAgg[k]; o.qty=round3(o.qty); if(addOp(o)) added++; });
+      Object.keys(bendAgg).forEach(function(k){ var o=bendAgg[k]; o.qty=Math.round(o.qty); if(addOp(o)) added++; });
+      Object.keys(matAgg).forEach(function(k){ var o=matAgg[k]; if(addMat(o.code, round3(o.qty))) added++; });
       var h=document.getElementById('dxfHint');
-      if(added){ h.textContent='Добавлено строк из DXF: '+added+' — проверьте толщину/материал.'+(missingTh?' В части расчётов не указана толщина — рез/гиб не добавлены.':''); }
+      if(added){ h.textContent='Добавлено строк из DXF: '+added+' (метры/гибы просуммированы по всем файлам — тариф берётся по общему объёму) — проверьте толщину/материал.'+(missingTh?' В части расчётов не указана толщина — рез/гиб не добавлены.':''); }
       else if(missingTh){ h.textContent='В DXF-расчёте не указана толщина — откройте «DXF / Раскрой», задайте толщину и нажмите «Сохранить расчёт».'; }
       else { h.textContent='В DXF-расчёте нет данных площади/реза для добавления.'; }
       recompute();
