@@ -39,6 +39,15 @@
     .pull:hover { background:#0055cc; }
     .pull.ghost { background:transparent; color:#0c66e4; border:1px solid #0c66e4; }
     .hint { font-size:11px; color:var(--muted); margin-top:6px; }
+    .breakdown { margin:10px 0 16px; border:1px solid #3a414a; border-radius:6px; overflow:hidden; }
+    .breakdown table { width:100%; border-collapse:collapse; font-size:11.5px; }
+    .breakdown th, .breakdown td { padding:5px 8px; border-bottom:1px solid #2c333a; text-align:left; white-space:nowrap; }
+    .breakdown th { color:var(--muted); font-size:10px; text-transform:uppercase; background:#20262b; }
+    .breakdown td.num { text-align:right; }
+    .breakdown td.old { color:#9fadbc; }
+    .breakdown td.new { color:#c7d1db; font-weight:600; }
+    .breakdown .fn { max-width:220px; overflow:hidden; text-overflow:ellipsis; }
+    .breakdown .savings { padding:8px 10px; background:#1c3329; color:#4bce97; font-size:12.5px; font-weight:600; }
     /* sticky total bar */
     #bar { position:fixed; left:0; right:0; bottom:0; background:var(--bg); border-top:1px solid var(--line); padding:10px 16px; }
     #bar .inner { max-width:1000px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:14px; }
@@ -71,6 +80,7 @@
       <button class="resetBtn" id="resetAll" type="button" title="Удалить все строки работ/материалов/компонентов и начать заново">↺ Сбросить расчёт</button>
       <span class="hint" id="dxfHint"></span>
     </div>
+    <div id="dxfBreakdown"></div>
 
     <div class="sec">
       <h3>Работы (резка / гибка / сварка)</h3>
@@ -417,6 +427,46 @@
       return best;
     }
 
+    function escHtml(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+    // Построчная сверка "как раньше" (без опта) против правильной оптовой цены — для
+    // проверки инженером по названиям файлов. Обе цифры считает САМ движок CALC.compute(),
+    // просто с разной группировкой входных операций — так формула нигде не дублируется:
+    // столбец "поштучно" = каждый файл посчитан в одиночку; столбец "по опту" = доля файла
+    // в правильном суммарном тарифе группы (толщина+вид), поэтому сумма долей = чек группы.
+    function renderBreakdown(perFileOps, cutAgg, bendAgg){
+      var box = document.getElementById('dxfBreakdown');
+      if(!perFileOps.length){ box.innerHTML=''; return; }
+      var naiveRes = CALC.compute({ operations: perFileOps.map(function(o){ return {kind:o.kind, thickness:o.thickness, qty:o.qty}; }) });
+      var naiveLines = (naiveRes.lineItems||[]).filter(function(li){ return li.group==='op'; });
+
+      var groupOps=[];
+      Object.keys(cutAgg).forEach(function(k){ groupOps.push(cutAgg[k]); });
+      Object.keys(bendAgg).forEach(function(k){ groupOps.push(bendAgg[k]); });
+      var bulkRes = CALC.compute({ operations: groupOps });
+      var bulkTotalByKey={}, qtyByKey={};
+      (bulkRes.lineItems||[]).forEach(function(li){ if(li.group==='op') bulkTotalByKey[li.kind+'|'+li.thickness]=li.lineTotal; });
+      groupOps.forEach(function(o){ qtyByKey[o.kind+'|'+o.thickness]=o.qty; });
+
+      var rows='', sumNaive=0, sumBulk=0;
+      perFileOps.forEach(function(o,i){
+        var key=o.kind+'|'+o.thickness;
+        var naive = naiveLines[i] ? naiveLines[i].lineTotal : 0;
+        var groupQty = qtyByKey[key]||0, groupTotal = bulkTotalByKey[key]||0;
+        var bulkShare = groupQty>0 ? (o.qty/groupQty)*groupTotal : 0;
+        sumNaive+=naive; sumBulk+=bulkShare;
+        var lbl = (CALC.KIND[o.kind]&&CALC.KIND[o.kind].lbl) || o.kind;
+        rows += '<tr><td class="fn" title="'+escHtml(o.fileName)+'">'+escHtml(o.fileName)+'</td><td>'+escHtml(lbl)+'</td>'+
+          '<td class="num">'+o.thickness+' мм</td><td class="num">'+o.qty+'</td>'+
+          '<td class="num old">'+fmt(naive)+' ₸</td><td class="num new">'+fmt(bulkShare)+' ₸</td></tr>';
+      });
+      var savings = sumNaive-sumBulk;
+      var pct = sumNaive>0 ? (savings/sumNaive*100) : 0;
+      box.innerHTML = '<div class="breakdown"><table><thead><tr><th>Файл</th><th>Операция</th><th>Толщина</th><th>Кол-во</th>'+
+        '<th>Цена поштучно (было)</th><th>Цена по опту (сейчас)</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+        '<div class="savings">Экономия за счёт объединения партий в опт: '+fmt(savings)+' ₸ ('+pct.toFixed(1)+'%) — именно на эту сумму раньше был бы завышен счёт и заработок резчика/гибщика.</div></div>';
+    }
+
     function doPullFromMetrics(){
       var keys=Object.keys(dxfMetrics);
       if(!keys.length){ renderDxfHint(); return; }
@@ -426,15 +476,17 @@
       // потом решаем, какие строки на экране устарели и должны быть заменены.
       var cutAgg={}, bendAgg={}, matAgg={};
       var missingTh=0;
+      var perFileOps=[]; // для таблицы-разбивки: {fileName, kind, thickness, qty}
       keys.forEach(function(k){
         var m=dxfMetrics[k]||{}; var q=+m.quantity||1; var th=+m.thicknessMm||0;
+        var fname = m.fileName || k;
         if(m.cutLenM>0){
-          if(m.tube){ var thb=nearestTh(th)||th||1.5; var kb='cutTube|'+thb; cutAgg[kb]=(cutAgg[kb]||{kind:'cutTube',thickness:thb,qty:0}); cutAgg[kb].qty+=m.cutLenM*q; }
-          else if(th>0){ var thn=nearestTh(th); var kc='cut|'+thn; cutAgg[kc]=(cutAgg[kc]||{kind:'cut',thickness:thn,qty:0}); cutAgg[kc].qty+=m.cutLenM*q; }
+          if(m.tube){ var thb=nearestTh(th)||th||1.5; var kb='cutTube|'+thb; cutAgg[kb]=(cutAgg[kb]||{kind:'cutTube',thickness:thb,qty:0}); cutAgg[kb].qty+=m.cutLenM*q; perFileOps.push({fileName:fname,kind:'cutTube',thickness:thb,qty:round3(m.cutLenM*q)}); }
+          else if(th>0){ var thn=nearestTh(th); var kc='cut|'+thn; cutAgg[kc]=(cutAgg[kc]||{kind:'cut',thickness:thn,qty:0}); cutAgg[kc].qty+=m.cutLenM*q; perFileOps.push({fileName:fname,kind:'cut',thickness:thn,qty:round3(m.cutLenM*q)}); }
           else missingTh++;
         }
         if(m.bendCount>0){
-          if(th>0){ var thbd=nearestTh(th); var kind=(m.tube?'bendTube':'bend'); var kbnd=kind+'|'+thbd; bendAgg[kbnd]=(bendAgg[kbnd]||{kind:kind,thickness:thbd,qty:0}); bendAgg[kbnd].qty+=m.bendCount*q; }
+          if(th>0){ var thbd=nearestTh(th); var kind=(m.tube?'bendTube':'bend'); var kbnd=kind+'|'+thbd; bendAgg[kbnd]=(bendAgg[kbnd]||{kind:kind,thickness:thbd,qty:0}); bendAgg[kbnd].qty+=m.bendCount*q; perFileOps.push({fileName:fname,kind:kind,thickness:thbd,qty:Math.round(m.bendCount*q)}); }
           else missingTh++;
         }
         if(m.partAreaM2>0){
@@ -479,9 +531,11 @@
       Object.keys(bendAgg).forEach(function(k){ var o=bendAgg[k]; o.qty=Math.round(o.qty); if(addOp(o)) added++; });
       Object.keys(matAgg).forEach(function(k){ var o=matAgg[k]; if(addMat(o.code, round3(o.qty))) added++; });
       var h=document.getElementById('dxfHint');
-      if(added){ h.textContent='Добавлено строк из DXF: '+added+' (метры/гибы просуммированы по всем файлам — тариф берётся по общему объёму) — проверьте толщину/материал.'+(missingTh?' В части расчётов не указана толщина — рез/гиб не добавлены.':''); }
+      if(added){ h.textContent='Добавлено строк из DXF: '+added+' (тариф — по общему объёму; построчная сверка ниже) — проверьте толщину/материал.'+(missingTh?' В части расчётов не указана толщина — рез/гиб не добавлены.':''); }
       else if(missingTh){ h.textContent='В DXF-расчёте не указана толщина — откройте «DXF / Раскрой», задайте толщину и нажмите «Сохранить расчёт».'; }
       else { h.textContent='В DXF-расчёте нет данных площади/реза для добавления.'; }
+
+      renderBreakdown(perFileOps, cutAgg, bendAgg);
       recompute();
     }
 
