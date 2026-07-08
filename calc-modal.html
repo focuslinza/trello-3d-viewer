@@ -34,6 +34,8 @@
     .fld select, .fld input { height:32px; border:1px solid var(--line); border-radius:4px; background:var(--bg); color:var(--txt); font-size:13px; padding:0 6px; }
     .chk { display:flex; align-items:center; gap:6px; height:32px; }
     .pull { background:#0c66e4; color:#fff; border:none; border-radius:4px; padding:7px 14px; font-size:12px; font-weight:600; cursor:pointer; height:34px; }
+    .resetBtn { background:transparent; color:#e8a59d; border:1px solid #7a3a32; border-radius:4px; padding:7px 14px; font-size:12px; font-weight:600; cursor:pointer; height:34px; }
+    .resetBtn:hover { background:#3a2320; }
     .pull:hover { background:#0055cc; }
     .pull.ghost { background:transparent; color:#0c66e4; border:1px solid #0c66e4; }
     .hint { font-size:11px; color:var(--muted); margin-top:6px; }
@@ -64,8 +66,9 @@
     <h2 id="cardTitle">Калькулятор стоимости</h2>
     <div class="sub" id="meta">v22 · загрузка…</div>
 
-    <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
+    <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
+      <button class="resetBtn" id="resetAll" type="button" title="Удалить все строки работ/материалов/компонентов и начать заново">↺ Сбросить расчёт</button>
       <span class="hint" id="dxfHint"></span>
     </div>
 
@@ -417,21 +420,10 @@
     function doPullFromMetrics(){
       var keys=Object.keys(dxfMetrics);
       if(!keys.length){ renderDxfHint(); return; }
-      // remove rows previously added by an earlier "Загрузить из DXF" click (avoid duplication)
-      [].slice.call(opLines.querySelectorAll('[data-dxf]')).forEach(function(r){ r.remove(); });
-      [].slice.call(matLines.querySelectorAll('[data-dxf]')).forEach(function(r){ r.remove(); });
-      // signatures of rows already present (manual or restored) — skip identical ones
-      var seen={};
-      [].forEach.call(opLines.children, function(r){ var d=r._read&&r._read(); if(d) seen['op|'+d.kind+'|'+d.thickness+'|'+round3(d.qty)]=1; });
-      [].forEach.call(matLines.children, function(r){ var d=r._read&&r._read(); if(d) seen['mat|'+d.code+'|'+round3(d.qty)]=1; });
-      function addOp(o){ var sig='op|'+o.kind+'|'+o.thickness+'|'+round3(o.qty); if(seen[sig]) return false; seen[sig]=1; var row=makeOpRow(o); row.setAttribute('data-dxf','1'); opLines.appendChild(row); return true; }
-      function addMat(code,qty){ var sig='mat|'+code+'|'+round3(qty); if(seen[sig]) return false; seen[sig]=1; var row=makeCatRow(MATG,{code:code||'',qty:qty},'м²'); row.setAttribute('data-dxf','1'); matLines.appendChild(row); return true; }
 
-      // Сначала СУММИРУЕМ метры реза / количество гибов по всем DXF-файлам заявки
-      // (сгруппировав по виду операции + толщине), и только потом создаём строки —
-      // иначе тарифная сетка (1/20/100/500) применяется к метражу КАЖДОГО файла в
-      // отдельности вместо общего объёма всей партии, и цена выходит не той, что в
-      // прайсе за настоящий опт (баг: 16 файлов = 16 мелких партий вместо одной на 250 шт).
+      // Сначала СУММИРУЕМ метры реза / количество гибов / площадь по всем DXF-файлам
+      // заявки (сгруппировав по виду операции + толщине, и по материалу) — и только
+      // потом решаем, какие строки на экране устарели и должны быть заменены.
       var cutAgg={}, bendAgg={}, matAgg={};
       var missingTh=0;
       keys.forEach(function(k){
@@ -450,6 +442,38 @@
           var km = 'mat|'+(code||''); matAgg[km]=(matAgg[km]||{code:code,qty:0}); matAgg[km].qty += m.partAreaM2*q;
         }
       });
+
+      // Удаляем ЛЮБЫЕ существующие строки резки/гибки той же толщины и материала того же
+      // кода, которые сейчас заменяются свежим суммарным значением — вне зависимости от
+      // того, стоит ли на них метка "добавлено автоматически". Раньше чистились только
+      // помеченные строки, и заказы, где ручные/старые построчные записи были без метки
+      // (например, сделанные ещё до появления этой метки), задваивались: и старые мелкие
+      // строки, и новая суммарная строка считались ОДНОВРЕМЕННО, счёт вместо уменьшения рос.
+      // Строки другой толщины или другого вида (например, сварка) это не затрагивает.
+      var cutBendKeys={}; // "kind|thickness" -> true, для того, что мы сейчас пересоздадим
+      Object.keys(cutAgg).forEach(function(k){ cutBendKeys[cutAgg[k].kind+'|'+cutAgg[k].thickness]=1; });
+      Object.keys(bendAgg).forEach(function(k){ cutBendKeys[bendAgg[k].kind+'|'+bendAgg[k].thickness]=1; });
+      [].slice.call(opLines.children).forEach(function(r){
+        var d=r._read&&r._read(); if(!d) return;
+        if(cutBendKeys[d.kind+'|'+d.thickness]) r.remove();
+      });
+      var matCodes={};
+      Object.keys(matAgg).forEach(function(k){ matCodes['mat|'+(matAgg[k].code||'')]=1; });
+      [].slice.call(matLines.children).forEach(function(r){
+        var d=r._read&&r._read(); if(!d) return;
+        if(matCodes['mat|'+(d.code||'')]) r.remove();
+      });
+      // на всякий случай убираем и оставшиеся хвосты от прежней версии дедупликации по метке
+      [].slice.call(opLines.querySelectorAll('[data-dxf]')).forEach(function(r){ r.remove(); });
+      [].slice.call(matLines.querySelectorAll('[data-dxf]')).forEach(function(r){ r.remove(); });
+
+      // то, что осталось на экране после чистки, — это ручные строки; не трогаем их
+      var seen={};
+      [].forEach.call(opLines.children, function(r){ var d=r._read&&r._read(); if(d) seen['op|'+d.kind+'|'+d.thickness+'|'+round3(d.qty)]=1; });
+      [].forEach.call(matLines.children, function(r){ var d=r._read&&r._read(); if(d) seen['mat|'+d.code+'|'+round3(d.qty)]=1; });
+      function addOp(o){ var sig='op|'+o.kind+'|'+o.thickness+'|'+round3(o.qty); if(seen[sig]) return false; seen[sig]=1; var row=makeOpRow(o); row.setAttribute('data-dxf','1'); opLines.appendChild(row); return true; }
+      function addMat(code,qty){ var sig='mat|'+code+'|'+round3(qty); if(seen[sig]) return false; seen[sig]=1; var row=makeCatRow(MATG,{code:code||'',qty:qty},'м²'); row.setAttribute('data-dxf','1'); matLines.appendChild(row); return true; }
+
       var added=0;
       Object.keys(cutAgg).forEach(function(k){ var o=cutAgg[k]; o.qty=round3(o.qty); if(addOp(o)) added++; });
       Object.keys(bendAgg).forEach(function(k){ var o=bendAgg[k]; o.qty=Math.round(o.qty); if(addOp(o)) added++; });
@@ -466,6 +490,16 @@
       if(Object.keys(dxfMetrics).length){ doPullFromMetrics(); return; }
       // empty: re-fetch the bridge (handles first-load race / stale cache)
       fetchBridge().then(applyBridge).then(doPullFromMetrics);
+    };
+    document.getElementById('resetAll').onclick=function(){
+      var n = opLines.children.length + matLines.children.length + cmpLines.children.length;
+      if(!n){ document.getElementById('dxfHint').textContent='Строк и так нет — сбрасывать нечего.'; return; }
+      if(!confirm('Удалить все строки работ, материалов и компонентов ('+n+' шт.) и начать расчёт заново? Это не сохранится, пока вы не нажмёте «Сохранить».')) return;
+      [].slice.call(opLines.children).forEach(function(r){ r.remove(); });
+      [].slice.call(matLines.children).forEach(function(r){ r.remove(); });
+      [].slice.call(cmpLines.children).forEach(function(r){ r.remove(); });
+      document.getElementById('dxfHint').textContent='Расчёт очищен. Нажмите «Загрузить из DXF» или добавьте строки вручную.';
+      recompute();
     };
     function nearestTh(th){ var best=TH[0],bd=1e9; TH.forEach(function(x){var d=Math.abs(x-th); if(d<bd){bd=d;best=x;}}); return best; }
     function round3(x){ return Math.round(x*1000)/1000; }
