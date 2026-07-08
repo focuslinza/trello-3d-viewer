@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Разовая загрузка клиентов — Покупатели.docx</title>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #app{max-width:900px;margin:0 auto;padding:24px 16px 60px}
+    h2{margin:0 0 6px} .muted{color:var(--muted);font-size:13px}
+    .btn{background:#274469;border:1px solid var(--blue);border-radius:9px;color:#cfe1ff;padding:11px 20px;font-size:15px;font-weight:600;cursor:pointer;margin-top:14px}
+    .btn:disabled{opacity:.5;cursor:default}
+    table{width:100%;border-collapse:collapse;margin-top:16px}
+    th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:top}
+    th{color:var(--muted);font-size:11px;text-transform:uppercase}
+    .pill{display:inline-block;border-radius:9px;padding:2px 9px;font-size:11.5px;font-weight:700}
+    .pill.new{background:#1c3329;color:var(--green)} .pill.dup{background:#2c333a;color:var(--muted)} .pill.err{background:#42221f;color:var(--red)} .pill.wait{background:#2c333a;color:var(--muted)}
+    #summary{margin-top:16px;font-size:14px}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2>Разовая загрузка клиентов из «Покупатели.docx»</h2>
+    <div class="muted">Записей в файле: 34. Перед созданием каждая сверяется с уже имеющимися клиентами CRM по БИН/ИИН — совпадения не дублируются.</div>
+    <button class="btn" id="runBtn" type="button">Проверить и загрузить</button>
+    <div id="summary"></div>
+    <table id="tbl" style="display:none"><thead><tr><th>№</th><th>Название</th><th>БИН/ИИН</th><th>Телефон</th><th>Статус</th></tr></thead><tbody id="rows"></tbody></table>
+  </div>
+  <script>
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    var RECORDS = [{"num": 1, "bin": "130140011649", "legal": "ТОО", "name": "ТОО «Тәп-Тәтті»", "addr": "Республика Казахстан, 010000, город Астана, район Сарыарка, жилой массив Көктал, ул. Баршын, зд. 40", "phone": "+77057550044"}, {"num": 2, "bin": "210440003715", "legal": "ТОО", "name": "ТОО «TT Ondiris»", "addr": "010000, город Астана, район Алматы, жилой массив Юго-Восток (правая сторона), ул. Қордай, д. 12", "phone": ""}, {"num": 3, "bin": "140140015247", "legal": "ТОО", "name": "ТОО «TapTatti Retail»", "addr": "Республика Казахстан, г.Астана, Есильский район, ул.Мангилик ел, дом 51,н.п.8", "phone": ""}, {"num": 4, "bin": "220540011543", "legal": "ТОО", "name": "ТОО «Astana Cake Shops»", "addr": "РЕСПУБЛИКА КАЗАХСТАН, Г.АСТАНА, РАЙОН НҰРА, Проспект Тұран, дом 42, н.п. 6", "phone": ""}, {"num": 5, "bin": "240340013556", "legal": "ТОО", "name": "ТОО «Qorday Bakery»", "addr": "РЕСПУБЛИКА КАЗАХСТАН, Г.АСТАНА, РАЙОН АЛМАТЫ, Жилой массив Юго-Восток (правая сторона), улица Қордай, дом 12", "phone": ""}, {"num": 6, "bin": "231140010733", "legal": "ТОО", "name": "ТОО «Сусын Мастер»", "addr": "Республика Казахстан, 010000, город Астана, район Алматы, жилой массив Юго-Восток (правая сторона), ул. Қордай, зд. 12", "phone": "+7(778)060-00-08"}, {"num": 7, "bin": "080840012908", "legal": "ТОО", "name": "ТОО «IPM ENGINEERING»", "addr": "Республика Казахстан, 010000, город Астана, район Алматы, жилой массив Юго-Восток (правая сторона), ул. Қордай, д. 12", "phone": "87075511050"}, {"num": 8, "bin": "230140024532", "legal": "ТОО", "name": "ТОО «Dairy Horeca»", "addr": "Республика Казахстан,010000, город Астана, район Алматы, жилой массив Юго-Восток (правая сторона), ул. Қордай, зд. 12", "phone": "+7(717)247-60-97"}, {"num": 9, "bin": "120640005717", "legal": "ТОО", "name": "ТОО «TT CONSTRUCTION»", "addr": "010000, город Астана, район Алматы, жилой массив Юго-Восток (правая сторона), ул. Қордай, д. 12", "phone": ""}, {"num": 10, "bin": "090840003366", "legal": "ТОО", "name": "ТОО «HRC» (ЭЙЧАРСИ)", "addr": "Индекс 050050, Республика Казахстан, г.Алматы, Жетысуский район, пр. Суюнбая 66 В", "phone": "7 7172579797"}, {"num": 11, "bin": "240940029306", "legal": "ТОО", "name": "ТОО «Unison Group»", "addr": "060009, Атырауская область, город Атырау, проезд Тұмар Ханша, зд. 37Б", "phone": "+7(707)704-07-55"}, {"num": 12, "bin": "240540004356", "legal": "ТОО", "name": "ТОО «Astana Bakery»", "addr": "Республика Казахстан, 010000, город Астана, район Есиль, ул. Сарайшық, д. 5, ВП 5", "phone": "+7 700 321 0000"}, {"num": 13, "bin": "250540005049", "legal": "ТОО", "name": "ТОО «Tasty Cakes»", "addr": "Z05M0M5, город Астана, район Есиль, пр. Мангилик Ел, д. 17, н.п. 24", "phone": "+7(700)321-00-07"}, {"num": 14, "bin": "191040028613", "legal": "ТОО", "name": "ТОО «IL-TOV» (ИЛ-ТОВ)", "addr": "Республика Казахстан, 010078, Акмолинская область, город Косшы, ул. Абая Кунанбаева, ст-е 36", "phone": ""}, {"num": 16, "bin": "240240023301", "legal": "ТОО", "name": "ТОО «SJP»", "addr": "010000, город Астана, район Сарыарка, жилой массив Көктал, ул. Баршын, зд. 40", "phone": "+7(701)982-12-60"}, {"num": 17, "bin": "260340032249", "legal": "ТОО", "name": "ТОО «IPM Industrial Services»", "addr": "010000, город Астана, район Сарыарка, жилой массив Көктал, ул. Баршын, зд. 40", "phone": "+7(775)916-01-44"}, {"num": 18, "bin": "870430400506", "legal": "ИП", "name": "ИП Qorday Bakery", "addr": "Республика Казахстан,010000, город Астана, Алматинский район, ул Кордай, д 12", "phone": ""}, {"num": 19, "bin": "201140035199", "legal": "ТОО", "name": "ТОО «Qulpynai Production»", "addr": "050053, город Алматы, Алатауский район, мкр. Алгабас, ул. 7, д. 142/89", "phone": "+7(707) 906 08 66"}, {"num": 20, "bin": "840520402798", "legal": "ИП", "name": "ИП Мұратбек А.М.", "addr": "КАЗАХСТАН, город Астана, Проспект УЛЫ ДАЛА, дом 41/3, квартира 178", "phone": ""}, {"num": 21, "bin": "171240023785", "legal": "ТОО", "name": "ТОО «MedQyzmet Group»", "addr": "010000, город Астана, район Нұра, мкр. Караоткель, ул. Жылой, д. 1/2", "phone": "+7 (701) 9389326"}, {"num": 22, "bin": "831011300674", "legal": "ИП", "name": "ИП Development", "addr": "Республика Казахстан, Астана, район Алматы, Проспект Тәуелсіздік, дом № 43, к.100", "phone": ""}, {"num": 23, "bin": "860421302221", "legal": "ИП", "name": "ИП BIDAS", "addr": "г. Астана, ПРОСПЕКТ ТҰРАН, дом 42, кв/офис 486", "phone": "7 702 800 6008"}, {"num": 24, "bin": "910440000340", "legal": "ТОО", "name": "ТОО «Ассоциация Альянс»", "addr": "071400, Восточно-Казахстанская область, город Семей, ул. Тельмана Уранхаева, д. 1, кв. 77", "phone": "87710514497"}, {"num": 25, "bin": "891018351702", "legal": "ИП", "name": "ИП ЧЁРНАЯ ЖЕМЧУЖИНА", "addr": "Республика Казахстан, г.Астана, Ж ТАРХАНА, дом 9, кв/офис 17", "phone": ""}, {"num": 26, "bin": "181140035658", "legal": "ТОО", "name": "ТОО «CaspiPromTekh»", "addr": "010000, город Астана, район Сарыарка, жилой массив Көктал, ул. Шантобе, зд. 11А", "phone": "+7(775) 408-86-54"}, {"num": 27, "bin": "430828300417", "legal": "ИП", "name": "ИП Рысбеков К.", "addr": "Республика Казахстан, г. Астана, ул. УЛИЦА САРАЙШЫК, д. 34, кв. (офис) 226", "phone": ""}, {"num": 28, "bin": "220440022238", "legal": "ТОО", "name": "ТОО «Manul Technologies»", "addr": "010000, город Астана, район Нұра, ул. КАЙЫМ МУХАМЕДХАНОВ, зд. 5, н.п. 38, тел.: +7, 777 182 70 11", "phone": ""}, {"num": 29, "bin": "201140032253", "legal": "ТОО", "name": "ТОО «Qulpynai Bakery»", "addr": "050036, город Алматы, Ауэзовский район, мкр. Мамыр-1, д. 26", "phone": ""}, {"num": 30, "bin": "240740007576", "legal": "ТОО", "name": "ТОО «SALQYN SUB-ZERO»", "addr": "010000, город Астана, район Алматы, жилой массив Юго-Восток (правая сторона), ул. Қордай, д. 12", "phone": "+7(701)224-00-88"}, {"num": 31, "bin": "170840036805", "legal": "ТОО", "name": "ТОО «Lift Capital»", "addr": "010000, город Астана, район Есиль, ул. Дінмұхамед Қонаев, ст-е 14/3, БЦ \"Нурсая\" 5 этаж", "phone": "+77751313733"}, {"num": 32, "bin": "240440025563", "legal": "ТОО", "name": "ТОО «Астана Фермер»", "addr": "010000, город Астана, район Алматы, жилой массив Интернациональный, ул. Мереке, д. 14, кв. 1", "phone": "+7(701)465-15-02"}, {"num": 33, "bin": "190140011233", "legal": "ТОО", "name": "ТОО «Салтанат уйи»", "addr": "010000, город Астана, район Нұра, пр. Қабанбай Батыр, зд. 3", "phone": "+7 7017244452"}, {"num": 34, "bin": "230140004250", "legal": "ТОО", "name": "ТОО «TT Karagandy»", "addr": "Республика Казахстан, 100009, Карагандинская область, город Караганда, район имени Казыбек Би, ул. Мельничная, зд. 24", "phone": "+7(708)757-24-07"}, {"num": 35, "bin": "200540022941", "legal": "ТОО", "name": "ТОО «TT BAKERY»", "addr": "Республика Казахстан, г. Шымкент, Аль-Фарабийский район,улица Сарбаздар, здание 10А", "phone": ""}];
+
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+    function renderRows(){
+      var h='';
+      RECORDS.forEach(function(r){
+        h+='<tr id="row_'+r.num+'"><td>'+r.num+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.bin)+'</td><td>'+esc(r.phone||'—')+'</td><td><span class="pill wait" id="st_'+r.num+'">…</span></td></tr>';
+      });
+      document.getElementById('rows').innerHTML = h;
+      document.getElementById('tbl').style.display = '';
+    }
+    function setStatus(num, cls, text){
+      var el = document.getElementById('st_'+num);
+      if (el){ el.className='pill '+cls; el.textContent=text; }
+    }
+
+    document.getElementById('runBtn').onclick = function(){
+      var btn=this; btn.disabled=true; btn.textContent='Загрузка…';
+      renderRows();
+      fetch(WORKER+'/companies-list').then(function(r){return r.json();}).then(function(j){
+        var existing = (j&&j.ok&&j.companies)||[];
+        var byBin = {};
+        existing.forEach(function(c){ if(c.bin) byBin[String(c.bin).trim()] = c; });
+
+        var created=0, skipped=0, failed=0;
+        var chain = Promise.resolve();
+        RECORDS.forEach(function(r){
+          chain = chain.then(function(){
+            var dup = byBin[r.bin];
+            if (dup){
+              skipped++; setStatus(r.num,'dup','уже есть: '+ (dup.name||'').slice(0,30));
+              return;
+            }
+            var company = {
+              id: 'imp_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),
+              type: 'company', name: r.name, bin: r.bin, addr: r.addr||'', phone: r.phone||'',
+              contacts: [], objects: []
+            };
+            return fetch(WORKER+'/company-save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ company: company }) })
+              .then(function(rr){ return rr.json(); })
+              .then(function(jj){
+                if (jj && jj.ok){ created++; byBin[r.bin]=company; setStatus(r.num,'new','создан'); }
+                else { failed++; setStatus(r.num,'err','ошибка: '+((jj&&jj.error)||'?')); }
+              }).catch(function(e){ failed++; setStatus(r.num,'err','сеть: '+(e&&e.message||e)); });
+          });
+        });
+        chain.then(function(){
+          btn.textContent='Готово';
+          document.getElementById('summary').innerHTML =
+            '<b>Итог:</b> создано <span style="color:var(--green)">'+created+'</span>, '+
+            'уже было в CRM (пропущено) <span style="color:var(--muted)">'+skipped+'</span>, '+
+            'ошибок <span style="color:var(--red)">'+failed+'</span>.';
+        });
+      }).catch(function(e){
+        document.getElementById('summary').innerHTML = '<span style="color:var(--red)">Не удалось получить список текущих клиентов: '+esc(e&&e.message||e)+'</span>';
+        btn.disabled=false; btn.textContent='Проверить и загрузить';
+      });
+    };
+  </script>
+</body>
+</html>
