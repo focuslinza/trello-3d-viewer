@@ -66,9 +66,7 @@
     <div id="canvas-holder"></div>
     <div id="toolbar" style="display:none;">
       <button class="tb-btn" id="btn-reset">Сбросить вид</button>
-      <button class="tb-btn" id="btn-measure">Расстояние</button>
-      <button class="tb-btn" id="btn-angle">Угол</button>
-      <button class="tb-btn" id="btn-radius">Радиус</button>
+      <button class="tb-btn" id="btn-clear-pick">Очистить выбор</button>
       <button class="tb-btn" id="btn-wireframe">Каркас</button>
       <button class="tb-btn active" id="btn-grid">Сетка</button>
     </div>
@@ -240,22 +238,82 @@
     });
 
     var raycaster = new THREE.Raycaster();
-    var hoverHighlight = new THREE.Mesh(
-      new THREE.BufferGeometry(),
-      new THREE.MeshBasicMaterial({ color: 0xffd93d, transparent: true, opacity: 0.55, depthTest: false, side: THREE.DoubleSide })
-    );
-    hoverHighlight.renderOrder = 999;
-    hoverHighlight.visible = false;
-    scene.add(hoverHighlight);
-    var hoveredFace = null;
 
-    function clearHover() {
-      hoveredFace = null;
-      hoverHighlight.visible = false;
-      hoverHintEl.style.display = 'none';
+    // ==========================================================================
+    // Контрастная отрисовка рёбер CAD-модели — рисуются один раз при загрузке,
+    // видны всегда (не только по наведению), тёмным цветом поверх затенённой
+    // поверхности — как обычно показывают рёбра в инженерных программах.
+    // Примечание: WebGL в браузерах не даёт по-настоящему толстые линии через
+    // обычный механизм отрисовки линий (ограничение платформы, не наше) —
+    // контраст здесь достигается цветом и приоритетом отрисовки, а не толщиной.
+    // ==========================================================================
+    function buildEdgeOverlay(mesh, edges) {
+      var positions = [];
+      edges.forEach(function (e) {
+        for (var i = 1; i < e.points.length; i++) {
+          var a = e.points[i - 1], b = e.points[i];
+          positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        }
+      });
+      var geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      var mat = new THREE.LineBasicMaterial({ color: 0x14181d, depthTest: true, depthWrite: false, transparent: true, opacity: 0.9 });
+      var lines = new THREE.LineSegments(geom, mat);
+      lines.renderOrder = 5;
+      lines.position.copy(mesh.position); lines.quaternion.copy(mesh.quaternion); lines.scale.copy(mesh.scale);
+      return lines;
     }
 
-    function pickFaceAt(clientX, clientY) {
+    // ==========================================================================
+    // Единый подбор элемента под курсором: ТОЧКА (конец ребра) > РЕБРО > ГРАНЬ,
+    // по близости в экранных пикселях для точки/ребра, лучом — для грани.
+    // Дальше система сама решает, что считать, по тому, что выбрано.
+    // ==========================================================================
+    var VERTEX_PX = 10, EDGE_PX = 7;
+
+    function toScreenPx(worldPoint) {
+      var v = worldPoint.clone().project(camera);
+      var rect = renderer.domElement.getBoundingClientRect();
+      return { x: (v.x * 0.5 + 0.5) * rect.width + rect.left, y: (-v.y * 0.5 + 0.5) * rect.height + rect.top };
+    }
+    function distPointToSegPx(p, a, b) {
+      var dx = b.x - a.x, dy = b.y - a.y;
+      var len2 = dx*dx + dy*dy;
+      var t = len2 > 0 ? Math.max(0, Math.min(1, ((p.x-a.x)*dx + (p.y-a.y)*dy) / len2)) : 0;
+      var cx = a.x + t*dx, cy = a.y + t*dy;
+      return Math.hypot(p.x-cx, p.y-cy);
+    }
+
+    function pickAt(clientX, clientY) {
+      var cursor = { x: clientX, y: clientY };
+      var bestVertex = null, bestVertexDist = VERTEX_PX;
+      var bestEdge = null, bestEdgeDist = EDGE_PX;
+
+      modelGroup.children.forEach(function (mesh) {
+        if (!mesh.isMesh || !mesh.userData.edges) return;
+        mesh.userData.edges.forEach(function (e, ei) {
+          // концы каждого ребра — кандидаты в "точку"
+          [e.points[0], e.points[e.points.length - 1]].forEach(function (pt) {
+            var scr = toScreenPx(pt);
+            var d = Math.hypot(scr.x - cursor.x, scr.y - cursor.y);
+            if (d < bestVertexDist) { bestVertexDist = d; bestVertex = { mesh: mesh, point: pt }; }
+          });
+          // сегменты ребра — кандидаты в "ребро"
+          for (var i = 1; i < e.points.length; i++) {
+            var a = toScreenPx(e.points[i-1]), b = toScreenPx(e.points[i]);
+            var d2 = distPointToSegPx(cursor, a, b);
+            if (d2 < bestEdgeDist) { bestEdgeDist = d2; bestEdge = { mesh: mesh, edge: e, edgeIndex: ei }; }
+          }
+        });
+      });
+
+      if (bestVertex) return { kind: 'point', mesh: bestVertex.mesh, point: bestVertex.point };
+      if (bestEdge) {
+        var shape = GEOM.classifyEdgeShape(bestEdge.edge.points);
+        return { kind: 'edge', mesh: bestEdge.mesh, points: bestEdge.edge.points, shape: shape, edgeIndex: bestEdge.edgeIndex };
+      }
+
+      // ничего рядом по точкам/рёбрам — пробуем грань лучом
       var rect = renderer.domElement.getBoundingClientRect();
       var ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
       raycaster.setFromCamera(ndc, camera);
@@ -264,11 +322,13 @@
       var hit = hits[0];
       var mesh = hit.object;
       var ud = mesh.userData;
-      if (!ud || !ud.triToFace || hit.faceIndex == null) return { mesh: mesh, faceIndex: null, first: 0, last: 0, point: hit.point };
+      if (!ud || !ud.triToFace || hit.faceIndex == null) return null;
       var faceIdx = ud.triToFace[hit.faceIndex];
-      if (faceIdx < 0 || !ud.brepFaces[faceIdx]) return { mesh: mesh, faceIndex: null, first: 0, last: 0, point: hit.point };
+      if (faceIdx < 0 || !ud.brepFaces[faceIdx]) return null;
       var bf = ud.brepFaces[faceIdx];
-      return { mesh: mesh, faceIndex: faceIdx, first: bf.first, last: bf.last, point: hit.point };
+      var pos = mesh.geometry.attributes.position.array, idxArr = mesh.geometry.index.array;
+      var normal = GEOM.averageFaceNormal(pos, idxArr, bf.first, bf.last);
+      return { kind: 'face', mesh: mesh, first: bf.first, last: bf.last, normal: normal, centroid: hit.point };
     }
 
     function buildHighlightGeometry(mesh, first, last) {
@@ -283,30 +343,56 @@
       return geom;
     }
 
-    function setHoverHighlight(pick) {
-      if (!pick || pick.faceIndex == null) { clearHover(); return; }
-      if (hoveredFace && hoveredFace.mesh === pick.mesh && hoveredFace.faceIndex === pick.faceIndex) return;
-      hoveredFace = pick;
-      if (hoverHighlight.geometry) hoverHighlight.geometry.dispose();
-      hoverHighlight.geometry = buildHighlightGeometry(pick.mesh, pick.first, pick.last);
-      hoverHighlight.position.copy(pick.mesh.position);
-      hoverHighlight.quaternion.copy(pick.mesh.quaternion);
-      hoverHighlight.scale.copy(pick.mesh.scale);
-      hoverHighlight.visible = true;
-      hoverHintEl.textContent = 'Грань выделена — можно кликать';
+    // ---- подсветка по наведению: показывает, ЧТО именно будет выбрано кликом ----
+    var hoverPointMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffd93d, depthTest: false }));
+    hoverPointMesh.renderOrder = 999; hoverPointMesh.visible = false;
+    scene.add(hoverPointMesh);
+    var hoverEdgeLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffd93d, linewidth: 3, depthTest: false }));
+    hoverEdgeLine.renderOrder = 999; hoverEdgeLine.visible = false;
+    scene.add(hoverEdgeLine);
+    var hoverFaceMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xffd93d, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide }));
+    hoverFaceMesh.renderOrder = 999; hoverFaceMesh.visible = false;
+    scene.add(hoverFaceMesh);
+    var hoverKind = null;
+
+    function clearHoverVisuals() {
+      hoverPointMesh.visible = false; hoverEdgeLine.visible = false; hoverFaceMesh.visible = false;
+      hoverHintEl.style.display = 'none';
+      hoverKind = null;
+    }
+
+    function showHover(pick) {
+      if (!pick) { clearHoverVisuals(); return; }
+      clearHoverVisuals();
+      hoverKind = pick.kind;
+      if (pick.kind === 'point') {
+        hoverPointMesh.scale.setScalar(Math.max(modelMaxDim * 0.012, 0.0001));
+        hoverPointMesh.position.copy(pick.point);
+        hoverPointMesh.visible = true;
+        hoverHintEl.textContent = 'Точка — можно кликать';
+      } else if (pick.kind === 'edge') {
+        if (hoverEdgeLine.geometry) hoverEdgeLine.geometry.dispose();
+        hoverEdgeLine.geometry = new THREE.BufferGeometry().setFromPoints(pick.points);
+        hoverEdgeLine.position.copy(pick.mesh.position); hoverEdgeLine.quaternion.copy(pick.mesh.quaternion); hoverEdgeLine.scale.copy(pick.mesh.scale);
+        hoverEdgeLine.visible = true;
+        hoverHintEl.textContent = (pick.shape.kind === 'curved' ? 'Дуга' : 'Ребро') + ' — можно кликать';
+      } else if (pick.kind === 'face') {
+        if (hoverFaceMesh.geometry) hoverFaceMesh.geometry.dispose();
+        hoverFaceMesh.geometry = buildHighlightGeometry(pick.mesh, pick.first, pick.last);
+        hoverFaceMesh.position.copy(pick.mesh.position); hoverFaceMesh.quaternion.copy(pick.mesh.quaternion); hoverFaceMesh.scale.copy(pick.mesh.scale);
+        hoverFaceMesh.visible = true;
+        hoverHintEl.textContent = 'Грань — можно кликать';
+      }
       hoverHintEl.style.display = 'block';
     }
 
-    renderer.domElement.addEventListener('pointermove', function (e) {
-      setHoverHighlight(pickFaceAt(e.clientX, e.clientY));
-    });
-    renderer.domElement.addEventListener('pointerleave', clearHover);
+    renderer.domElement.addEventListener('pointermove', function (e) { showHover(pickAt(e.clientX, e.clientY)); });
+    renderer.domElement.addEventListener('pointerleave', clearHoverVisuals);
 
-    var mode = 'none';
+    // ---- накопленный выбор (до 2 элементов) и автоопределение результата ----
     var pickGroup = new THREE.Group();
     scene.add(pickGroup);
-    var pickedPoints = [];
-    var pickedFaces = [];
+    var picks = [];
 
     function clearPicks() {
       while (pickGroup.children.length) {
@@ -314,39 +400,28 @@
         if (ch.geometry) ch.geometry.dispose();
         if (ch.material) ch.material.dispose();
       }
-      pickedPoints = []; pickedFaces = [];
+      picks = [];
+      setReadout('<div class="hint">Кликните точку, ребро или грань — я сам определю, что посчитать</div>', true);
     }
     function setReadout(html, show) { readoutEl.innerHTML = html; readoutEl.style.display = show ? 'block' : 'none'; }
 
-    function setMode(next) {
-      mode = (mode === next) ? 'none' : next;
-      ['measure','angle','radius'].forEach(function (m) { document.getElementById('btn-' + m).classList.toggle('active', mode === m); });
-      clearPicks();
-      if (mode === 'none') { setReadout('', false); return; }
-      if (mode === 'measure') setReadout('<div class="hint">Кликните две точки на модели, чтобы измерить расстояние (мм)</div>', true);
-      if (mode === 'angle') setReadout('<div class="hint">Кликните первую грань, затем вторую — покажу угол между ними</div>', true);
-      if (mode === 'radius') setReadout('<div class="hint">Кликните на скруглённую грань (сгиб) — оценю радиус</div>', true);
-    }
-    document.getElementById('btn-measure').addEventListener('click', function () { setMode('measure'); });
-    document.getElementById('btn-angle').addEventListener('click', function () { setMode('angle'); });
-    document.getElementById('btn-radius').addEventListener('click', function () { setMode('radius'); });
-
-    function addMarker(point, color) {
-      var r = Math.max(modelMaxDim * 0.012, 0.0001);
-      var m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 16), new THREE.MeshBasicMaterial({ color: color || 0xe8590c }));
-      m.position.copy(point);
-      pickGroup.add(m);
-    }
-    function addLine(a, b, color) {
-      var geom = new THREE.BufferGeometry().setFromPoints([a, b]);
-      pickGroup.add(new THREE.Line(geom, new THREE.LineBasicMaterial({ color: color || 0xe8590c })));
-    }
-    function addFaceMarker(mesh, first, last, color) {
-      var geom = buildHighlightGeometry(mesh, first, last);
-      var m = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide }));
-      m.renderOrder = 998;
-      m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale);
-      pickGroup.add(m);
+    function markPick(pick, colorIndex) {
+      var color = colorIndex === 0 ? 0x4f7cff : 0xe8590c;
+      if (pick.kind === 'point') {
+        var m = new THREE.Mesh(new THREE.SphereGeometry(Math.max(modelMaxDim * 0.012, 0.0001), 16, 16), new THREE.MeshBasicMaterial({ color: color }));
+        m.position.copy(pick.point);
+        pickGroup.add(m);
+      } else if (pick.kind === 'edge') {
+        var l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pick.points), new THREE.LineBasicMaterial({ color: color }));
+        l.position.copy(pick.mesh.position); l.quaternion.copy(pick.mesh.quaternion); l.scale.copy(pick.mesh.scale);
+        pickGroup.add(l);
+      } else if (pick.kind === 'face') {
+        var geom = buildHighlightGeometry(pick.mesh, pick.first, pick.last);
+        var fm = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.45, depthTest: false, side: THREE.DoubleSide }));
+        fm.renderOrder = 998;
+        fm.position.copy(pick.mesh.position); fm.quaternion.copy(pick.mesh.quaternion); fm.scale.copy(pick.mesh.scale);
+        pickGroup.add(fm);
+      }
     }
 
     function formatMm(v) {
@@ -354,71 +429,38 @@
       return v.toFixed(2) + ' мм';
     }
 
-    function handleMeasureClick(pick) {
-      if (!pick) { setReadout('<div class="hint">Точка мимо модели — наведитесь прямо на деталь и кликните</div>', true); return; }
-      var p = pick.point.clone();
-      if (pickedPoints.length >= 2) clearPicks();
-      pickedPoints.push(p);
-      addMarker(p);
-      if (pickedPoints.length === 1) {
-        setReadout('<div class="hint">Первая точка поставлена. Кликните вторую точку.</div>', true);
-      } else {
-        addLine(pickedPoints[0], pickedPoints[1]);
-        var d = pickedPoints[0].distanceTo(pickedPoints[1]);
-        setReadout('<div class="big">' + formatMm(d) + '</div><div class="hint">Кликните ещё раз, чтобы начать новое измерение</div>', true);
-      }
+    function renderClassification(res) {
+      if (res.action === 'need-more') { setReadout('<div class="hint">' + res.hint + '</div>', true); return; }
+      var lines = '';
+      if (res.action === 'length') lines = '<div class="big">' + formatMm(res.value) + '</div><div class="sub">длина ребра</div>';
+      else if (res.action === 'radius') lines = '<div class="big">≈ ' + res.value.toFixed(2) + ' мм</div><div class="sub">оценка радиуса по сетке (не точный CAD-параметр)</div>';
+      else if (res.action === 'distance') lines = '<div class="big">' + formatMm(res.value) + '</div>' + (res.mixed ? '<div class="sub">расстояние между отмеченными элементами</div>' : '<div class="sub">расстояние между точками</div>');
+      else if (res.action === 'angle') lines = '<div class="big">' + res.value.toFixed(1) + '°</div><div class="sub">включённый угол между гранями (плоский лист = 180°)</div><div class="sub">угол между нормалями: ' + res.normalsAngle.toFixed(1) + '°</div>';
+      else if (res.action === 'distance-between-edges') lines = '<div class="big">' + formatMm(res.value) + '</div><div class="sub">расстояние между параллельными рёбрами</div>';
+      else if (res.action === 'angle-between-edges') lines = '<div class="big">' + res.value.toFixed(1) + '°</div><div class="sub">угол между рёбрами</div>';
+      setReadout(lines + '<div class="hint">Кликните ещё раз, чтобы начать новый замер</div>', true);
     }
 
-    function handleAngleClick(pick) {
-      if (!pick || pick.faceIndex == null) { setReadout('<div class="hint">Не попали на грань — кликните прямо на поверхность детали</div>', true); return; }
-      if (pickedFaces.length >= 2) clearPicks();
-      var pos = pick.mesh.geometry.attributes.position.array;
-      var idx = pick.mesh.geometry.index.array;
-      var normal = GEOM.averageFaceNormal(pos, idx, pick.first, pick.last);
-      var color = pickedFaces.length === 0 ? 0x4f7cff : 0xe8590c;
-      addFaceMarker(pick.mesh, pick.first, pick.last, color);
-      pickedFaces.push({ mesh: pick.mesh, first: pick.first, last: pick.last, normal: normal });
-      if (pickedFaces.length === 1) {
-        setReadout('<div class="hint">Первая грань отмечена. Кликните вторую грань сгиба.</div>', true);
-      } else {
-        var res = GEOM.dihedralAngle(pickedFaces[0].normal, pickedFaces[1].normal);
-        setReadout(
-          '<div class="big">' + res.includedAngle.toFixed(1) + '°</div>' +
-          '<div class="sub">включённый угол между гранями (плоский лист = 180°)</div>' +
-          '<div class="sub">угол между нормалями: ' + res.angleBetweenNormals.toFixed(1) + '°</div>' +
-          '<div class="hint">Кликните ещё раз, чтобы начать новое измерение</div>', true);
-      }
+    function handleClick(pick) {
+      if (!pick) { setReadout('<div class="hint">Мимо модели — наведитесь точно на точку, ребро или грань</div>', true); return; }
+      if (picks.length >= 2) clearPicks();
+      markPick(pick, picks.length);
+      picks.push(pick);
+      renderClassification(GEOM.classifySelection(picks));
     }
 
-    function handleRadiusClick(pick) {
-      if (!pick || pick.faceIndex == null) { setReadout('<div class="hint">Не попали на грань — кликните прямо на скруглённый участок</div>', true); return; }
-      clearPicks();
-      addFaceMarker(pick.mesh, pick.first, pick.last, 0x2ea043);
-      var pos = pick.mesh.geometry.attributes.position.array;
-      var idx = pick.mesh.geometry.index.array;
-      var est = GEOM.estimateFaceRadius(pos, idx, pick.first, pick.last);
-      if (!est || !isFinite(est.radius) || est.radius > modelMaxDim * 5) {
-        setReadout('<div class="hint">Эта грань похожа на плоскую — радиус не определить. Кликните на скруглённый сгиб.</div>', true);
-        return;
-      }
-      setReadout(
-        '<div class="big">≈ ' + est.radius.toFixed(2) + ' мм</div>' +
-        '<div class="sub">оценка по сетке треугольников грани (не точный CAD-параметр)</div>' +
-        '<div class="warn">Надёжнее всего на вытянутых сгибах; на коротких скруглениях — грубее</div>', true);
-    }
+    document.getElementById('btn-clear-pick').addEventListener('click', clearPicks);
+    clearPicks(); // изначальная подсказка
 
     var downPos = null;
     renderer.domElement.addEventListener('pointerdown', function (e) { downPos = { x: e.clientX, y: e.clientY, time: Date.now() }; });
     renderer.domElement.addEventListener('pointerup', function (e) {
-      if (mode === 'none' || !downPos) { downPos = null; return; }
+      if (!downPos) return;
       var moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
       var dt = Date.now() - downPos.time;
       downPos = null;
-      if (moved >= 6 || dt >= 400) return;
-      var pick = pickFaceAt(e.clientX, e.clientY);
-      if (mode === 'measure') handleMeasureClick(pick);
-      else if (mode === 'angle') handleAngleClick(pick);
-      else if (mode === 'radius') handleRadiusClick(pick);
+      if (moved >= 6 || dt >= 400) return; // это было вращение камеры, не клик
+      handleClick(pickAt(e.clientX, e.clientY));
     });
 
     function downloadUrl() {
@@ -451,7 +493,16 @@
           var triCount = (meshData.index.array.length / 3) | 0;
           mesh.userData.brepFaces = brepFaces;
           mesh.userData.triToFace = GEOM.buildTriToFaceMap(brepFaces, triCount);
+          var rawEdges = GEOM.extractFeatureEdges(meshData.attributes.position.array, meshData.index.array, mesh.userData.triToFace);
+          // step-geom.js работает с обычными {x,y,z}-объектами (проверяется чистыми
+          // Node-тестами без Three.js) — здесь конвертируем в настоящие THREE.Vector3,
+          // потому что дальше код использует .clone()/.project()/.copy() и т.п.
+          var edges = rawEdges.map(function (e) {
+            return { faceTag: e.faceTag, points: e.points.map(function (p) { return new THREE.Vector3(p.x, p.y, p.z); }) };
+          });
+          mesh.userData.edges = edges;
           addMesh(mesh);
+          if (edges.length) modelGroup.add(buildEdgeOverlay(mesh, edges));
         });
       });
     }

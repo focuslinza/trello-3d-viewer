@@ -149,16 +149,245 @@
     return { radius: fit.radius, pointCount: pts.length };
   }
 
+  // ==========================================================================
+  // Выделение РЁБЕР исходной CAD-модели из треугольной сетки. У occt-import-js
+  // нет готовых кривых рёбер (только треугольники) — ребро CAD-модели мы
+  // определяем как границу между ДВУМЯ РАЗНЫМИ гранями (brep_faces), либо как
+  // открытый край сетки (используется только одним треугольником). Соседние
+  // отрезки одной и той же пары граней склеиваются в одну цепочку — это и есть
+  // одно логическое ребро (для дуги — цепочка из многих мелких отрезков).
+  // ==========================================================================
+  function edgeKey(a, b) { return a < b ? a + '_' + b : b + '_' + a; }
+
+  function extractFeatureEdges(positions, indices, triToFace) {
+    var triCount = indices.length / 3;
+    var edgeFaces = {};  // "v1_v2" -> {v1,v2, faceSet:{faceIdx:true}, triCount:number}
+    for (var t = 0; t < triCount; t++) {
+      var a = indices[t*3], b = indices[t*3+1], c = indices[t*3+2];
+      var face = triToFace[t];
+      [[a,b],[b,c],[c,a]].forEach(function (pair) {
+        var k = edgeKey(pair[0], pair[1]);
+        var e = edgeFaces[k] || (edgeFaces[k] = { v1: pair[0], v2: pair[1], faceSet: {}, triCount: 0 });
+        e.faceSet[face] = true;
+        e.triCount++;
+      });
+    }
+    // Настоящее ребро CAD-модели — это граница МЕЖДУ ДВУМЯ РАЗНЫМИ гранями,
+    // либо открытый край сетки (ребро использовано ровно одним треугольником).
+    // Если ребро лежит внутри ОДНОЙ грани и использовано двумя треугольниками —
+    // это просто внутренняя линия триангуляции (например, изогнутой грани), а
+    // не настоящее ребро — её отбрасываем, иначе "рёбер" была бы туча лишних.
+    var keyInfo = {};
+    var featureAdj = {};
+    Object.keys(edgeFaces).forEach(function (k) {
+      var e = edgeFaces[k];
+      var faceIds = Object.keys(e.faceSet);
+      var isFeature = (faceIds.length >= 2) || (e.triCount === 1);
+      if (!isFeature) return;
+      var faceTag = faceIds.length >= 2 ? faceIds.sort().join('-') : ('open' + faceIds[0]);
+      keyInfo[k] = { v1: e.v1, v2: e.v2, faceTag: faceTag };
+      (featureAdj[e.v1] = featureAdj[e.v1] || []).push({ other: e.v2, key: k });
+      (featureAdj[e.v2] = featureAdj[e.v2] || []).push({ other: e.v1, key: k });
+    });
+    // склеиваем связные цепочки рёбер с ОДНИМ И ТЕМ ЖЕ faceTag в одно логическое ребро
+    var visited = {};
+    var edges = [];
+    Object.keys(keyInfo).forEach(function (startKey) {
+      if (visited[startKey]) return;
+      var tag = keyInfo[startKey].faceTag;
+      // обходим цепочку в обе стороны от стартового отрезка
+      var chainKeys = [startKey];
+      visited[startKey] = true;
+      [keyInfo[startKey].v1, keyInfo[startKey].v2].forEach(function (endVertex, side) {
+        var cur = endVertex, guard = 0;
+        while (guard++ < 100000) {
+          var neighbors = (featureAdj[cur] || []).filter(function (n) {
+            return !visited[n.key] && keyInfo[n.key] && keyInfo[n.key].faceTag === tag;
+          });
+          if (neighbors.length !== 1) break; // конец цепочки, развилка или другая грань
+          var nx = neighbors[0];
+          visited[nx.key] = true;
+          if (side === 0) chainKeys.unshift(nx.key); else chainKeys.push(nx.key);
+          cur = nx.other;
+        }
+      });
+      // строим упорядоченную полилинию вершин из цепочки отрезков
+      var poly = [keyInfo[chainKeys[0]].v1];
+      chainKeys.forEach(function (k) {
+        var e = keyInfo[k];
+        var last = poly[poly.length - 1];
+        poly.push(last === e.v1 ? e.v2 : e.v1);
+      });
+      edges.push({ faceTag: tag, vertexChain: poly, keys: chainKeys });
+    });
+    return edges.map(function (e) {
+      var pts = e.vertexChain.map(function (vi) { return { x: positions[vi*3], y: positions[vi*3+1], z: positions[vi*3+2], vi: vi }; });
+      return { points: pts, faceTag: e.faceTag };
+    });
+  }
+
+  // прямая или дугообразная? считаем максимальное отклонение точек цепочки от
+  // прямой, соединяющей её концы, относительно длины цепочки.
+  function classifyEdgeShape(points) {
+    if (points.length < 2) return { kind: 'point' };
+    var p0 = points[0], p1 = points[points.length - 1];
+    var dir = normalize(sub(p1, p0));
+    var chainLen = 0;
+    for (var i = 1; i < points.length; i++) chainLen += length(sub(points[i], points[i-1]));
+    if (chainLen < 1e-9) return { kind: 'point' };
+    var maxDev = 0;
+    for (var j = 0; j < points.length; j++) {
+      var v = sub(points[j], p0);
+      var proj = dot(v, dir);
+      var closest = { x: p0.x + dir.x*proj, y: p0.y + dir.y*proj, z: p0.z + dir.z*proj };
+      var dev = length(sub(points[j], closest));
+      if (dev > maxDev) maxDev = dev;
+    }
+    var straight = maxDev < Math.max(chainLen * 0.01, 1e-4);
+    return { kind: straight ? 'straight' : 'curved', length: chainLen, maxDeviation: maxDev, start: p0, end: p1 };
+  }
+
+  function edgeLength(points) {
+    var len = 0;
+    for (var i = 1; i < points.length; i++) len += length(sub(points[i], points[i-1]));
+    return len;
+  }
+
+  // Наименьшая по дисперсии ось — нужна для ПЛОСКИХ КРИВЫХ (дуга ребра лежит в
+  // одной плоскости, и её нормаль — это направление С НАИМЕНЬШЕЙ дисперсией
+  // точек, в отличие от вытянутой полосы сгиба, где нужна ось НАИБОЛЬШЕЙ
+  // дисперсии). Ищем через степенной метод на (trace*I - C) — это обращает
+  // порядок собственных значений.
+  function pcaSmallestAxis(points) {
+    var n = points.length;
+    var mean = { x:0, y:0, z:0 };
+    for (var i = 0; i < n; i++) { mean.x += points[i].x; mean.y += points[i].y; mean.z += points[i].z; }
+    mean.x /= n; mean.y /= n; mean.z /= n;
+    var cxx=0, cxy=0, cxz=0, cyy=0, cyz=0, czz=0;
+    for (var j = 0; j < n; j++) {
+      var dx = points[j].x - mean.x, dy = points[j].y - mean.y, dz = points[j].z - mean.z;
+      cxx += dx*dx; cxy += dx*dy; cxz += dx*dz; cyy += dy*dy; cyz += dy*dz; czz += dz*dz;
+    }
+    var trace = cxx + cyy + czz;
+    // работаем с M = trace*I - C: наибольшее собственное значение M соответствует
+    // наименьшему собственному значению C
+    var mxx = trace - cxx, myy = trace - cyy, mzz = trace - czz;
+    var mxy = -cxy, mxz = -cxz, myz = -cyz;
+    var v = { x:1, y:1, z:1 };
+    for (var k = 0; k < 60; k++) {
+      var nx = mxx*v.x + mxy*v.y + mxz*v.z;
+      var ny = mxy*v.x + myy*v.y + myz*v.z;
+      var nz = mxz*v.x + myz*v.y + mzz*v.z;
+      var l = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1;
+      v = { x: nx/l, y: ny/l, z: nz/l };
+    }
+    return { axis: v, mean: mean };
+  }
+
+  function estimateEdgeRadius(points) {
+    if (points.length < 4) return null;
+    var pca = pcaSmallestAxis(points);
+    var proj = projectToPlane(points, pca.axis, pca.mean);
+    return fitCircle2D(proj);
+  }
+
+  // направление прямого ребра (единичный вектор от начала к концу)
+  function edgeDirection(points) {
+    return normalize(sub(points[points.length - 1], points[0]));
+  }
+
+  // расстояние между двумя примерно параллельными рёбрами: среднее расстояние
+  // от точек одного ребра до бесконечной прямой второго.
+  function distanceBetweenParallelEdges(pointsA, pointsB) {
+    var p0 = pointsB[0], dir = edgeDirection(pointsB);
+    var sum = 0;
+    pointsA.forEach(function (p) {
+      var v = sub(p, p0);
+      var proj = dot(v, dir);
+      var closest = { x: p0.x + dir.x*proj, y: p0.y + dir.y*proj, z: p0.z + dir.z*proj };
+      sum += length(sub(p, closest));
+    });
+    return sum / pointsA.length;
+  }
+
+  function angleBetweenDirections(d1, d2) {
+    var c = Math.max(-1, Math.min(1, Math.abs(dot(normalize(d1), normalize(d2))))); // без знака — прямая не имеет направления
+    return Math.acos(c) * 180 / Math.PI;
+  }
+
+  // ==========================================================================
+  // Автоопределение того, что хочет узнать пользователь, по составу выбора.
+  // picks: массив из 1-2 объектов { kind:'point'|'edge'|'face', ... }
+  // Возвращает { action, ...результат } либо { action:'need-more', hint }.
+  // ==========================================================================
+  function classifySelection(picks) {
+    if (picks.length === 1) {
+      var p = picks[0];
+      if (p.kind === 'point') return { action: 'need-more', hint: 'Точка отмечена. Выберите вторую точку, ребро или грань.' };
+      if (p.kind === 'face') return { action: 'need-more', hint: 'Грань отмечена. Выберите вторую грань, чтобы узнать угол сгиба.' };
+      if (p.kind === 'edge') {
+        var shape = p.shape || classifyEdgeShape(p.points);
+        if (shape.kind === 'straight') return { action: 'length', value: edgeLength(p.points) };
+        if (shape.kind === 'curved') {
+          var fit = estimateEdgeRadius(p.points);
+          if (fit) return { action: 'radius', value: fit.radius };
+          return { action: 'need-more', hint: 'Не удалось оценить радиус этой дуги.' };
+        }
+      }
+      return { action: 'need-more', hint: 'Выберите ещё один элемент.' };
+    }
+    if (picks.length === 2) {
+      var a = picks[0], b = picks[1];
+      if (a.kind === 'point' && b.kind === 'point') {
+        return { action: 'distance', value: length(sub(a.point, b.point)) };
+      }
+      if (a.kind === 'face' && b.kind === 'face') {
+        var ang = dihedralAngle(a.normal, b.normal);
+        return { action: 'angle', value: ang.includedAngle, normalsAngle: ang.angleBetweenNormals };
+      }
+      if (a.kind === 'edge' && b.kind === 'edge') {
+        var sa = a.shape || classifyEdgeShape(a.points), sb = b.shape || classifyEdgeShape(b.points);
+        if (sa.kind === 'straight' && sb.kind === 'straight') {
+          var dirA = edgeDirection(a.points), dirB = edgeDirection(b.points);
+          var angBetween = angleBetweenDirections(dirA, dirB);
+          if (angBetween < 15) {
+            return { action: 'distance-between-edges', value: distanceBetweenParallelEdges(a.points, b.points) };
+          }
+          return { action: 'angle-between-edges', value: angBetween };
+        }
+        return { action: 'need-more', hint: 'Для двух дуговых рёбер автоопределение пока не поддержано.' };
+      }
+      // смешанный выбор (грань+ребро, ребро+точка и т.п.) — считаем расстояние
+      // между их представительными точками как разумный запасной вариант.
+      function repPoint(x) {
+        if (x.kind === 'point') return x.point;
+        if (x.kind === 'edge') return x.points[Math.floor(x.points.length/2)];
+        if (x.kind === 'face') return x.centroid;
+      }
+      return { action: 'distance', value: length(sub(repPoint(a), repPoint(b))), mixed: true };
+    }
+    return { action: 'need-more', hint: 'Кликните элемент модели.' };
+  }
+
   var API = {
     buildTriToFaceMap: buildTriToFaceMap,
     averageFaceNormal: averageFaceNormal,
     dihedralAngle: dihedralAngle,
     pcaAxis: pcaAxis,
+    pcaSmallestAxis: pcaSmallestAxis,
     fitCircle2D: fitCircle2D,
     projectToPlane: projectToPlane,
     uniqueFaceVertices: uniqueFaceVertices,
     estimateFaceRadius: estimateFaceRadius,
-    triangleNormal: triangleNormal
+    triangleNormal: triangleNormal,
+    extractFeatureEdges: extractFeatureEdges,
+    classifyEdgeShape: classifyEdgeShape,
+    edgeLength: edgeLength,
+    estimateEdgeRadius: estimateEdgeRadius,
+    edgeDirection: edgeDirection,
+    distanceBetweenParallelEdges: distanceBetweenParallelEdges,
+    angleBetweenDirections: angleBetweenDirections,
+    classifySelection: classifySelection
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   root.STEPGEOM = API;
