@@ -41,6 +41,8 @@
     .pull:hover { background:#0055cc; }
     .pull.ghost { background:transparent; color:#0c66e4; border:1px solid #0c66e4; }
     .hint { font-size:11px; color:var(--muted); margin-top:6px; }
+    .paidWarn { background:#3d321c; border:1px solid #8a6d1f; color:#e8c07d; border-radius:6px; padding:9px 12px; font-size:12.5px; margin:8px 0; line-height:1.5; }
+    .paidWarn b { color:#fff; }
     .breakdown { margin:10px 0 16px; border:1px solid #3a414a; border-radius:6px; overflow:hidden; }
     .breakdown table { width:100%; border-collapse:collapse; font-size:11.5px; }
     .breakdown th, .breakdown td { padding:5px 8px; border-bottom:1px solid #2c333a; text-align:left; white-space:nowrap; }
@@ -79,6 +81,7 @@
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
     <div class="sub" id="meta">v22 · загрузка…</div>
+    <div id="paidWarning"></div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
@@ -360,10 +363,21 @@
         }
       }).then(function(){
         if(!ctx.cardId){ ctx._diag='Не удалось получить cardId (ни из args, ни из t.card).'; return; }
-        return fetchBridge().then(applyBridge);
+        return fetchBridge().then(applyBridge).then(checkPaidStatus);
       }).then(finishMeta).catch(function(e){
         ctx._diag='loadContext: '+(e&&e.message||e); finishMeta();
       });
+    }
+    // Заказ уже мог быть отмечен оплаченным в Бухгалтерии — калькулятор до сих пор
+    // никак это не показывал, и правку резки/гибки после оплаты было не отличить от
+    // правки до неё, хотя заработок работника считается по ТЕКУЩИМ данным расчёта
+    // (это осознанно — иначе исправить ошибку было бы нельзя). Явно предупреждаем,
+    // чтобы правка задним числом не проходила незаметно.
+    function checkPaidStatus(){
+      return fetch(WORKER+'/calc-get?id='+encodeURIComponent(ctx.cardId)).then(function(r){return r.json();}).then(function(j){
+        ctx.paid = !!(j && j.ok && j.row && j.row.paid);
+        ctx.paidAt = (j && j.row && j.row.paid_at) || null;
+      }).catch(function(){ ctx.paid=false; });
     }
     function finishMeta(){
       var meta=[];
@@ -375,6 +389,11 @@
         (meta.join('  ·  ') || 'без компании')
         + '   ·   v22   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
         + '   ·   DXF:'+Object.keys(dxfMetrics).length;
+      var pw = document.getElementById('paidWarning');
+      if(ctx.paid){
+        pw.innerHTML = '<div class="paidWarn">⚠ Этот заказ уже отмечен <b>оплаченным</b>'+(ctx.paidAt?(' ('+String(ctx.paidAt).slice(0,10)+')'):'')+
+          '. Изменения здесь пересчитают и уже начисленный заработок работников по этому заказу задним числом. Меняйте, только если это исправление ошибки в данных, а не обычная правка.</div>';
+      } else { pw.innerHTML=''; }
       renderDxfHint();
     }
 
