@@ -102,8 +102,23 @@ window.CRM = (function () {
   function getCardCompanyId(t) {
     return t.get('card', 'shared', 'companyId', null);
   }
-  function setCardCompanyId(t, id) {
-    return t.set('card', 'shared', 'companyId', id || null);
+  // Смена клиента на карточке теперь сама обновляет уже сохранённый расчёт
+  // (таблицу calculations на сервере) — раньше это требовало вручную открыть
+  // калькулятор и нажать "Сохранить" ещё раз, что легко забыть; теперь связь
+  // клиента с расчётом обновляется в момент смены клиента, автоматически.
+  function setCardCompanyId(t, id, name) {
+    return t.set('card', 'shared', 'companyId', id || null).then(function (res) {
+      if (id) {
+        t.card('id').then(function (c) {
+          if (!c || !c.id) return;
+          fetch(W() + '/calc-relink', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cardId: c.id, companyId: id, companyName: name || '' })
+          }).catch(function () { /* необязательное обновление — если расчёта ещё нет, промолчим */ });
+        }).catch(function () {});
+      }
+      return res;
+    });
   }
   function getCardContacts(t) {
     return t.get('card', 'shared', 'cardContacts', []).then(function (a) {

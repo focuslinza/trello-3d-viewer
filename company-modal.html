@@ -140,7 +140,8 @@
     // Link the chosen company to this card, then refresh the view.
     function assignCompany(id) {
       if (!id) return;
-      CRM.setCardCompanyId(t, id).then(function () {
+      var co = state.directory.filter(function (c) { return c.id === id; })[0];
+      CRM.setCardCompanyId(t, id, co ? co.name : '').then(function () {
         state.cardCompanyId = id;
         renderHome();
       });
@@ -392,7 +393,7 @@
       CRM.upsertCompany(t, company).then(function (r) {
         state.nearFull = r.info && r.info.nearFull;
         if (!state.cardCompanyId) {
-          return CRM.setCardCompanyId(t, company.id).then(function () {
+          return CRM.setCardCompanyId(t, company.id, company.name).then(function () {
             state.cardCompanyId = company.id;
           });
         }
