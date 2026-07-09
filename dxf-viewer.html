@@ -303,7 +303,7 @@
       }).then(function(r){ return r.json(); }).then(function(j){
         if(!j || !j.ok) throw new Error((j&&j.error)||'сервер не подтвердил сохранение');
         msg.textContent = 'Сохранено ✓ Данные готовы для калькулятора.';
-        setTimeout(function(){ msg.textContent=''; }, 4000);
+        setTimeout(function(){ t.closeModal(); }, 900);
         // одноразовый перенос: старые записи с карточки — в базу, затем освобождаем место на карточке
         return t.get('card','shared','dxfMetrics', {}).then(function(all){
           if (!all || !Object.keys(all).length) return;
