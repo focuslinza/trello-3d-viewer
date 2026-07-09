@@ -122,14 +122,19 @@
           if(!list.length){ el.innerHTML='<div class="muted">Заявок пока нет.</div>'; return; }
           var h='';
           list.forEach(function(r){
-            h+='<div class="req"><div class="nm">'+esc(r.name)+(r.qty?(' · '+esc(r.qty)):'')+
+            h+='<div class="req" data-req="'+r.id+'"><div class="nm">'+esc(r.name)+(r.qty?(' · '+esc(r.qty)):'')+
                (r.urgent?' <span class="pill urgent">срочно</span>':'')+
-               ' <span class="pill '+esc(r.status)+'">'+(STATUS_LBL[r.status]||r.status)+'</span></div>'+
+               ' <span class="pill '+esc(r.status)+'">'+(STATUS_LBL[r.status]||r.status)+'</span>'+
+               (r.status==='new'?' <button class="btn2" data-edit="'+r.id+'" type="button" style="padding:2px 8px;font-size:11px">✎</button>':'')+'</div>'+
                '<div class="sub">'+esc((r.createdAt||'').slice(0,10))+(r.comment?(' · '+esc(r.comment)):'')+(r.note?(' · ответ: '+esc(r.note)):'')+
                (r.link?(' · <a href="'+esc(r.link)+'" target="_blank" style="color:#8ab4ff">ссылка ↗</a>'):'')+
-               ' <span class="rfiles" data-id="'+r.id+'"></span></div></div>';
+               ' <span class="rfiles" data-id="'+r.id+'"></span></div>'+
+               '<div class="editReq" id="editReq_'+r.id+'" style="display:none"></div></div>';
           });
           el.innerHTML=h;
+          [].forEach.call(el.querySelectorAll('[data-edit]'), function(b){
+            b.onclick=function(){ toggleReqEdit(this.getAttribute('data-edit'), list); };
+          });
           [].forEach.call(el.querySelectorAll('.rfiles'), function(sp){
             fetch(WORKER+'/receipts-list?kind=req&refId='+encodeURIComponent(sp.getAttribute('data-id')))
               .then(function(r){return r.json();}).then(function(j){
@@ -141,6 +146,38 @@
               }).catch(function(){});
           });
         }).catch(function(){ document.getElementById('mine').innerHTML='<div class="muted">Не удалось загрузить.</div>'; });
+    }
+
+    function toggleReqEdit(id, list){
+      var box=document.getElementById('editReq_'+id);
+      if(box.style.display==='none'){ box.style.display=''; drawReqEdit(id, list); }
+      else box.style.display='none';
+    }
+    function drawReqEdit(id, list){
+      var r=list.filter(function(x){return String(x.id)===String(id);})[0]; if(!r) return;
+      var box=document.getElementById('editReq_'+id);
+      var h='<label>Что нужно<br><input type="text" class="rName" value="'+esc(r.name)+'" style="width:200px"></label> ';
+      h+='<label>Кол-во<br><input type="text" class="rQty" value="'+esc(r.qty||'')+'" style="width:100px"></label> ';
+      h+='<label>Ссылка<br><input type="text" class="rLink" value="'+esc(r.link||'')+'" style="width:160px"></label> ';
+      h+='<label style="display:inline-flex;align-items:center;gap:5px;margin-top:16px"><input type="checkbox" class="rUrgent"'+(r.urgent?' checked':'')+'> срочно</label> ';
+      h+='<button class="btn2" data-savereq="'+id+'" type="button" style="margin-top:14px">Сохранить</button>';
+      h+='<span class="rMsg" style="font-size:12px;margin-left:8px"></span>';
+      box.innerHTML=h;
+      box.querySelector('[data-savereq]').onclick=function(){ saveReqEdit(id); };
+    }
+    function saveReqEdit(id){
+      var box=document.getElementById('editReq_'+id);
+      var name=box.querySelector('.rName').value.trim();
+      if(!name){ alert('Напишите, что нужно купить.'); return; }
+      var msg=box.querySelector('.rMsg'); msg.textContent='Сохранение…'; msg.style.color='var(--muted)';
+      fetch(WORKER+'/supply-request-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        id:id, name:name, qty:box.querySelector('.rQty').value.trim(), link:box.querySelector('.rLink').value.trim(),
+        urgent:box.querySelector('.rUrgent').checked
+      })}).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'не удалось сохранить');
+        msg.textContent='Сохранено ✓'; msg.style.color='var(--green)';
+        setTimeout(loadMine, 800);
+      }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
     }
 
     document.getElementById('send').onclick=function(){

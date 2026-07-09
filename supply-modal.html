@@ -103,6 +103,7 @@
       var h='<table><thead><tr><th>Что</th><th>Кол-во</th><th>Кто просил</th><th>Дата</th><th>Статус</th><th>Действия</th></tr></thead><tbody>';
       REQS.forEach(function(r){
         h+='<tr><td>'+(r.urgent?'<span class="pill urgent">срочно</span> ':'')+esc(r.name)+
+           ' <button class="btn" data-reqedit="'+r.id+'" type="button" style="padding:2px 8px;font-size:11px">✎</button>'+
            (r.comment?('<div class="muted">'+esc(r.comment)+'</div>'):'')+
            (r.link?('<div><a href="'+esc(r.link)+'" target="_blank">ссылка от работника ↗</a></div>'):'')+
            '<div class="rqfiles" data-id="'+r.id+'"></div>'+
@@ -114,8 +115,44 @@
                                 '<button class="btn danger rq" data-id="'+r.id+'" data-st="rejected" type="button">Отклонить</button>';
         else if(r.status==='bought') h+='<button class="btn rq" data-id="'+r.id+'" data-st="given" type="button">Выдано</button>';
         h+='</td></tr>';
+        h+='<tr class="reqEditRow" id="reqEditRow_'+r.id+'" style="display:none"><td colspan="6"><div id="reqEditBox_'+r.id+'"></div></td></tr>';
       });
       return h+'</tbody></table>';
+    }
+    function toggleReqEditRow(id){
+      var row=document.getElementById('reqEditRow_'+id);
+      if(row.style.display==='none'){ row.style.display=''; drawReqEditBox(id); } else row.style.display='none';
+    }
+    function drawReqEditBox(id){
+      var r=REQS.filter(function(x){return x.id===id;})[0]; if(!r) return;
+      var box=document.getElementById('reqEditBox_'+id);
+      var h='';
+      if(r.status!=='new') h+='<div class="muted" style="color:var(--amber);margin-bottom:6px">⚠ Заявка уже не новая — правьте, только если это исправление ошибки.</div>';
+      h+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">';
+      h+='<label>Что<br><input type="text" class="rqName" value="'+esc(r.name)+'" style="width:200px"></label>';
+      h+='<label>Кол-во<br><input type="text" class="rqQty" value="'+esc(r.qty||'')+'" style="width:100px"></label>';
+      h+='<label>Ссылка<br><input type="text" class="rqLink" value="'+esc(r.link||'')+'" style="width:180px"></label>';
+      h+='<label style="display:inline-flex;align-items:center;gap:5px"><input type="checkbox" class="rqUrgent"'+(r.urgent?' checked':'')+'> срочно</label>';
+      h+='<button class="btn primary" data-savereqedit="'+id+'" type="button">Сохранить</button>';
+      h+='<span class="rqeMsg muted"></span></div>';
+      box.innerHTML=h;
+      box.querySelector('[data-savereqedit]').onclick=function(){ saveReqEditBox(id); };
+    }
+    function saveReqEditBox(id){
+      var box=document.getElementById('reqEditBox_'+id);
+      var r=REQS.filter(function(x){return x.id===id;})[0];
+      var name=box.querySelector('.rqName').value.trim();
+      if(!name){ alert('Укажите, что нужно.'); return; }
+      var msg=box.querySelector('.rqeMsg'); msg.textContent='Сохранение…';
+      fetch(WORKER+'/supply-request-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        id:id, name:name, qty:box.querySelector('.rqQty').value.trim(), link:box.querySelector('.rqLink').value.trim(),
+        urgent:box.querySelector('.rqUrgent').checked
+      })}).then(function(rr){return rr.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'не удалось сохранить');
+        Object.assign(r,{name:name, qty:box.querySelector('.rqQty').value.trim(), link:box.querySelector('.rqLink').value.trim(), urgent:box.querySelector('.rqUrgent').checked});
+        msg.textContent='Сохранено ✓'; msg.style.color='var(--green)';
+        setTimeout(function(){ render(); }, 700);
+      }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
     }
 
     // ---------- ИНСТРУМЕНТ ----------
@@ -328,6 +365,9 @@
             .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
             .catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); });
         };
+      });
+      [].forEach.call(document.querySelectorAll('[data-reqedit]'), function(b){
+        b.onclick=function(){ toggleReqEditRow(+this.getAttribute('data-reqedit')); };
       });
 
       var ta=document.getElementById('taddBtn'); if(ta) ta.onclick=function(){ TOOL_EDIT={}; render(); };

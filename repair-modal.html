@@ -105,13 +105,16 @@
       visible.forEach(function(r){
         h+='<tr data-id="'+r.id+'">';
         h+='<td><span class="num-badge">'+esc(r.number)+'</span></td>';
-        h+='<td>'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'<div class="opline">'+esc(r.category||'')+'</div></td>';
+        h+='<td>'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+
+           ' <button class="btn" data-edit="'+r.id+'" type="button" style="padding:2px 8px;font-size:11px">✎</button>'+
+           '<div class="opline">'+esc(r.category||'')+'</div></td>';
         h+='<td>'+esc(r.companyName||'—')+(r.objectName?('<div class="opline">'+esc(r.objectName)+'</div>'):'')+'</td>';
         h+='<td><span class="pill '+esc(r.status)+'">'+(r.status==='new'?'новая':r.status==='done'?'сделано':'отклонена')+'</span></td>';
         h+='<td>'+(r.doneByName?esc(r.doneByName):'—')+'<div class="opline">'+esc(opsSummary(r.doneOperations))+'</div></td>';
         h+='<td class="num"><input type="text" class="priceInp" data-id="'+r.id+'" value="'+(r.clientTotal!=null?r.clientTotal:'')+'" placeholder="сумма"></td>';
         h+='<td>'+chip(r,'invoiceSent','счёт')+' '+chip(r,'paid','оплачен')+'</td>';
         h+='</tr>';
+        h+='<tr class="editRow" id="editRow_'+r.id+'" style="display:none"><td colspan="7"><div id="editBox_'+r.id+'"></div></td></tr>';
       });
       h+='</tbody></table>';
       app.innerHTML=h;
@@ -141,6 +144,52 @@
             .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ r0[field]=newVal; render(); } });
         };
       });
+      [].forEach.call(document.querySelectorAll('[data-edit]'), function(b){
+        b.onclick=function(){ toggleEditRow(+this.getAttribute('data-edit')); };
+      });
+    }
+
+    var CATEGORIES_SEED = ['Тележка','Стеллаж','Шкаф','Стол','Полка','Дверь/дверца','Мотор/электрика','Прочее'];
+
+    function toggleEditRow(id){
+      var row=document.getElementById('editRow_'+id);
+      if(row.style.display==='none'){ row.style.display=''; drawEditBox(id); } else row.style.display='none';
+    }
+
+    function drawEditBox(id){
+      var r=ROWS.find(function(x){return x.id===id;}); if(!r) return;
+      var box=document.getElementById('editBox_'+id);
+      var h='';
+      if(r.status!=='new') h+='<div class="opline" style="color:var(--amber);margin-bottom:6px">⚠ Заявка уже не новая — правьте, только если это исправление ошибки.</div>';
+      h+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">';
+      h+='<label>Название<br><input type="text" class="eTitle" value="'+esc(r.title)+'" style="width:220px"></label>';
+      h+='<label>Категория<br><select class="eCat">';
+      var cats=CATEGORIES_SEED.indexOf(r.category)>=0?CATEGORIES_SEED:CATEGORIES_SEED.concat([r.category].filter(Boolean));
+      cats.forEach(function(c){ h+='<option value="'+esc(c)+'"'+(c===r.category?' selected':'')+'>'+esc(c)+'</option>'; });
+      h+='</select></label>';
+      h+='<label>Клиент<br><input type="text" class="eCompany" value="'+esc(r.companyName||'')+'" style="width:170px"></label>';
+      h+='<label>Объект<br><input type="text" class="eObject" value="'+esc(r.objectName||'')+'" style="width:140px"></label>';
+      h+='<button class="btn primary" data-save="'+id+'" type="button">Сохранить</button>';
+      h+='<span class="eMsg opline"></span></div>';
+      box.innerHTML=h;
+      box.querySelector('[data-save]').onclick=function(){ saveEditBox(id); };
+    }
+
+    function saveEditBox(id){
+      var box=document.getElementById('editBox_'+id);
+      var r=ROWS.find(function(x){return x.id===id;});
+      var title=box.querySelector('.eTitle').value.trim();
+      if(!title){ alert('Укажите название заявки.'); return; }
+      var msg=box.querySelector('.eMsg'); msg.textContent='Сохранение…'; msg.style.color='var(--muted)';
+      fetch(WORKER+'/repair-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        id:id, title:title, category:box.querySelector('.eCat').value,
+        companyId:r.companyId||null, companyName:box.querySelector('.eCompany').value.trim(), objectName:box.querySelector('.eObject').value.trim()
+      })}).then(function(rr){return rr.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'не удалось сохранить');
+        Object.assign(r, { title:title, category:box.querySelector('.eCat').value, companyName:box.querySelector('.eCompany').value.trim(), objectName:box.querySelector('.eObject').value.trim() });
+        msg.textContent='Сохранено ✓'; msg.style.color='var(--green)';
+        setTimeout(function(){ render(); }, 700);
+      }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
     }
 
     isDirector().then(function(ok){
