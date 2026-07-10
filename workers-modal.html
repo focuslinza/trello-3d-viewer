@@ -41,6 +41,8 @@
     .chipcb input{display:none}
     .chipcb.on{border-color:#2e5c44;background:#1c3329;color:#4bce97}
     .chipcb.on.warn{border-color:#5a4a2a;background:#3d321c;color:#e8c07d}
+    .wcard.inactive{opacity:.65;border-style:dashed}
+    .delbadge{font-size:11px;color:#e9b3b3;border:1px solid #5a3a3a;border-radius:10px;padding:2px 8px}
     .btn{border:1px solid var(--line);background:var(--bg);color:var(--txt);
       border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px}
     .btn:hover{border-color:var(--accent)}
@@ -88,6 +90,7 @@
       <div id="rows"></div>
       <div class="empty" id="emptyHint" style="display:none">Пока нет работников. Добавьте первого.</div>
       <div style="margin-top:12px"><button class="btn add" id="addBtn" type="button">+ добавить работника</button></div>
+      <label class="hint" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer"><input type="checkbox" id="showDeleted" style="width:auto"> показать удалённых работников</label>
       <div class="msg" id="msg"></div>
     </div>
   </div>
@@ -166,9 +169,11 @@
     }
     function makeRow(w){
       w = w || { id:'', name:'', salary:'', stages:[] };
+      var inactive = (w.active===0 || w.active==='0');
       var card=document.createElement('div');
-      card.className='wcard';
+      card.className='wcard'+(inactive?' inactive':'');
       card.setAttribute('data-id', w.id||'');
+      card.setAttribute('data-active', inactive?'0':'1');
       var stagesSel = w.stages||[];
       var h =
         '<div class="wtop">'+
@@ -176,9 +181,11 @@
           '<input class="sal" type="number" min="0" step="1000" placeholder="оклад ₸/мес" value="'+(w.salary!=null?w.salary:'')+'" title="Оклад, ₸/мес">'+
           '<span class="wage" title="Ставка в день = оклад ÷ рабочие дни">—</span>'+
           '<select class="mem" title="Trello-аккаунт">'+memberOptionsHtml(w.trello_member_id||'')+'</select>'+
+          (inactive?'<span class="delbadge">удалён</span>':'')+
           '<span class="actions">'+
             '<button class="btn save" type="button">Сохранить</button>'+
-            '<button class="btn del" type="button">Удалить</button>'+
+            (inactive?'<button class="btn restore" type="button" style="color:#a8d5b5;border-color:#2e5c44">Вернуть</button>'
+                     :'<button class="btn del" type="button">Удалить</button>')+
           '</span>'+
         '</div>';
       h+='<div class="wrowlbl">Этапы (что делает)</div><div class="chips">'+
@@ -206,7 +213,13 @@
           var cb=card.querySelector('.'+cls); if(cb){ cb.checked=true; cb.parentNode.classList.add('on'); }
         });
       });
-      card.querySelector('.del').addEventListener('click', function(){ delRow(card); });
+      var delBtn=card.querySelector('.del');
+      if(delBtn) delBtn.addEventListener('click', function(){ delRow(card); });
+      var rst=card.querySelector('.restore');
+      if(rst) rst.addEventListener('click', function(){
+        card.setAttribute('data-active','1');
+        saveRow(card);
+      });
       return card;
     }
 
@@ -215,7 +228,8 @@
     function loadWorkers(){
       if(!WORKER){ setMsg('Не задан адрес сервера (config.js).'); return; }
       setMsg('Загрузка…');
-      return fetch(WORKER+'/workers-list?cb='+Date.now())
+      var showDel = document.getElementById('showDeleted') && document.getElementById('showDeleted').checked;
+      return fetch(WORKER+'/workers-list?'+(showDel?'all=1&':'')+'cb='+Date.now())
         .then(function(r){ return r.json(); })
         .then(function(d){
           rowsEl.innerHTML='';
@@ -244,13 +258,14 @@
       if(!name){ setMsg('Введите имя.'); return; }
       if(!salary){ setMsg('Введите оклад.'); return; }
       var id=tr.getAttribute('data-id')||'';
+      var active=(tr.getAttribute('data-active')==='0')?0:1; // сохранение удалённого не возвращает его в активные
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats })
       }).then(function(r){ return r.json(); })
         .then(function(d){
-          if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; updateCount(); }
+          if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; updateCount(); if(tr.classList.contains('inactive') && tr.getAttribute('data-active')==='1') loadWorkers(); }
           else setMsg('Не удалось сохранить: '+(d&&d.error||'?'));
         }).catch(function(e){ setMsg('Ошибка: '+(e&&e.message||e)); });
     }
@@ -288,6 +303,7 @@
       applyAuto();
     })();
 
+    document.getElementById('showDeleted').addEventListener('change', function(){ loadWorkers(); });
     document.getElementById('addBtn').addEventListener('click', function(){
       var card=makeRow(); rowsEl.appendChild(card); document.getElementById('emptyHint').style.display='none';
       card.querySelector('.nm').focus();
