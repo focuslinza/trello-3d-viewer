@@ -27,12 +27,20 @@
     .daysrow{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
     .daysrow .group{min-width:160px}
     .hint{color:var(--muted);font-size:12px}
-    table{width:100%;border-collapse:collapse}
-    th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
-    th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
-    td .nm{min-width:160px}
-    td .sal{max-width:140px;text-align:right}
-    .wage{color:#a8d5b5;white-space:nowrap}
+    .wage{color:#a8d5b5;white-space:nowrap;font-size:13px}
+    /* карточка работника */
+    .wcard{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--bg)}
+    .wtop{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .wtop .nm{flex:1;min-width:160px}
+    .wtop .sal{width:130px;text-align:right}
+    .wtop .mem{width:190px}
+    .wrowlbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 5px}
+    .chips{display:flex;flex-wrap:wrap;gap:5px 6px;align-items:center}
+    .chipcb{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:14px;
+      padding:4px 10px;font-size:12px;cursor:pointer;user-select:none;background:var(--bg2);color:var(--muted)}
+    .chipcb input{display:none}
+    .chipcb.on{border-color:#2e5c44;background:#1c3329;color:#4bce97}
+    .chipcb.on.warn{border-color:#5a4a2a;background:#3d321c;color:#e8c07d}
     .btn{border:1px solid var(--line);background:var(--bg);color:var(--txt);
       border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px}
     .btn:hover{border-color:var(--accent)}
@@ -77,12 +85,7 @@
 
     <div class="sec">
       <h3>Работники</h3>
-      <table id="tbl">
-        <thead>
-          <tr><th>Имя</th><th>Оклад, ₸/мес</th><th>Ставка/день</th><th>Этапы (что делает)</th><th>Права доступа</th><th>Trello-аккаунт</th><th></th></tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
+      <div id="rows"></div>
       <div class="empty" id="emptyHint" style="display:none">Пока нет работников. Добавьте первого.</div>
       <div style="margin-top:12px"><button class="btn add" id="addBtn" type="button">+ добавить работника</button></div>
       <div class="msg" id="msg"></div>
@@ -108,9 +111,7 @@
       return h;
     }
     function updateCount(){
-      var n = rowsEl.querySelectorAll('tr[data-id]:not([data-id=""])').length;
-      // count rows whose data-id is non-empty
-      n = [].filter.call(rowsEl.querySelectorAll('tr'), function(tr){ return (tr.getAttribute('data-id')||'')!==''; }).length;
+      var n = [].filter.call(rowsEl.querySelectorAll('.wcard'), function(c){ return (c.getAttribute('data-id')||'')!==''; }).length;
       document.getElementById('meta').textContent = 'v5 · работников: '+n;
     }
     function showDenied(){
@@ -133,9 +134,9 @@
     }
     function recalcWages(){
       var wd=currentWorkdays();
-      [].forEach.call(rowsEl.querySelectorAll('tr'), function(tr){
-        var sal=parseFloat(tr.querySelector('.sal').value)||0;
-        tr.querySelector('.wage').textContent = fmt(sal/wd)+' ₸';
+      [].forEach.call(rowsEl.querySelectorAll('.wcard'), function(c){
+        var sal=parseFloat(c.querySelector('.sal').value)||0;
+        c.querySelector('.wage').textContent = fmt(sal/wd)+' ₸/дн';
       });
     }
 
@@ -149,40 +150,64 @@
         return '<label class="chk stg"><input type="checkbox" class="stgcb" value="'+g.key+'"'+(sel.indexOf(g.key)>=0?' checked':'')+'> '+g.label+'</label>';
       }).join('');
     }
+    var PERMS = [
+      {cls:'cantabel',  fld:'can_timesheet', label:'Табель',              hint:'заполняет посещаемость'},
+      {cls:'candash',   fld:'can_dashboard', label:'Панель руководителя', hint:'выручка, прибыль, этапы, заработки, оплаты'},
+      {cls:'canrepair', fld:'can_repair',    label:'Ремонт',              hint:'панель заявок на ремонт'},
+      {cls:'cansup',    fld:'can_supply',    label:'Снабжение',           hint:'заявки, инструмент, наличные'},
+      {cls:'caninv',    fld:'can_invoice',   label:'Бухгалтерия',         hint:'счета на оплату, статусы'},
+      {cls:'cancrm',    fld:'can_crm',       label:'CRM',                 hint:'клиенты, выручка, долги'},
+      {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены в калькуляторе'},
+      {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true}
+    ];
+    function chipCb(cls, label, hint, on, extra){
+      return '<label class="chipcb'+(on?' on':'')+(extra||'')+'" title="'+hint.replace(/"/g,'&quot;')+'">'+
+             '<input type="checkbox" class="'+cls+'"'+(on?' checked':'')+'>'+label+'</label>';
+    }
     function makeRow(w){
       w = w || { id:'', name:'', salary:'', stages:[] };
-      var tr=document.createElement('tr');
-      tr.setAttribute('data-id', w.id||'');
-      tr.innerHTML =
-        '<td><input class="nm" type="text" placeholder="Имя работника" value="'+(w.name?String(w.name).replace(/"/g,'&quot;'):'')+'"></td>'+
-        '<td><input class="sal" type="number" min="0" step="1000" placeholder="например, 400000" value="'+(w.salary!=null?w.salary:'')+'"></td>'+
-        '<td class="wage">—</td>'+
-        '<td><div class="stagewrap">'+stagesHtml(w.stages||[])+'</div></td>'+
-        '<td><div class="permwrap">'+
-          '<label class="chk pm"><input type="checkbox" class="cantabel"'+((w.can_timesheet==1||w.can_timesheet===true)?' checked':'')+'> Табель <span class="pmh">заполняет посещаемость</span></label>'+
-          '<label class="chk pm"><input type="checkbox" class="candash"'+((w.can_dashboard==1||w.can_dashboard===true)?' checked':'')+'> Панель руководителя <span class="pmh">выручка, прибыль, этапы, заработки, оплаты</span></label>'+
-          '<label class="chk pm"><input type="checkbox" class="canrepair"'+((w.can_repair==1||w.can_repair===true)?' checked':'')+'> Ремонт <span class="pmh">панель заявок на ремонт</span></label>'+
-          '<label class="chk pm"><input type="checkbox" class="cansup"'+((w.can_supply==1||w.can_supply===true)?' checked':'')+'> Снабжение <span class="pmh">заявки, инструмент, наличные</span></label>'+
-          '<label class="chk pm"><input type="checkbox" class="caninv"'+((w.can_invoice==1||w.can_invoice===true)?' checked':'')+'> Бухгалтерия <span class="pmh">счета на оплату, статусы</span></label>'+
-          '<label class="chk pm"><input type="checkbox" class="cancrm"'+((w.can_crm==1||w.can_crm===true)?' checked':'')+'> CRM <span class="pmh">клиенты, выручка, долги</span></label>'+
-          '<label class="chk pm"><input type="checkbox" class="cancost"'+((w.can_see_cost==1||w.can_see_cost===true)?' checked':'')+'> Видит стоимость <span class="pmh">цены в калькуляторе</span></label>'+
-          '<a href="#" class="preset">профиль: начальник цеха</a>'+
-        '</div></td>'+
-        '<td><select class="mem">'+memberOptionsHtml(w.trello_member_id||'')+'</select></td>'+
-        '<td><div class="actions">'+
-          '<button class="btn save" type="button">Сохранить</button>'+
-          '<button class="btn del" type="button">Удалить</button>'+
-        '</div></td>';
-      tr.querySelector('.sal').addEventListener('input', recalcWages);
-      tr.querySelector('.save').addEventListener('click', function(){ saveRow(tr); });
-      var pr=tr.querySelector('.preset');
+      var card=document.createElement('div');
+      card.className='wcard';
+      card.setAttribute('data-id', w.id||'');
+      var stagesSel = w.stages||[];
+      var h =
+        '<div class="wtop">'+
+          '<input class="nm" type="text" placeholder="Имя работника" value="'+(w.name?String(w.name).replace(/"/g,'&quot;'):'')+'">'+
+          '<input class="sal" type="number" min="0" step="1000" placeholder="оклад ₸/мес" value="'+(w.salary!=null?w.salary:'')+'" title="Оклад, ₸/мес">'+
+          '<span class="wage" title="Ставка в день = оклад ÷ рабочие дни">—</span>'+
+          '<select class="mem" title="Trello-аккаунт">'+memberOptionsHtml(w.trello_member_id||'')+'</select>'+
+          '<span class="actions">'+
+            '<button class="btn save" type="button">Сохранить</button>'+
+            '<button class="btn del" type="button">Удалить</button>'+
+          '</span>'+
+        '</div>';
+      h+='<div class="wrowlbl">Этапы (что делает)</div><div class="chips">'+
+        STAGE_GROUPS.map(function(g){
+          var on = stagesSel.indexOf(g.key)>=0;
+          return '<label class="chipcb'+(on?' on':'')+'"><input type="checkbox" class="stgcb" value="'+g.key+'"'+(on?' checked':'')+'>'+g.label+'</label>';
+        }).join('')+'</div>';
+      h+='<div class="wrowlbl">Права доступа <a href="#" class="preset" style="margin-left:8px;text-transform:none;letter-spacing:0">профиль: начальник цеха</a></div><div class="chips">'+
+        PERMS.map(function(p){
+          var on = (w[p.fld]==1||w[p.fld]===true);
+          return chipCb(p.cls, p.label, p.hint, on, p.warn?' warn':'');
+        }).join('')+'</div>';
+      card.innerHTML=h;
+      // чип переключается визуально вместе с чекбоксом
+      [].forEach.call(card.querySelectorAll('.chipcb input'), function(cb){
+        cb.addEventListener('change', function(){ this.parentNode.classList.toggle('on', this.checked); });
+      });
+      card.querySelector('.sal').addEventListener('input', recalcWages);
+      card.querySelector('.save').addEventListener('click', function(){ saveRow(card); });
+      var pr=card.querySelector('.preset');
       if(pr) pr.addEventListener('click', function(ev){
         ev.preventDefault();
         // профиль «начальник цеха»: табель + панель руководителя + ремонт + снабжение
-        ['cantabel','candash','canrepair','cansup'].forEach(function(cls){ var cb=tr.querySelector('.'+cls); if(cb) cb.checked=true; });
+        ['cantabel','candash','canrepair','cansup'].forEach(function(cls){
+          var cb=card.querySelector('.'+cls); if(cb){ cb.checked=true; cb.parentNode.classList.add('on'); }
+        });
       });
-      tr.querySelector('.del').addEventListener('click', function(){ delRow(tr); });
-      return tr;
+      card.querySelector('.del').addEventListener('click', function(){ delRow(card); });
+      return card;
     }
 
     function setMsg(s){ msgEl.textContent = s||''; }
@@ -215,13 +240,14 @@
       var canTimesheet=tr.querySelector('.cantabel')?tr.querySelector('.cantabel').checked:false;
       var canDashboard=tr.querySelector('.candash')?tr.querySelector('.candash').checked:false;
       var canRepair=tr.querySelector('.canrepair')?tr.querySelector('.canrepair').checked:false;
+      var hideStats=tr.querySelector('.hidestats')?tr.querySelector('.hidestats').checked:false;
       if(!name){ setMsg('Введите имя.'); return; }
       if(!salary){ setMsg('Введите оклад.'); return; }
       var id=tr.getAttribute('data-id')||'';
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; updateCount(); }
@@ -263,8 +289,8 @@
     })();
 
     document.getElementById('addBtn').addEventListener('click', function(){
-      var tr=makeRow(); rowsEl.appendChild(tr); document.getElementById('emptyHint').style.display='none';
-      tr.querySelector('.nm').focus();
+      var card=makeRow(); rowsEl.appendChild(card); document.getElementById('emptyHint').style.display='none';
+      card.querySelector('.nm').focus();
     });
 
     // access control: only a director (admin of the board OR the workspace) may view/edit salaries
