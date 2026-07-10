@@ -122,8 +122,13 @@
       ctx.allCompanies = ((j2&&j2.ok&&j2.companies)||[]).slice().sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||'')); });
       ctx._diag = { http:ctx._http, ok:!!(j&&j.ok), d1ok:!!(j2&&j2.ok), companyId:ctx.cardCompanyId, companies:ctx.allCompanies.length };
       // default selected = card's company if it exists in the directory
-      if(ctx.cardCompanyId && ctx.allCompanies.some(function(c){return c.id===ctx.cardCompanyId;})) selectedCompanyId=ctx.cardCompanyId;
-      else if(ctx.allCompanies.length) selectedCompanyId=ctx.allCompanies[0].id;
+      if(ctx.cardCompanyId && ctx.allCompanies.some(function(c){return c.id===ctx.cardCompanyId;})) {
+        selectedCompanyId=ctx.cardCompanyId;
+        ctx.linkProblem = null;
+      } else {
+        ctx.linkProblem = !ctx.cardCompanyId ? 'none' : 'missing'; // 'none' = карточка вообще не привязана; 'missing' = привязана, но такого клиента нет в списке
+        if(ctx.allCompanies.length) selectedCompanyId=ctx.allCompanies[0].id;
+      }
       setBuyerFromSelected();
     }).catch(function(e){ ctx._diag={ http:ctx._http||0, net:(e&&e.message||'сеть') }; });
   }
@@ -137,9 +142,28 @@
   function loadAllOrders(){
     return fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
       ALL_ORDERS = ((j&&j.rows)||[]).map(function(row){
-        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false };
+        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'' };
       });
     }).catch(function(){ ALL_ORDERS=[]; });
+  }
+
+  // Имя заказчика-человека (контакт, отмеченный на карточке в «Компания и контакты»):
+  // подтягиваем для заказов ТЕКУЩЕГО клиента, чтобы дописать в счёте
+  // «Изготовление стола… (Ануар)». Ошибки не критичны — просто без имени.
+  function loadPersonNames(){
+    var orders = clientOrders().filter(function(o){ return !o.personName && !o._personTried; });
+    if(!orders.length) return Promise.resolve();
+    var co = companyById(selectedCompanyId);
+    var contactsById = {};
+    ((co&&co.contacts)||[]).forEach(function(c){ contactsById[c.id]=c.name||''; });
+    return Promise.all(orders.map(function(o){
+      o._personTried = true;
+      return fetch(WORKER+'/plugindata?cardId='+encodeURIComponent(o.cardId)).then(function(r){return r.json();}).then(function(j){
+        var ids = (j && j.cardData && j.cardData.cardContacts) || [];
+        var names = ids.map(function(id){ return contactsById[id]; }).filter(Boolean);
+        o.personName = names[0] || ''; // первый отмеченный контакт; если несколько — берём первого
+      }).catch(function(){});
+    }));
   }
 
   function loadNumber(){
@@ -204,7 +228,10 @@
               (ctx.buyer.phone?'тел. '+esc(ctx.buyer.phone):'')+'</div>';
       }
       if(selectedCompanyId!==ctx.cardCompanyId){
-        html+='<div class="small muted" style="margin-top:6px">Выбран клиент, отличный от привязанного к карточке.</div>';
+        var warnTxt = ctx.linkProblem==='none'
+          ? 'На этой карточке клиент вообще не выбран — показан первый по алфавиту, просто чтобы не оставлять список пустым. Откройте «Компания и контакты» на карточке и выберите клиента, затем откройте это окно заново.'
+          : 'Карточка привязана к клиенту, которого нет в текущем списке (возможно, старая или задвоенная запись) — показан первый по алфавиту вместо него. Откройте «Компания и контакты» на карточке и выберите клиента заново, затем откройте это окно заново.';
+        html+='<div class="small" style="margin-top:6px;color:#e8c07d">⚠ '+warnTxt+'</div>';
       }
     } else {
       html+='<div class="warnbox">Справочник компаний пуст или не подгрузился'+(ctx._diag&&ctx._diag.net?(' ('+esc(ctx._diag.net)+')'):'')+'. Добавьте компанию в «Компания и контакты».</div>';
@@ -224,7 +251,7 @@
         html+='<tr>'+
           '<td><input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'></td>'+
           '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
-          '<td>'+esc(o.name)+'</td>'+
+          '<td>'+esc(o.name)+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+'</td>'+
           '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'"></td>'+
           '<td class="num">'+money(o.total)+' ₸</td>'+
           '<td style="white-space:nowrap"><button class="btn ghost paybtn" data-id="'+esc(o.cardId)+'" type="button" title="Клиент оплатил этот заказ">оплачен</button> <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" title="Убрать заказ из списка (не оплата)">убрать</button></td>'+
@@ -299,7 +326,7 @@
     // wire
     [].forEach.call(document.querySelectorAll('input[name=sup]'), function(r){ r.addEventListener('change', function(){ supplierKey=this.value; render(); }); });
     var bs=document.getElementById('buyerSel');
-    if(bs) bs.addEventListener('change', function(){ selectedCompanyId=this.value; setBuyerFromSelected(); render(); });
+    if(bs) bs.addEventListener('change', function(){ selectedCompanyId=this.value; setBuyerFromSelected(); render(); loadPersonNames().then(render); });
     [].forEach.call(document.querySelectorAll('.ck'), function(c){ c.addEventListener('change', function(){ var id=this.getAttribute('data-id'), chk=this.checked; var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.checked=chk; updateGrand(); }); });
     [].forEach.call(document.querySelectorAll('.qn'), function(q){ q.addEventListener('input', function(){ var id=this.getAttribute('data-id'), v=Math.max(1,+this.value||1); var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.qty=v; }); });
     [].forEach.call(document.querySelectorAll('.relink'), function(b){ b.addEventListener('click', function(){ relink(this.getAttribute('data-id')); }); });
@@ -360,7 +387,8 @@
     var numEl=document.getElementById('inum'), dEl=document.getElementById('idate'), cEl=document.getElementById('icontract');
     var items = selectedOrders().map(function(o){
       var qty=Math.max(1,o.qty||1);
-      return { code:o.number||'', name:o.name, qty:qty, unit:'Услуга', price:(o.total/qty), cardId:o.cardId };
+      var nm = o.name + (o.personName ? ' ('+o.personName+')' : '');
+      return { code:o.number||'', name:nm, qty:qty, unit:'Услуга', price:(o.total/qty), cardId:o.cardId };
     });
     return {
       supplier:sup, buyer:ctx.buyer,
@@ -426,7 +454,12 @@
       var cur = ALL_ORDERS.filter(function(o){ return o.cardId===ctx.cardId; })[0];
       if(cur && cur.company_id===selectedCompanyId) cur.checked=true;
     })
-    .then(render)
+    .then(function(){
+      // Имена заказчиков грузим независимо от успеха первого рендера — даже если
+      // рендер упал по посторонней причине, имена не должны от этого пострадать.
+      try { render(); } catch(e) { console.error('render:', e); }
+      return loadPersonNames().then(function(){ try { render(); } catch(e){} });
+    })
     .catch(function(e){ boot('Ошибка загрузки: '+(e&&e.message||e)); });
 </script>
 </body>
