@@ -73,8 +73,10 @@
           return adminIn(res[1])||adminIn(res[2]);
         }).catch(function(){ return false; });
     }
+    var IS_ADMIN=false;
     function canUse(){
       return isDirector().then(function(admin){
+        IS_ADMIN=admin;
         if(admin) return true;
         return t.member('id').then(function(me){
           return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||''))
@@ -207,8 +209,30 @@
         '<input type="date" id="cfrom" value="'+CASH_RANGE.from+'"><span class="muted">—</span>'+
         '<input type="date" id="cto" value="'+CASH_RANGE.to+'">'+
         '<button class="btn" id="capply" type="button">Показать</button></div>';
-      h+='<div class="kpis"><div class="kpi"><div class="k">Итого за период</div><div class="v">'+money(CASH?CASH.total:0)+' ₸</div></div>'+
-         '<div class="kpi"><div class="k">Записей</div><div class="v">'+((CASH&&CASH.entries)?CASH.entries.length:0)+'</div></div></div>';
+      var bal=(CASH&&CASH.balance!=null)?CASH.balance:null;
+      h+='<div class="kpis">'+
+         '<div class="kpi"><div class="k">Перенос с прошлого</div><div class="v">'+money(CASH?CASH.carryIn:0)+' ₸</div></div>'+
+         '<div class="kpi"><div class="k">Выдано за период</div><div class="v" style="color:#579dff">'+money(CASH?CASH.issued:0)+' ₸</div></div>'+
+         '<div class="kpi"><div class="k">Потрачено</div><div class="v">'+money(CASH?CASH.total:0)+' ₸</div></div>'+
+         '<div class="kpi"><div class="k">Остаток в подотчёте</div><div class="v" style="color:'+(bal!=null&&bal<0?'var(--red,#f28b82)':'var(--green,#4bce97)')+'">'+money(bal)+' ₸</div></div>'+
+         '</div>';
+      if(bal!=null&&bal<0) h+='<div class="muted" style="color:var(--red,#f28b82);margin:-6px 0 10px">⚠ Потрачено больше, чем выдано — проверьте, все ли выдачи записаны.</div>';
+      if(IS_ADMIN){
+        h+='<h3>Выдача налом (подотчёт)</h3><div class="grid2">'+
+           '<div><div class="lbl">Дата</div><input type="date" id="idate" value="'+fmtDate(new Date())+'"></div>'+
+           '<div><div class="lbl">Сумма, ₸ *</div><input type="text" id="iamount" placeholder="200000"></div>'+
+           '<div><div class="lbl">Заметка</div><input type="text" id="inote" placeholder="выдача на июль"></div></div>'+
+           '<button class="btn primary" id="iadd" type="button">+ Выдать</button><span id="imsg" class="muted" style="margin-left:8px"></span>';
+      }
+      var issues=(CASH&&CASH.issues)||[];
+      if(issues.length){
+        h+='<h3 style="margin-top:14px">Выдачи за период</h3><table><thead><tr><th>Дата</th><th class="num">Сумма</th><th>Заметка</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
+        issues.forEach(function(i0){
+          h+='<tr><td>'+esc(i0.date)+'</td><td class="num" style="color:#579dff">+'+money(i0.amount)+' ₸</td><td class="muted">'+esc(i0.note||'')+'</td>'+
+             (IS_ADMIN?('<td><button class="btn danger idel" data-id="'+i0.id+'" type="button">✕</button></td>'):'')+'</tr>';
+        });
+        h+='</tbody></table>';
+      }
       h+='<h3>Новый расход</h3><div class="grid2">'+
          '<div><div class="lbl">Дата</div><input type="date" id="cdate" value="'+fmtDate(new Date())+'"></div>'+
          '<div><div class="lbl">Сумма, ₸ *</div><input type="text" id="camount" placeholder="12500"></div>'+
@@ -402,6 +426,25 @@
         if(!f||!t2) return; if(f>t2){var tmp=f;f=t2;t2=tmp;}
         CASH_RANGE.from=f; CASH_RANGE.to=t2; loadAll();
       };
+      var iadd=document.getElementById('iadd'); if(iadd) iadd.onclick=function(){
+        var amount=+String(document.getElementById('iamount').value).replace(/[^\d.]/g,'');
+        var date=document.getElementById('idate').value;
+        var note=document.getElementById('inote').value.trim();
+        var msg=document.getElementById('imsg');
+        if(!(amount>0)||!date){ msg.textContent='Заполните дату и сумму.'; return; }
+        var btn=this; btn.disabled=true;
+        fetch(WORKER+'/cash-issue-save',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({issue:{date:date,amount:amount,note:note}})})
+          .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
+          .catch(function(e){ msg.textContent='Не сохранилось: '+(e&&e.message||e); btn.disabled=false; });
+      };
+      [].forEach.call(document.querySelectorAll('.idel'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id');
+          if(!confirm('Удалить эту выдачу? Остаток пересчитается.')) return;
+          fetch(WORKER+'/cash-issue-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+            .then(function(){ loadAll(); });
+        };
+      });
       var cadd=document.getElementById('cadd'); if(cadd) cadd.onclick=function(){
         var amount=+String(document.getElementById('camount').value).replace(/[^\d.]/g,'');
         var what=document.getElementById('cwhat').value.trim();
