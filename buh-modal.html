@@ -51,6 +51,8 @@
     function fmtDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
     var RANGE={ from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now), preset:'month' };
     var ROWS=[], TOTALS={}, FILTER='', ONLY_OPEN=false;
+    var VIEW='orders'; // orders | invoices
+    var INV_ROWS=[], INV_TOTALS={}, INV_SHARE=0.5;
 
     function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -84,12 +86,25 @@
     }
 
     function load(){
+      if(VIEW==='invoices') return loadInvoices();
       var b=document.getElementById('boot'); if(b) b.textContent='Загружаю заказы…';
       fetch(WORKER+'/acct-list?from='+RANGE.from+'&to='+RANGE.to)
         .then(function(r){return r.json();})
         .then(function(j){
           if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
           ROWS=j.rows||[]; TOTALS=j.totals||{};
+          render();
+        })
+        .catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+    }
+
+    function loadInvoices(){
+      var b=document.getElementById('boot'); if(b) b.textContent='Загружаю счета…';
+      fetch(WORKER+'/invoice-payments-list?from='+RANGE.from+'&to='+RANGE.to)
+        .then(function(r){return r.json();})
+        .then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+          INV_ROWS=j.rows||[]; INV_TOTALS=j.totals||{}; INV_SHARE=j.minShare||0.5;
           render();
         })
         .catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
@@ -112,6 +127,10 @@
     function render(){
       var app=document.getElementById('app');
       var h='<h2>Бухгалтерия <span class="muted" style="font-weight:400">· '+RANGE.from+' — '+RANGE.to+'</span></h2>';
+      h+='<div class="tabs" style="margin-bottom:6px">'+
+         '<div class="tab'+(VIEW==='orders'?' active':'')+'" data-view="orders">Заказы</div>'+
+         '<div class="tab'+(VIEW==='invoices'?' active':'')+'" data-view="invoices">Счета на оплату</div>'+
+         '</div>';
       h+='<div class="tabs">';
       [['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].forEach(function(p){
         h+='<div class="tab'+(RANGE.preset===p[0]?' active':'')+'" data-preset="'+p[0]+'">'+p[1]+'</div>';
@@ -124,6 +143,12 @@
          '<input type="text" id="q" placeholder="Поиск: №, заказ, клиент…" value="'+esc(FILTER)+'">'+
          '<label class="f"><input type="checkbox" id="onlyOpen"'+(ONLY_OPEN?' checked':'')+'> только незакрытые</label>'+
          '</div>';
+      if(VIEW==='invoices'){
+        h+=renderInvoicesBody();
+        app.innerHTML=h;
+        bindCommon();
+        return;
+      }
       var T=TOTALS;
       h+='<div class="kpis">';
       h+='<div class="kpi"><div class="k">Заказов</div><div class="v">'+(T.orders||0)+'</div></div>';
@@ -150,15 +175,9 @@
         h+='</tbody></table>';
       }
       app.innerHTML=h;
-      [].forEach.call(document.querySelectorAll('[data-preset]'), function(el){ el.onclick=function(){ applyPreset(this.getAttribute('data-preset')); }; });
-      document.getElementById('applyR').onclick=function(){
-        var f=document.getElementById('fromD').value, t2=document.getElementById('toD').value;
-        if(!f||!t2) return; if(f>t2){ var tmp=f; f=t2; t2=tmp; }
-        RANGE.from=f; RANGE.to=t2; RANGE.preset='custom'; load();
-      };
-      var q=document.getElementById('q');
-      q.oninput=function(){ FILTER=this.value; render(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
-      document.getElementById('onlyOpen').onchange=function(){ ONLY_OPEN=this.checked; render(); };
+      bindCommon();
+    }
+    function _bindChipsBody(){
       [].forEach.call(document.querySelectorAll('.chip'), function(c){
         c.onclick=function(){
           var cardId=this.getAttribute('data-card'), field=this.getAttribute('data-f');
@@ -181,7 +200,66 @@
       });
     }
 
-    canUse().then(function(allowed){
+    function invStatusLabel(r){
+      if(r.status==='full') return ['оплачен полностью','var(--green)'];
+      if(r.status==='launched') return ['аванс '+(r.pct!=null?r.pct+'%':'')+' — в производстве','#579dff'];
+      if(r.status==='partial') return ['частично '+(r.pct!=null?r.pct+'%':''),'var(--amber)'];
+      return ['не оплачен','var(--muted)'];
+    }
+    function renderInvoicesBody(){
+      var T=INV_TOTALS||{};
+      var h='<div class="kpis">';
+      h+='<div class="kpi"><div class="k">Счетов</div><div class="v">'+(T.count||0)+'</div></div>';
+      h+='<div class="kpi"><div class="k">Выставлено</div><div class="v">'+money(T.total)+' ₸</div></div>';
+      h+='<div class="kpi green"><div class="k">Поступило</div><div class="v">'+money(T.received)+' ₸</div></div>';
+      h+='<div class="kpi"><div class="k">Не оплачено</div><div class="v">'+(T.unpaid||0)+'</div></div>';
+      h+='<div class="kpi amber"><div class="k">Частично</div><div class="v">'+(T.partial||0)+'</div></div>';
+      h+='<div class="kpi"><div class="k">Аванс, в работе</div><div class="v" style="color:#579dff">'+(T.launched||0)+'</div></div>';
+      h+='<div class="kpi green"><div class="k">Оплачено</div><div class="v">'+(T.full||0)+'</div></div>';
+      h+='</div>';
+      h+='<div class="muted" style="margin:-6px 0 10px">Поступления подтягиваются из выписки БЦК автоматически. Порог запуска в производство: '+Math.round((INV_SHARE||0.5)*100)+'% суммы счёта. Статусы счетов не зависят от галочек по заказам.</div>';
+      var f=FILTER.toLowerCase();
+      var rows=(INV_ROWS||[]).filter(function(r){
+        if(!f) return true;
+        return (String(r.number)+' '+(r.buyer||'')).toLowerCase().indexOf(f)>=0;
+      });
+      if(!rows.length) return h+'<div class="empty">Счетов не найдено. Счета появляются после формирования через журнал счетов.</div>';
+      h+='<table><thead><tr><th>Счёт</th><th>Дата</th><th>Покупатель</th><th class="num">Заказов</th><th class="num">Сумма</th><th class="num">Поступило</th><th class="num">%</th><th>Статус</th><th>Последний платёж</th></tr></thead><tbody>';
+      rows.forEach(function(r){
+        var st=invStatusLabel(r);
+        h+='<tr><td><b>№'+esc(r.number)+'</b></td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+'</td>'+
+           '<td class="num">'+(r.cards||0)+'</td>'+
+           '<td class="num">'+money(r.total)+' ₸</td>'+
+           '<td class="num">'+money(r.received)+' ₸</td>'+
+           '<td class="num">'+(r.pct!=null?r.pct+'%':'—')+'</td>'+
+           '<td style="color:'+st[1]+'">'+esc(st[0])+'</td>'+
+           '<td class="muted">'+esc(r.lastPayment||'')+'</td></tr>';
+      });
+      h+='</tbody></table>';
+      return h;
+    }
+
+    function bindCommon(){
+      [].forEach.call(document.querySelectorAll('[data-view]'), function(el){ el.onclick=function(){ var v=this.getAttribute('data-view'); if(v!==VIEW){ VIEW=v; load(); } }; });
+      [].forEach.call(document.querySelectorAll('[data-preset]'), function(el){ el.onclick=function(){ applyPreset(this.getAttribute('data-preset')); }; });
+      var ap=document.getElementById('applyR');
+      if(ap) ap.onclick=function(){
+        var f=document.getElementById('fromD').value, t2=document.getElementById('toD').value;
+        if(!f||!t2) return; if(f>t2){ var tmp=f; f=t2; t2=tmp; }
+        RANGE.from=f; RANGE.to=t2; RANGE.preset='custom'; load();
+      };
+      var q=document.getElementById('q');
+      if(q) q.oninput=function(){ FILTER=this.value; render(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
+      var oo=document.getElementById('onlyOpen');
+      if(oo) oo.onchange=function(){ ONLY_OPEN=this.checked; render(); };
+      bindChips();
+    }
+
+    function bindChips(){
+      _bindChipsBody();
+    }
+
+        canUse().then(function(allowed){
       if(!allowed){
         document.getElementById('boot').textContent='Раздел доступен руководителю и сотрудникам с правом «выставлять счета» (включается в «Зарплата / Работники»).';
         return;
