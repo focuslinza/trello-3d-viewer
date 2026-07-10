@@ -44,6 +44,11 @@
     .empty{color:var(--muted);padding:14px 0}
     .stagewrap{display:flex;flex-wrap:wrap;gap:6px 12px;max-width:280px}
     .chk.stg{font-size:12px;white-space:nowrap}
+      .permwrap{display:grid;grid-template-columns:1fr;gap:3px;min-width:280px}
+    .chk.pm{display:flex;align-items:baseline;gap:6px;font-size:12.5px;white-space:nowrap}
+    .chk.pm .pmh{color:var(--muted, #9fadbc);font-size:11px;white-space:normal}
+    .preset{font-size:11.5px;color:#579dff;text-decoration:none;margin-top:3px;display:inline-block}
+    .preset:hover{text-decoration:underline}
   </style>
 </head>
 <body>
@@ -74,7 +79,7 @@
       <h3>Работники</h3>
       <table id="tbl">
         <thead>
-          <tr><th>Имя</th><th>Оклад, ₸/мес</th><th>Ставка/день</th><th>Этапы (что делает)</th><th>Счета</th><th>Видит стоимость</th><th>Снабженец</th><th>CRM</th><th>Trello-аккаунт</th><th></th></tr>
+          <tr><th>Имя</th><th>Оклад, ₸/мес</th><th>Ставка/день</th><th>Этапы (что делает)</th><th>Права доступа</th><th>Trello-аккаунт</th><th></th></tr>
         </thead>
         <tbody id="rows"></tbody>
       </table>
@@ -153,10 +158,16 @@
         '<td><input class="sal" type="number" min="0" step="1000" placeholder="например, 400000" value="'+(w.salary!=null?w.salary:'')+'"></td>'+
         '<td class="wage">—</td>'+
         '<td><div class="stagewrap">'+stagesHtml(w.stages||[])+'</div></td>'+
-        '<td style="text-align:center"><input type="checkbox" class="caninv"'+((w.can_invoice==1||w.can_invoice===true)?' checked':'')+' title="Может выставлять счёт на оплату"></td>'+
-        '<td style="text-align:center"><input type="checkbox" class="cancost"'+((w.can_see_cost==1||w.can_see_cost===true)?' checked':'')+' title="Видит стоимость в калькуляторе"></td>'+
-        '<td style="text-align:center"><input type="checkbox" class="cansup"'+((w.can_supply==1||w.can_supply===true)?' checked':'')+' title="Снабженец: видит панель Снабжение (заявки, инструмент, наличные)"></td>'+
-        '<td style="text-align:center"><input type="checkbox" class="cancrm"'+((w.can_crm==1||w.can_crm===true)?' checked':'')+' title="Менеджер продаж: видит CRM (клиенты, выручка, долги)"></td>'+
+        '<td><div class="permwrap">'+
+          '<label class="chk pm"><input type="checkbox" class="cantabel"'+((w.can_timesheet==1||w.can_timesheet===true)?' checked':'')+'> Табель <span class="pmh">заполняет посещаемость</span></label>'+
+          '<label class="chk pm"><input type="checkbox" class="candash"'+((w.can_dashboard==1||w.can_dashboard===true)?' checked':'')+'> Панель руководителя <span class="pmh">выручка, прибыль, этапы, заработки, оплаты</span></label>'+
+          '<label class="chk pm"><input type="checkbox" class="canrepair"'+((w.can_repair==1||w.can_repair===true)?' checked':'')+'> Ремонт <span class="pmh">панель заявок на ремонт</span></label>'+
+          '<label class="chk pm"><input type="checkbox" class="cansup"'+((w.can_supply==1||w.can_supply===true)?' checked':'')+'> Снабжение <span class="pmh">заявки, инструмент, наличные</span></label>'+
+          '<label class="chk pm"><input type="checkbox" class="caninv"'+((w.can_invoice==1||w.can_invoice===true)?' checked':'')+'> Бухгалтерия <span class="pmh">счета на оплату, статусы</span></label>'+
+          '<label class="chk pm"><input type="checkbox" class="cancrm"'+((w.can_crm==1||w.can_crm===true)?' checked':'')+'> CRM <span class="pmh">клиенты, выручка, долги</span></label>'+
+          '<label class="chk pm"><input type="checkbox" class="cancost"'+((w.can_see_cost==1||w.can_see_cost===true)?' checked':'')+'> Видит стоимость <span class="pmh">цены в калькуляторе</span></label>'+
+          '<a href="#" class="preset">профиль: начальник цеха</a>'+
+        '</div></td>'+
         '<td><select class="mem">'+memberOptionsHtml(w.trello_member_id||'')+'</select></td>'+
         '<td><div class="actions">'+
           '<button class="btn save" type="button">Сохранить</button>'+
@@ -164,6 +175,12 @@
         '</div></td>';
       tr.querySelector('.sal').addEventListener('input', recalcWages);
       tr.querySelector('.save').addEventListener('click', function(){ saveRow(tr); });
+      var pr=tr.querySelector('.preset');
+      if(pr) pr.addEventListener('click', function(ev){
+        ev.preventDefault();
+        // профиль «начальник цеха»: табель + панель руководителя + ремонт + снабжение
+        ['cantabel','candash','canrepair','cansup'].forEach(function(cls){ var cb=tr.querySelector('.'+cls); if(cb) cb.checked=true; });
+      });
       tr.querySelector('.del').addEventListener('click', function(){ delRow(tr); });
       return tr;
     }
@@ -195,13 +212,16 @@
       var canSupply=tr.querySelector('.cansup')?tr.querySelector('.cansup').checked:false;
       var canCrm=tr.querySelector('.cancrm')?tr.querySelector('.cancrm').checked:false;
       var canSeeCost=tr.querySelector('.cancost')?tr.querySelector('.cancost').checked:false;
+      var canTimesheet=tr.querySelector('.cantabel')?tr.querySelector('.cantabel').checked:false;
+      var canDashboard=tr.querySelector('.candash')?tr.querySelector('.candash').checked:false;
+      var canRepair=tr.querySelector('.canrepair')?tr.querySelector('.canrepair').checked:false;
       if(!name){ setMsg('Введите имя.'); return; }
       if(!salary){ setMsg('Введите оклад.'); return; }
       var id=tr.getAttribute('data-id')||'';
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; updateCount(); }

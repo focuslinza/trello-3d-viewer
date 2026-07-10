@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Табель</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; --violet:#b58de6; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #app{max-width:1200px;margin:0 auto;padding:16px 16px 70px}
+    h2{margin:0 0 10px;font-size:18px}
+    .muted{color:var(--muted);font-size:12.5px}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end;z-index:50}
+    .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 14px;font-size:13px;cursor:pointer}
+    .btn:hover{border-color:var(--blue)}
+    .nav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+    .nav b{font-size:15px;min-width:150px;text-align:center}
+    .legend{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 12px;font-size:12.5px;color:var(--muted)}
+    .legend .sw{display:inline-block;width:16px;height:16px;border-radius:4px;vertical-align:-3px;margin-right:5px;border:1px solid var(--line)}
+    .wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+    table{border-collapse:collapse;min-width:100%}
+    th,td{border-bottom:1px solid var(--line);border-right:1px solid #2b3138;padding:0;text-align:center;font-size:12px}
+    th{color:var(--muted);font-size:10.5px;background:var(--bg2);padding:6px 3px;position:sticky;top:0}
+    th.we{color:var(--red)}
+    td.name,th.name{position:sticky;left:0;background:var(--bg);text-align:left;padding:6px 10px;font-size:13px;white-space:nowrap;z-index:2;min-width:140px;border-right:1px solid var(--line)}
+    th.name{background:var(--bg2);z-index:3}
+    td.cell{width:30px;height:34px;min-width:30px;cursor:pointer;user-select:none;font-weight:800}
+    td.cell.ro{cursor:default}
+    td.cell.we{background:#20242a}
+    td.cell.s-p{background:#1c3329;color:var(--green)}
+    td.cell.s-n{background:#3a2226;color:var(--red)}
+    td.cell.s-b{background:#3d321c;color:var(--amber)}
+    td.cell.s-o{background:#2b2340;color:var(--violet)}
+    td.cell.busy{opacity:.4;pointer-events:none}
+    td.sum{padding:4px 8px;font-size:12px;white-space:nowrap;color:var(--muted)}
+    td.sum b{color:var(--txt)}
+    .empty{color:var(--muted);padding:16px 4px}
+    .today{outline:2px solid var(--blue);outline-offset:-2px}
+  </style>
+</head>
+<body>
+  <div id="app"><div class="empty" id="boot">Загрузка…</div></div>
+  <div class="bar"><button class="btn" id="close" type="button">Закрыть</button></div>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    document.getElementById('close').onclick=function(){ t.closeModal(); };
+
+    var STATUSES=['','p','n','b','o'];                    // цикл по клику
+    var LABEL={p:'Я',n:'Н',b:'Б',o:'О'};                  // Я=явка Н=неявка Б=больничный О=отпуск
+    var YM=new Date().toISOString().slice(0,7);
+    var DATA=null, CAN_EDIT=false, ME_NAME='';
+
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function ymTitle(ym){
+      var m=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+      var M=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+      var p=ym.split('-'); return M[+p[1]-1]+' '+p[0];
+    }
+    function daysIn(ym){ var p=ym.split('-'); return new Date(+p[0], +p[1], 0).getDate(); }
+    function shiftYm(ym,d){ var p=ym.split('-'); var dt=new Date(+p[0], +p[1]-1+d, 1); return dt.getFullYear()+'-'+(dt.getMonth()<9?'0':'')+(dt.getMonth()+1); }
+    function isWeekend(ym,day){ var p=ym.split('-'); var wd=new Date(Date.UTC(+p[0],+p[1]-1,day)).getUTCDay(); return wd===0||wd===6; }
+
+    function isDirector(){
+      return Promise.all([ t.member('id'), t.board('memberships'), t.organization('memberships').catch(function(){return null;}) ])
+        .then(function(res){ var me=res[0]||{};
+          function adminIn(o){ var ms=((o&&o.memberships)||[]).filter(function(x){return x.idMember===me.id;})[0]; return !!(ms&&ms.memberType==='admin'); }
+          return adminIn(res[1])||adminIn(res[2]);
+        }).catch(function(){ return false; });
+    }
+
+    function access(){
+      return Promise.all([ isDirector(), t.member('id','fullName') ]).then(function(res){
+        var admin=res[0], me=res[1]||{};
+        ME_NAME = me.fullName || '';
+        if(admin) return { view:true, edit:true };
+        return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||''))
+          .then(function(r){return r.json();})
+          .then(function(j){
+            var ts=!!(j&&j.canTimesheet), inv=!!(j&&j.canInvoice);
+            return { view: ts||inv, edit: ts };
+          }).catch(function(){ return { view:false, edit:false }; });
+      });
+    }
+
+    function load(){
+      var b=document.getElementById('boot'); if(b) b.textContent='Загружаю табель…';
+      fetch(WORKER+'/att-month?ym='+YM)
+        .then(function(r){return r.json();})
+        .then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+          DATA=j; render();
+        })
+        .catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+    }
+
+    function render(){
+      var app=document.getElementById('app');
+      var days=daysIn(YM);
+      var today=new Date().toISOString().slice(0,10);
+      var h='<h2>Табель <span class="muted" style="font-weight:400">· '+(CAN_EDIT?'клик по клетке меняет статус':'просмотр')+'</span></h2>';
+      h+='<div class="nav"><button class="btn" id="prevM" type="button">←</button><b>'+ymTitle(YM)+'</b><button class="btn" id="nextM" type="button">→</button></div>';
+      h+='<div class="legend">'+
+         '<span><span class="sw" style="background:#1c3329"></span>Я — явка</span>'+
+         '<span><span class="sw" style="background:#3a2226"></span>Н — не явился</span>'+
+         '<span><span class="sw" style="background:#3d321c"></span>Б — больничный</span>'+
+         '<span><span class="sw" style="background:#2b2340"></span>О — отпуск</span>'+
+         '<span class="muted">пустая клетка — нет отметки</span></div>';
+      var ws=(DATA&&DATA.workers)||[];
+      if(!ws.length){ app.innerHTML=h+'<div class="empty">Нет активных работников. Добавьте их в «Зарплата / Работники».</div>'; bindNav(); return; }
+      h+='<div class="wrap"><table><thead><tr><th class="name">Работник</th>';
+      for(var d=1;d<=days;d++){ h+='<th'+(isWeekend(YM,d)?' class="we"':'')+'>'+d+'</th>'; }
+      h+='<th>Итого</th></tr></thead><tbody>';
+      ws.forEach(function(w){
+        var rec=(DATA.records&&DATA.records[w.id])||{};
+        var c={p:0,n:0,b:0,o:0};
+        h+='<tr><td class="name">'+esc(w.name)+'</td>';
+        for(var d=1;d<=days;d++){
+          var date=YM+'-'+(d<10?'0':'')+d;
+          var r=rec[date]; var s=r?r.s:'';
+          if(s&&c[s]!=null)c[s]++;
+          h+='<td class="cell'+(s?' s-'+s:'')+(isWeekend(YM,d)?' we':'')+(CAN_EDIT?'':' ro')+(date===today?' today':'')+'"'+
+             ' data-w="'+esc(w.id)+'" data-d="'+date+'" data-s="'+(s||'')+'"'+
+             (r&&r.src&&r.src!=='manual'?' title="источник: '+esc(r.src)+'"':'')+'>'+(s?LABEL[s]:'')+'</td>';
+        }
+        h+='<td class="sum"><b>'+c.p+'</b> я · '+c.n+' н · '+c.b+' б · '+c.o+' о</td></tr>';
+      });
+      h+='</tbody></table></div>';
+      app.innerHTML=h;
+      bindNav();
+      if(CAN_EDIT){
+        [].forEach.call(document.querySelectorAll('td.cell'), function(td){
+          td.onclick=function(){
+            var el=this;
+            var cur=el.getAttribute('data-s')||'';
+            var next=STATUSES[(STATUSES.indexOf(cur)+1)%STATUSES.length];
+            el.classList.add('busy');
+            fetch(WORKER+'/att-set',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({workerId:el.getAttribute('data-w'),date:el.getAttribute('data-d'),status:next,byName:ME_NAME})})
+              .then(function(r){return r.json();})
+              .then(function(j){
+                if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+                var wId=el.getAttribute('data-w'), date=el.getAttribute('data-d');
+                DATA.records[wId]=DATA.records[wId]||{};
+                if(next) DATA.records[wId][date]={s:next,src:'manual'}; else delete DATA.records[wId][date];
+                render();
+              })
+              .catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); el.classList.remove('busy'); });
+          };
+        });
+      }
+    }
+
+    function bindNav(){
+      var p=document.getElementById('prevM'), n=document.getElementById('nextM');
+      if(p) p.onclick=function(){ YM=shiftYm(YM,-1); load(); };
+      if(n) n.onclick=function(){ YM=shiftYm(YM,1); load(); };
+    }
+
+    access().then(function(a){
+      if(!a.view){
+        document.getElementById('boot').textContent='Табель доступен руководителю, бухгалтеру и начальнику цеха (право «табель» включается в «Зарплата / Работники»).';
+        return;
+      }
+      CAN_EDIT=a.edit;
+      load();
+    }).catch(function(e){
+      document.getElementById('boot').textContent='Ошибка: '+(e&&e.message||e);
+    });
+  </script>
+</body>
+</html>

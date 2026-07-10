@@ -138,6 +138,17 @@
             });
           }
         };
+        var tabelBtn = {
+          icon: { dark: ICON_BASE + 'ic-tabel-w.png', light: ICON_BASE + 'ic-tabel-b.png' },
+          text: 'Табель',
+          callback: function (t) {
+            return t.modal({
+              url: './timesheet-modal.html?t=' + Date.now(),
+              fullscreen: true,
+              title: 'Табель'
+            });
+          }
+        };
         var dashBtn = {
           icon: { dark: ICON_BASE + 'ic-dashboard-w.png', light: ICON_BASE + 'ic-dashboard-b.png' },
           text: 'Панель руководителя',
@@ -154,16 +165,19 @@
           return t.member('id').then(function(me){
             return fetch(W + '/worker-perms?memberId=' + encodeURIComponent((me && me.id) || ''))
               .then(function(r){ return r.json(); })
-              .then(function(j){ return { canInvoice: !!(j && j.canInvoice), canSupply: !!(j && j.canSupply), canCrm: !!(j && j.canCrm) }; });
-          }).catch(function(){ return { canInvoice:false, canSupply:false, canCrm:false }; });
+              .then(function(j){ return { canInvoice: !!(j && j.canInvoice), canSupply: !!(j && j.canSupply), canCrm: !!(j && j.canCrm), canTimesheet: !!(j && j.canTimesheet), canDashboard: !!(j && j.canDashboard), canRepair: !!(j && j.canRepair) }; });
+          }).catch(function(){ return { canInvoice:false, canSupply:false, canCrm:false, canTimesheet:false, canDashboard:false, canRepair:false }; });
         }
         return isAdmin().then(function(admin){
-          if (admin) return [earnBtn, repairReqBtn, repairBtn, reqBtn, supBtn, buhBtn, crmBtn, dashBtn];
+          if (admin) return [earnBtn, repairReqBtn, repairBtn, reqBtn, supBtn, tabelBtn, buhBtn, crmBtn, dashBtn];
           return perms().then(function(p){
             var out = [earnBtn, repairReqBtn, reqBtn]; // заявки на ремонт/снабжение — любой работник
+            if (p.canRepair) out.push(repairBtn);
             if (p.canSupply) out.push(supBtn);
+            if (p.canTimesheet || p.canInvoice) out.push(tabelBtn); // табель: начальник цеха (заполняет) и бухгалтер (смотрит)
             if (p.canInvoice) out.push(buhBtn);
             if (p.canCrm) out.push(crmBtn);
+            if (p.canDashboard) out.push(dashBtn);
             return out;
           });
         });

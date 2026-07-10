@@ -565,15 +565,23 @@
   };
 
   isDirector().then(function(admin){
-    if(!admin){
-      var wb=document.getElementById('workers'); if(wb) wb.style.display='none';
-      var pb=document.getElementById('pricingBtn'); if(pb) pb.style.display='none';
-      boot('Панель доступна только руководителю (администратору доски).'); return;
+    if(admin){
+      fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
+        if(j&&j.ok&&j.pricing){ var p=j.pricing; PRICING_EDIT={ mat:p.mat||{}, cmp:p.cmp||{}, coef:p.coef||{}, customMat:p.customMat||[], customCmp:p.customCmp||[], customOp:p.customOp||[],
+          matOstBySec:p.matOstBySec||{}, matRahBySec:p.matRahBySec||{}, cmpOstBySec:p.cmpOstBySec||{}, cmpRahBySec:p.cmpRahBySec||{}, opOstBySec:p.opOstBySec||{}, opRahBySec:p.opRahBySec||{}, rates:p.rates||{} }; }
+      }).catch(function(){}).then(load);
+      return;
     }
-    fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
-      if(j&&j.ok&&j.pricing){ var p=j.pricing; PRICING_EDIT={ mat:p.mat||{}, cmp:p.cmp||{}, coef:p.coef||{}, customMat:p.customMat||[], customCmp:p.customCmp||[], customOp:p.customOp||[],
-        matOstBySec:p.matOstBySec||{}, matRahBySec:p.matRahBySec||{}, cmpOstBySec:p.cmpOstBySec||{}, cmpRahBySec:p.cmpRahBySec||{}, opOstBySec:p.opOstBySec||{}, opRahBySec:p.opRahBySec||{}, rates:p.rates||{} }; }
-    }).catch(function(){}).then(load);
+    // не админ: проверяем право «Панель руководителя» (начальник цеха и т.п.)
+    var wb=document.getElementById('workers'); if(wb) wb.style.display='none';
+    var pb=document.getElementById('pricingBtn'); if(pb) pb.style.display='none';
+    t.member('id').then(function(me){
+      return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
+        .then(function(r){return r.json();});
+    }).then(function(j){
+      if(j && j.canDashboard){ load(); }
+      else boot('Панель доступна руководителю и сотрудникам с правом «Панель руководителя» (включается в «Зарплата / Работники»).');
+    }).catch(function(){ boot('Панель доступна только руководителю (администратору доски).'); });
   });
 </script>
 </body>

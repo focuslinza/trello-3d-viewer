@@ -193,8 +193,15 @@
     }
 
     isDirector().then(function(ok){
-      if(!ok){ document.getElementById('boot').textContent='Раздел доступен руководителю/начальнику цеха.'; return; }
-      load();
+      if(ok){ load(); return; }
+      // не админ: право «Ремонт» из «Зарплата / Работники»
+      return t.member('id').then(function(me){
+        return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
+          .then(function(r){return r.json();});
+      }).then(function(j){
+        if(j && j.canRepair){ load(); }
+        else document.getElementById('boot').textContent='Раздел доступен руководителю и сотрудникам с правом «Ремонт» (включается в «Зарплата / Работники»).';
+      });
     }).catch(function(e){ document.getElementById('boot').textContent='Ошибка: '+(e&&e.message||e); });
   </script>
 </body>
