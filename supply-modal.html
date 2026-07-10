@@ -116,6 +116,8 @@
         if(r.status==='new') h+='<button class="btn rq" data-id="'+r.id+'" data-st="bought" type="button">Куплено</button> '+
                                 '<button class="btn danger rq" data-id="'+r.id+'" data-st="rejected" type="button">Отклонить</button>';
         else if(r.status==='bought') h+='<button class="btn rq" data-id="'+r.id+'" data-st="given" type="button">Выдано</button>';
+        if(IS_ADMIN) h+=' <button class="btn sarch" data-id="'+r.id+'" type="button" title="В архив: скрыть из списка, данные останутся" style="padding:3px 8px;font-size:11px">🗄</button>'+
+                        ' <button class="btn danger sdel" data-id="'+r.id+'" type="button" title="Удалить безвозвратно (для тестовых заявок)" style="padding:3px 8px;font-size:11px">✕</button>';
         h+='</td></tr>';
         h+='<tr class="reqEditRow" id="reqEditRow_'+r.id+'" style="display:none"><td colspan="6"><div id="reqEditBox_'+r.id+'"></div></td></tr>';
       });
@@ -388,6 +390,22 @@
             body:JSON.stringify({id:id,status:st,note:note})})
             .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
             .catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); });
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.sarch'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id');
+          if(!confirm('Убрать заявку в архив? Она исчезнет из списка; данные останутся в базе.')) return;
+          fetch(WORKER+'/supply-request-archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.sdel'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id');
+          if(!confirm('УДАЛИТЬ заявку безвозвратно вместе с чеками? Для рабочих заявок используйте архив.')) return;
+          fetch(WORKER+'/supply-request-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
         };
       });
       [].forEach.call(document.querySelectorAll('[data-reqedit]'), function(b){

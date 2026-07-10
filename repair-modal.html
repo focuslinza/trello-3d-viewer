@@ -112,7 +112,10 @@
         h+='<td><span class="pill '+esc(r.status)+'">'+(r.status==='new'?'новая':r.status==='done'?'сделано':'отклонена')+'</span></td>';
         h+='<td>'+(r.doneByName?esc(r.doneByName):'—')+'<div class="opline">'+esc(opsSummary(r.doneOperations))+'</div></td>';
         h+='<td class="num"><input type="text" class="priceInp" data-id="'+r.id+'" value="'+(r.clientTotal!=null?r.clientTotal:'')+'" placeholder="сумма"></td>';
-        h+='<td>'+chip(r,'invoiceSent','счёт')+' '+chip(r,'paid','оплачен')+'</td>';
+        h+='<td>'+chip(r,'invoiceSent','счёт')+' '+chip(r,'paid','оплачен')+
+           (IS_ADMIN?(' <button class="btn rarch" data-id="'+r.id+'" type="button" title="В архив: скрыть из списка и аналитики, данные останутся" style="padding:2px 8px;font-size:11px">🗄</button>'+
+                      ' <button class="btn rdel" data-id="'+r.id+'" type="button" title="Удалить безвозвратно (для тестовых заявок)" style="padding:2px 8px;font-size:11px;color:#e9b3b3;border-color:#5a3a3a">✕</button>'):'')+
+           '</td>';
         h+='</tr>';
         h+='<tr class="editRow" id="editRow_'+r.id+'" style="display:none"><td colspan="7"><div id="editBox_'+r.id+'"></div></td></tr>';
       });
@@ -128,6 +131,22 @@
 
     function wire(){
       var oo=document.getElementById('onlyOpen'); if(oo) oo.onchange=function(){ ONLY_OPEN=this.checked; render(); };
+      [].forEach.call(document.querySelectorAll('.rarch'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id');
+          if(!confirm('Убрать заявку в архив? Она исчезнет из списка и аналитики; данные останутся в базе.')) return;
+          fetch(WORKER+'/repair-archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); load(); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.rdel'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id');
+          if(!confirm('УДАЛИТЬ заявку безвозвратно вместе с чеками? Для рабочих заявок используйте архив.')) return;
+          fetch(WORKER+'/repair-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); load(); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
+      });
       [].forEach.call(document.querySelectorAll('.priceInp'), function(inp){
         inp.onblur=function(){
           var id=+this.getAttribute('data-id'); var val=+this.value.replace(/[^\d.]/g,'')||0;
@@ -192,7 +211,9 @@
       }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
     }
 
+    var IS_ADMIN=false;
     isDirector().then(function(ok){
+      IS_ADMIN=ok;
       if(ok){ load(); return; }
       // не админ: право «Ремонт» из «Зарплата / Работники»
       return t.member('id').then(function(me){
