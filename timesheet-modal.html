@@ -32,6 +32,7 @@
     td.cell.s-n{background:#3a2226;color:var(--red)}
     td.cell.s-b{background:#3d321c;color:var(--amber)}
     td.cell.s-o{background:#2b2340;color:var(--violet)}
+    td.cell.s-v{background:#26303c;color:#8fb3d9}
     td.cell.busy{opacity:.4;pointer-events:none}
     td.sum{padding:4px 8px;font-size:12px;white-space:nowrap;color:var(--muted)}
     td.sum b{color:var(--txt)}
@@ -47,8 +48,8 @@
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     document.getElementById('close').onclick=function(){ t.closeModal(); };
 
-    var STATUSES=['','p','n','b','o'];                    // цикл по клику
-    var LABEL={p:'Я',n:'Н',b:'Б',o:'О'};                  // Я=явка Н=неявка Б=больничный О=отпуск
+    var STATUSES=['','p','n','b','o','v'];                // цикл по клику
+    var LABEL={p:'Я',n:'Н',b:'Б',o:'О',v:'В'};            // Я=явка Н=неявка Б=больничный О=отпуск В=выходной
     var YM=new Date().toISOString().slice(0,7);
     var DATA=null, CAN_EDIT=false, ME_NAME='';
 
@@ -106,7 +107,8 @@
          '<span><span class="sw" style="background:#3a2226"></span>Н — не явился</span>'+
          '<span><span class="sw" style="background:#3d321c"></span>Б — больничный</span>'+
          '<span><span class="sw" style="background:#2b2340"></span>О — отпуск</span>'+
-         '<span class="muted">пустая клетка — нет отметки</span></div>';
+         '<span><span class="sw" style="background:#26303c"></span>В — выходной / праздник</span>'+
+         '<span class="muted">пустая клетка — не заполнено</span></div>';
       var ws=(DATA&&DATA.workers)||[];
       if(!ws.length){ app.innerHTML=h+'<div class="empty">Нет активных работников. Добавьте их в «Зарплата / Работники».</div>'; bindNav(); return; }
       h+='<div class="wrap"><table><thead><tr><th class="name">Работник</th>';
@@ -114,7 +116,7 @@
       h+='<th>Итого</th></tr></thead><tbody>';
       ws.forEach(function(w){
         var rec=(DATA.records&&DATA.records[w.id])||{};
-        var c={p:0,n:0,b:0,o:0};
+        var c={p:0,n:0,b:0,o:0,v:0};
         h+='<tr><td class="name">'+esc(w.name)+'</td>';
         for(var d=1;d<=days;d++){
           var date=YM+'-'+(d<10?'0':'')+d;
@@ -124,7 +126,7 @@
              ' data-w="'+esc(w.id)+'" data-d="'+date+'" data-s="'+(s||'')+'"'+
              (r&&r.src&&r.src!=='manual'?' title="источник: '+esc(r.src)+'"':'')+'>'+(s?LABEL[s]:'')+'</td>';
         }
-        h+='<td class="sum"><b>'+c.p+'</b> я · '+c.n+' н · '+c.b+' б · '+c.o+' о</td></tr>';
+        h+='<td class="sum"><b>'+c.p+'</b> я · '+c.n+' н · '+c.b+' б · '+c.o+' о · '+c.v+' в</td></tr>';
       });
       h+='</tbody></table></div>';
       app.innerHTML=h;
