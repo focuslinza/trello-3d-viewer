@@ -257,19 +257,47 @@
       var canRepair=tr.querySelector('.canrepair')?tr.querySelector('.canrepair').checked:false;
       var hideStats=tr.querySelector('.hidestats')?tr.querySelector('.hidestats').checked:false;
       var isSalaried=tr.querySelector('.salaried')?tr.querySelector('.salaried').checked:false;
-      if(!name){ setMsg('Введите имя.'); return; }
-      if(!salary){ setMsg('Введите оклад.'); return; }
+      if(!name){ setMsg('Введите имя.'); tr.querySelector('.nm').focus(); tr.querySelector('.nm').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.nm').style.borderColor='';},2000); return; }
+      if(!salary){ setMsg('Введите оклад.'); tr.querySelector('.sal').focus(); tr.querySelector('.sal').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.sal').style.borderColor='';},2000); return; }
       var id=tr.getAttribute('data-id')||'';
       var active=(tr.getAttribute('data-active')==='0')?0:1; // сохранение удалённого не возвращает его в активные
+      var btn=tr.querySelector('.save');
+      var btn0=btn.textContent;
+      btn.disabled=true; btn.textContent='Сохраняю…';
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried })
       }).then(function(r){ return r.json(); })
         .then(function(d){
-          if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; updateCount(); if(tr.classList.contains('inactive') && tr.getAttribute('data-active')==='1') loadWorkers(); }
-          else setMsg('Не удалось сохранить: '+(d&&d.error||'?'));
-        }).catch(function(e){ setMsg('Ошибка: '+(e&&e.message||e)); });
+          if(d&&d.ok){
+            tr.setAttribute('data-id', d.id);
+            setMsg('Сохранено: '+name);
+            // явное подтверждение: кнопка зеленеет с галочкой, карточка мигает зелёной рамкой
+            btn.textContent='✓ Сохранено';
+            btn.style.background='#1c3329'; btn.style.borderColor='#2e5c44'; btn.style.color='#4bce97';
+            tr.style.transition='border-color .3s'; tr.style.borderColor='#2e5c44';
+            setTimeout(function(){
+              btn.disabled=false; btn.textContent=btn0;
+              btn.style.background=''; btn.style.borderColor=''; btn.style.color='';
+              tr.style.borderColor='';
+            }, 2000);
+            document.getElementById('emptyHint').style.display='none'; updateCount();
+            if(tr.classList.contains('inactive') && tr.getAttribute('data-active')==='1') loadWorkers();
+          } else {
+            btn.disabled=false; btn.textContent='⚠ Ошибка';
+            btn.style.borderColor='#5a3a3a'; btn.style.color='#e9b3b3';
+            setTimeout(function(){ btn.textContent=btn0; btn.style.borderColor=''; btn.style.color=''; }, 3000);
+            setMsg('Не удалось сохранить: '+(d&&d.error||'?'));
+            alert('Не сохранилось: '+(d&&d.error||'сервер не подтвердил'));
+          }
+        }).catch(function(e){
+          btn.disabled=false; btn.textContent='⚠ Ошибка';
+          btn.style.borderColor='#5a3a3a'; btn.style.color='#e9b3b3';
+          setTimeout(function(){ btn.textContent=btn0; btn.style.borderColor=''; btn.style.color=''; }, 3000);
+          setMsg('Ошибка: '+(e&&e.message||e));
+          alert('Не сохранилось (нет связи с сервером): '+(e&&e.message||e));
+        });
     }
 
     function delRow(tr){
