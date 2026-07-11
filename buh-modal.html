@@ -54,6 +54,7 @@
     var VIEW='orders'; // orders | invoices | payroll
     var INV_ROWS=[], INV_TOTALS={}, INV_SHARE=0.5;
     var PAY=null, PAY_OPEN={};
+    var INV_EDIT=null; // id счёта в режиме правки
 
     function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -306,13 +307,30 @@
       h+='<table><thead><tr><th>Счёт</th><th>Дата</th><th>Покупатель</th><th class="num">Заказов</th><th class="num">Сумма</th><th class="num">Поступило</th><th class="num">%</th><th>Статус</th><th>Последний платёж</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
       rows.forEach(function(r){
         var st=invStatusLabel(r);
+        if(INV_EDIT===r.id){
+          h+='<tr style="background:#22272b">'+
+             '<td><input class="ie-num" value="'+esc(r.number)+'" style="width:64px"></td>'+
+             '<td><input type="date" class="ie-date" value="'+esc(r.dateIso||'')+'" style="width:135px"></td>'+
+             '<td><input class="ie-buyer" value="'+esc(r.buyer)+'" style="width:100%;min-width:140px"></td>'+
+             '<td class="num">'+(r.cards||0)+'</td>'+
+             '<td><input class="ie-total" value="'+(r.total||0)+'" style="width:100px;text-align:right"></td>'+
+             '<td class="num">'+money(r.received)+' ₸</td>'+
+             '<td class="num">'+(r.pct!=null?r.pct+'%':'—')+'</td>'+
+             '<td colspan="2"><button class="btn iesave" data-id="'+r.id+'" type="button" style="color:#4bce97;border-color:#2e5c44">Сохранить</button> '+
+             '<button class="btn iecancel" type="button">Отмена</button>'+
+             '<div class="muted" style="font-size:11px;margin-top:4px">Номер и сумма влияют на автопривязку оплат из банка'+(r.received>0?'; по счёту уже есть поступления — правьте осознанно':'')+'.</div></td>'+
+             (IS_ADMIN?'<td></td>':'')+
+             '</tr>';
+          return;
+        }
         h+='<tr><td><b>№'+esc(r.number)+'</b></td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+'</td>'+
            '<td class="num">'+(r.cards||0)+'</td>'+
            '<td class="num">'+money(r.total)+' ₸</td>'+
            '<td class="num">'+money(r.received)+' ₸</td>'+
            '<td class="num">'+(r.pct!=null?r.pct+'%':'—')+'</td>'+
            '<td style="color:'+st[1]+'">'+esc(st[0])+'</td>'+
-           '<td class="muted">'+esc(r.lastPayment||'')+'</td>'+
+           '<td class="muted">'+esc(r.lastPayment||'')+
+           ' <button class="btn iedit" data-id="'+r.id+'" type="button" title="Исправить счёт: номер, дата, покупатель, сумма" style="padding:2px 8px;font-size:11px">✎</button></td>'+
            (IS_ADMIN?('<td><button class="btn idel" data-id="'+r.id+'" data-num="'+esc(r.number)+'" type="button" title="Удалить тестовый счёт из журнала безвозвратно" style="padding:2px 8px;font-size:11px;color:#e9b3b3;border-color:#5a3a3a">✕</button></td>'):'')+
            '</tr>';
       });
@@ -333,6 +351,29 @@
       if(q) q.oninput=function(){ FILTER=this.value; render(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
       var oo=document.getElementById('onlyOpen');
       if(oo) oo.onchange=function(){ ONLY_OPEN=this.checked; render(); };
+      [].forEach.call(document.querySelectorAll('.iedit'), function(b){
+        b.onclick=function(){ INV_EDIT=+this.getAttribute('data-id'); render(); };
+      });
+      [].forEach.call(document.querySelectorAll('.iecancel'), function(b){
+        b.onclick=function(){ INV_EDIT=null; render(); };
+      });
+      [].forEach.call(document.querySelectorAll('.iesave'), function(b){
+        b.onclick=function(){
+          var id=+this.getAttribute('data-id'); var btn=this;
+          var num=document.querySelector('.ie-num').value.trim();
+          var dateIso=document.querySelector('.ie-date').value;
+          var buyer=document.querySelector('.ie-buyer').value.trim();
+          var total=+String(document.querySelector('.ie-total').value).replace(/[^\d.]/g,'');
+          if(!num){ alert('Номер счёта не может быть пустым.'); return; }
+          if(!(total>=0)){ alert('Сумма должна быть числом.'); return; }
+          btn.disabled=true; btn.textContent='Сохраняю…';
+          fetch(WORKER+'/invoice-update',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({id:id,number:num,dateIso:dateIso,buyer:buyer,total:total})})
+            .then(function(r){return r.json();})
+            .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил'); INV_EDIT=null; loadInvoices(); })
+            .catch(function(e){ btn.disabled=false; btn.textContent='Сохранить'; alert('Не сохранилось: '+(e&&e.message||e)); });
+        };
+      });
       [].forEach.call(document.querySelectorAll('.prow'), function(row){
         row.onclick=function(){ var w=this.getAttribute('data-w'); PAY_OPEN[w]=!PAY_OPEN[w]; render(); };
       });
