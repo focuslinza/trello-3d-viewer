@@ -51,8 +51,9 @@
     function fmtDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
     var RANGE={ from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now), preset:'month' };
     var ROWS=[], TOTALS={}, FILTER='', ONLY_OPEN=false;
-    var VIEW='orders'; // orders | invoices
+    var VIEW='orders'; // orders | invoices | payroll
     var INV_ROWS=[], INV_TOTALS={}, INV_SHARE=0.5;
+    var PAY=null, PAY_OPEN={};
 
     function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -89,6 +90,7 @@
 
     function load(){
       if(VIEW==='invoices') return loadInvoices();
+      if(VIEW==='payroll') return loadPayroll();
       var b=document.getElementById('boot'); if(b) b.textContent='Загружаю заказы…';
       fetch(WORKER+'/acct-list?from='+RANGE.from+'&to='+RANGE.to)
         .then(function(r){return r.json();})
@@ -98,6 +100,19 @@
           render();
         })
         .catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+    }
+
+    function loadPayroll(){
+      var b=document.getElementById('boot'); if(b) b.textContent='Считаю зарплаты…';
+      var app=document.getElementById('app');
+      app.innerHTML='<div class="empty">Считаю зарплаты за период… (собираю заработки по заказам, может занять до минуты)</div>';
+      fetch(WORKER+'/payroll-summary?from='+RANGE.from+'&to='+RANGE.to)
+        .then(function(r){return r.json();})
+        .then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+          PAY=j; render();
+        })
+        .catch(function(e){ app.innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
     }
 
     function loadInvoices(){
@@ -132,6 +147,7 @@
       h+='<div class="tabs" style="margin-bottom:6px">'+
          '<div class="tab'+(VIEW==='orders'?' active':'')+'" data-view="orders">Заказы</div>'+
          '<div class="tab'+(VIEW==='invoices'?' active':'')+'" data-view="invoices">Счета на оплату</div>'+
+         '<div class="tab'+(VIEW==='payroll'?' active':'')+'" data-view="payroll">Зарплаты</div>'+
          '</div>';
       h+='<div class="tabs">';
       [['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].forEach(function(p){
@@ -147,6 +163,12 @@
          '</div>';
       if(VIEW==='invoices'){
         h+=renderInvoicesBody();
+        app.innerHTML=h;
+        bindCommon();
+        return;
+      }
+      if(VIEW==='payroll'){
+        h+=renderPayrollBody();
         app.innerHTML=h;
         bindCommon();
         return;
@@ -204,6 +226,59 @@
       });
     }
 
+    function renderPayrollBody(){
+      if(!PAY) return '<div class="empty">Загрузка…</div>';
+      var T=PAY.totals||{};
+      var h='<div class="kpis">'+
+        '<div class="kpi"><div class="k">Сдельная за период</div><div class="v">'+money(T.piece)+' ₸</div></div>'+
+        '<div class="kpi"><div class="k">Окладникам начислено</div><div class="v">'+money(T.salaried)+' ₸</div></div>'+
+        '<div class="kpi green"><div class="k">Итого ФОТ</div><div class="v">'+money(T.all)+' ₸</div></div>'+
+        '<div class="kpi"><div class="k">Рабочих дней (Пн–Пт)</div><div class="v">'+(PAY.workdays||0)+'</div></div>'+
+        '</div>';
+      var f=FILTER.toLowerCase();
+      // --- сдельщики ---
+      var ps=(PAY.piece||[]).filter(function(p){ return !f || p.name.toLowerCase().indexOf(f)>=0; });
+      h+='<h3 style="margin:14px 0 6px">Сдельная зарплата</h3>';
+      if(!ps.length) h+='<div class="empty">Нет сдельных заработков за период.</div>';
+      else {
+        h+='<table><thead><tr><th></th><th>Работник</th><th class="num">Заработал</th><th class="num">Заказов</th></tr></thead><tbody>';
+        ps.forEach(function(p){
+          var open=!!PAY_OPEN[p.id];
+          h+='<tr class="prow" data-w="'+esc(p.id)+'" style="cursor:pointer">'+
+             '<td style="width:24px;color:#579dff">'+(p.ordersCount?(open?'▾':'▸'):'')+'</td>'+
+             '<td>'+esc(p.name)+'</td>'+
+             '<td class="num"><b>'+money(p.earned)+' ₸</b></td>'+
+             '<td class="num">'+p.ordersCount+'</td></tr>';
+          if(open && p.orders && p.orders.length){
+            p.orders.forEach(function(o){
+              h+='<tr class="osub"><td></td>'+
+                 '<td class="muted" style="padding-left:18px">'+(o.number?('№'+esc(o.number)+' · '):'')+esc(o.name)+
+                 (o.stages&&o.stages.length?(' <span style="font-size:11px;color:#7a8794">('+esc(o.stages.join(', '))+')</span>'):'')+'</td>'+
+                 '<td class="num">'+money(o.earned)+' ₸</td><td></td></tr>';
+            });
+          }
+        });
+        h+='</tbody></table>';
+      }
+      // --- окладники ---
+      var ss=(PAY.salaried||[]).filter(function(p){ return !f || p.name.toLowerCase().indexOf(f)>=0; });
+      h+='<h3 style="margin:18px 0 6px">Фиксированная зарплата (по табелю)</h3>';
+      if(!ss.length) h+='<div class="empty">Нет окладников. Чип «Окладник» ставится в «Зарплата / Работники».</div>';
+      else {
+        h+='<div class="muted" style="margin-bottom:6px">Начислено = оклад × явки ÷ рабочие дни периода ('+(PAY.workdays||0)+'). Явки берутся из табеля.</div>';
+        h+='<table><thead><tr><th>Работник</th><th class="num">Оклад/мес</th><th class="num">Явок</th><th class="num">Б/О/Н</th><th class="num">Начислено</th></tr></thead><tbody>';
+        ss.forEach(function(p){
+          h+='<tr><td>'+esc(p.name)+(p.noTimesheet?' <span style="font-size:11px;color:#e8c07d" title="В табеле за период нет ни одной отметки — начисление нулевое">⚠ табель пуст</span>':'')+'</td>'+
+             '<td class="num">'+money(p.salary)+' ₸</td>'+
+             '<td class="num"><b>'+p.present+'</b> / '+p.workdays+'</td>'+
+             '<td class="num muted">'+p.sick+' / '+p.vacation+' / '+p.absent+'</td>'+
+             '<td class="num"><b>'+money(p.accrued)+' ₸</b></td></tr>';
+        });
+        h+='</tbody></table>';
+      }
+      return h;
+    }
+
     function invStatusLabel(r){
       if(r.status==='full') return ['оплачен полностью','var(--green)'];
       if(r.status==='launched') return ['аванс '+(r.pct!=null?r.pct+'%':'')+' — в производстве','#579dff'];
@@ -258,6 +333,9 @@
       if(q) q.oninput=function(){ FILTER=this.value; render(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
       var oo=document.getElementById('onlyOpen');
       if(oo) oo.onchange=function(){ ONLY_OPEN=this.checked; render(); };
+      [].forEach.call(document.querySelectorAll('.prow'), function(row){
+        row.onclick=function(){ var w=this.getAttribute('data-w'); PAY_OPEN[w]=!PAY_OPEN[w]; render(); };
+      });
       [].forEach.call(document.querySelectorAll('.ohide'), function(b){
         b.onclick=function(){ var cardId=this.getAttribute('data-card');
           if(!confirm('Скрыть этот заказ из бухгалтерии, панели руководителя и финансов? Расчёт останется в базе; вернуть можно будет через Claude.')) return;
