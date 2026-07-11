@@ -161,7 +161,8 @@
       {cls:'caninv',    fld:'can_invoice',   label:'Бухгалтерия',         hint:'счета на оплату, статусы'},
       {cls:'cancrm',    fld:'can_crm',       label:'CRM',                 hint:'клиенты, выручка, долги'},
       {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены в калькуляторе'},
-      {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true}
+      {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true},
+      {cls:'salaried',  fld:'is_salaried',   label:'Окладник',            hint:'оклад автоматически идёт в постоянные расходы (страница «Финансы»)', warn:true}
     ];
     function chipCb(cls, label, hint, on, extra){
       return '<label class="chipcb'+(on?' on':'')+(extra||'')+'" title="'+hint.replace(/"/g,'&quot;')+'">'+
@@ -255,6 +256,7 @@
       var canDashboard=tr.querySelector('.candash')?tr.querySelector('.candash').checked:false;
       var canRepair=tr.querySelector('.canrepair')?tr.querySelector('.canrepair').checked:false;
       var hideStats=tr.querySelector('.hidestats')?tr.querySelector('.hidestats').checked:false;
+      var isSalaried=tr.querySelector('.salaried')?tr.querySelector('.salaried').checked:false;
       if(!name){ setMsg('Введите имя.'); return; }
       if(!salary){ setMsg('Введите оклад.'); return; }
       var id=tr.getAttribute('data-id')||'';
@@ -262,7 +264,7 @@
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){ tr.setAttribute('data-id', d.id); setMsg('Сохранено: '+name); document.getElementById('emptyHint').style.display='none'; updateCount(); if(tr.classList.contains('inactive') && tr.getAttribute('data-active')==='1') loadWorkers(); }
