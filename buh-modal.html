@@ -64,8 +64,10 @@
           return adminIn(res[1])||adminIn(res[2]);
         }).catch(function(){ return false; });
     }
+    var IS_ADMIN=false;
     function canUse(){
       return isDirector().then(function(admin){
+        IS_ADMIN=admin;
         if(admin) return true;
         return t.member('id').then(function(me){
           return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||''))
@@ -160,7 +162,7 @@
       var rows=visibleRows();
       if(!rows.length){ h+='<div class="empty">Нет заказов по выбранным условиям.</div>'; }
       else{
-        h+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th></tr></thead><tbody>';
+        h+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
         rows.forEach(function(r){
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
           h+='<tr'+(closed?' class="rowclosed"':'')+'><td>'+esc(r.number)+'</td>'+
@@ -170,7 +172,9 @@
              '<td>'+chip(r,'paid','оплачен')+'</td>'+
              '<td>'+chip(r,'delivered','сдали')+'</td>'+
              '<td>'+chip(r,'actSigned','акт')+'</td>'+
-             '<td class="muted">'+esc(r.date)+'</td></tr>';
+             '<td class="muted">'+esc(r.date)+'</td>'+
+             (IS_ADMIN?('<td><button class="btn ohide" data-card="'+esc(r.cardId)+'" type="button" title="Скрыть тестовый заказ из бухгалтерии и аналитики (расчёт останется в базе)" style="padding:2px 8px;font-size:11px">🗄</button></td>'):'')+
+             '</tr>';
         });
         h+='</tbody></table>';
       }
@@ -224,7 +228,7 @@
         return (String(r.number)+' '+(r.buyer||'')).toLowerCase().indexOf(f)>=0;
       });
       if(!rows.length) return h+'<div class="empty">Счетов не найдено. Счета появляются после формирования через журнал счетов.</div>';
-      h+='<table><thead><tr><th>Счёт</th><th>Дата</th><th>Покупатель</th><th class="num">Заказов</th><th class="num">Сумма</th><th class="num">Поступило</th><th class="num">%</th><th>Статус</th><th>Последний платёж</th></tr></thead><tbody>';
+      h+='<table><thead><tr><th>Счёт</th><th>Дата</th><th>Покупатель</th><th class="num">Заказов</th><th class="num">Сумма</th><th class="num">Поступило</th><th class="num">%</th><th>Статус</th><th>Последний платёж</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
       rows.forEach(function(r){
         var st=invStatusLabel(r);
         h+='<tr><td><b>№'+esc(r.number)+'</b></td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+'</td>'+
@@ -233,7 +237,9 @@
            '<td class="num">'+money(r.received)+' ₸</td>'+
            '<td class="num">'+(r.pct!=null?r.pct+'%':'—')+'</td>'+
            '<td style="color:'+st[1]+'">'+esc(st[0])+'</td>'+
-           '<td class="muted">'+esc(r.lastPayment||'')+'</td></tr>';
+           '<td class="muted">'+esc(r.lastPayment||'')+'</td>'+
+           (IS_ADMIN?('<td><button class="btn idel" data-id="'+r.id+'" data-num="'+esc(r.number)+'" type="button" title="Удалить тестовый счёт из журнала безвозвратно" style="padding:2px 8px;font-size:11px;color:#e9b3b3;border-color:#5a3a3a">✕</button></td>'):'')+
+           '</tr>';
       });
       h+='</tbody></table>';
       return h;
@@ -252,6 +258,22 @@
       if(q) q.oninput=function(){ FILTER=this.value; render(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
       var oo=document.getElementById('onlyOpen');
       if(oo) oo.onchange=function(){ ONLY_OPEN=this.checked; render(); };
+      [].forEach.call(document.querySelectorAll('.ohide'), function(b){
+        b.onclick=function(){ var cardId=this.getAttribute('data-card');
+          if(!confirm('Скрыть этот заказ из бухгалтерии, панели руководителя и финансов? Расчёт останется в базе; вернуть можно будет через Claude.')) return;
+          fetch(WORKER+'/calc-hide',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cardId:cardId,hidden:1})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error||'?'); load(); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.idel'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id'); var num=this.getAttribute('data-num');
+          if(!confirm('УДАЛИТЬ счёт №'+num+' из журнала безвозвратно? Автопривязка банковских платежей к этому номеру перестанет работать. Для тестовых счетов — то, что нужно.')) return;
+          fetch(WORKER+'/invoice-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error||'?'); load(); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
+      });
       bindChips();
     }
 
