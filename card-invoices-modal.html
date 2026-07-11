@@ -59,7 +59,7 @@
       return t.member('id').then(function(me){
         return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
           .then(function(r){return r.json();})
-          .then(function(j){ return !!(j&&j.canInvoice); })
+          .then(function(j){ return !!(j&&(j.canIssueInvoice||j.canInvoice)); })
           .catch(function(){ return false; });
       });
     });

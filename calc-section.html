@@ -136,7 +136,7 @@
           // not admin: show invoice only if my Trello account is an allowed worker
           return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||'')).then(function(x){return x.json();}).then(function(j){
             if (myGen !== renderGen) return; // устарело
-            if(j&&j.canInvoice) addInvoiceBtn();
+            if(j&&(j.canIssueInvoice||j.canInvoice)) addInvoiceBtn();
           }).catch(function(){}).then(function(){ if (myGen !== renderGen) return; return t.sizeTo('#wrap'); });
         });
       });

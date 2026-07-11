@@ -158,7 +158,8 @@
       {cls:'candash',   fld:'can_dashboard', label:'Панель руководителя', hint:'выручка, прибыль, этапы, заработки, оплаты'},
       {cls:'canrepair', fld:'can_repair',    label:'Ремонт',              hint:'панель заявок на ремонт'},
       {cls:'cansup',    fld:'can_supply',    label:'Снабжение',           hint:'заявки, инструмент, наличные'},
-      {cls:'caninv',    fld:'can_invoice',   label:'Бухгалтерия',         hint:'счета на оплату, статусы'},
+      {cls:'canissue',  fld:'can_issue_invoice', label:'Выставлять счета', hint:'кнопка «Выставить счёт» на карточке заказа'},
+      {cls:'caninv',    fld:'can_invoice',   label:'Бухгалтерия',         hint:'панель бухгалтера: статусы, счета на оплату, поступления из банка — только бухгалтеру'},
       {cls:'cancrm',    fld:'can_crm',       label:'CRM',                 hint:'клиенты, выручка, долги'},
       {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены в калькуляторе'},
       {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true},
@@ -249,6 +250,7 @@
       var memberId=tr.querySelector('.mem').value||'';
       var stages=[].map.call(tr.querySelectorAll('.stgcb:checked'), function(c){ return c.value; });
       var canInvoice=tr.querySelector('.caninv')?tr.querySelector('.caninv').checked:false;
+      var canIssueInvoice=tr.querySelector('.canissue')?tr.querySelector('.canissue').checked:false;
       var canSupply=tr.querySelector('.cansup')?tr.querySelector('.cansup').checked:false;
       var canCrm=tr.querySelector('.cancrm')?tr.querySelector('.cancrm').checked:false;
       var canSeeCost=tr.querySelector('.cancost')?tr.querySelector('.cancost').checked:false;
@@ -267,7 +269,7 @@
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, canIssueInvoice:canIssueInvoice })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){
