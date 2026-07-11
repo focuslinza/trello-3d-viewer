@@ -261,18 +261,29 @@
         });
         h+='</tbody></table>';
       }
+      // --- правила оплаты статусов табеля ---
+      var AP=(PAY.attPay)||{p:100,n:0,b:0,o:0,v:0};
+      h+='<h3 style="margin:18px 0 6px">Правила оплаты статусов табеля <span class="muted" style="font-weight:400;font-size:12px">— сколько % дневной ставки начисляется за день</span></h3>';
+      h+='<div class="row" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
+         '<label>Я явка <input class="ap" data-k="p" value="'+AP.p+'" style="width:56px;text-align:right"> %</label>'+
+         '<label>Б больничный <input class="ap" data-k="b" value="'+AP.b+'" style="width:56px;text-align:right"> %</label>'+
+         '<label>О отпуск <input class="ap" data-k="o" value="'+AP.o+'" style="width:56px;text-align:right"> %</label>'+
+         '<label>Н неявка <input class="ap" data-k="n" value="'+AP.n+'" style="width:56px;text-align:right"> %</label>'+
+         '<label>В выходной <input class="ap" data-k="v" value="'+AP.v+'" style="width:56px;text-align:right"> %</label>'+
+         '<button class="btn" id="apSave" type="button">Сохранить правила</button><span id="apMsg" class="muted"></span></div>';
       // --- окладники ---
       var ss=(PAY.salaried||[]).filter(function(p){ return !f || p.name.toLowerCase().indexOf(f)>=0; });
-      h+='<h3 style="margin:18px 0 6px">Фиксированная зарплата (по табелю)</h3>';
+      h+='<h3 style="margin:14px 0 6px">Фиксированная зарплата (по табелю)</h3>';
       if(!ss.length) h+='<div class="empty">Нет окладников. Чип «Окладник» ставится в «Зарплата / Работники».</div>';
       else {
-        h+='<div class="muted" style="margin-bottom:6px">Начислено = оклад × явки ÷ рабочие дни периода ('+(PAY.workdays||0)+'). Явки берутся из табеля.</div>';
-        h+='<table><thead><tr><th>Работник</th><th class="num">Оклад/мес</th><th class="num">Явок</th><th class="num">Б/О/Н</th><th class="num">Начислено</th></tr></thead><tbody>';
+        h+='<div class="muted" style="margin-bottom:6px">Начислено = оклад ÷ рабочие дни периода ('+(PAY.workdays||0)+') × оплачиваемые дни. Оплачиваемые дни = Σ(дни статуса × его %). Выход в выходной с отметкой «Я» оплачивается сверх нормы.</div>';
+        h+='<table><thead><tr><th>Работник</th><th class="num">Оклад/мес</th><th class="num">Явок</th><th class="num">Б/О/Н/В</th><th class="num">Оплач. дней</th><th class="num">Начислено</th></tr></thead><tbody>';
         ss.forEach(function(p){
           h+='<tr><td>'+esc(p.name)+(p.noTimesheet?' <span style="font-size:11px;color:#e8c07d" title="В табеле за период нет ни одной отметки — начисление нулевое">⚠ табель пуст</span>':'')+'</td>'+
              '<td class="num">'+money(p.salary)+' ₸</td>'+
              '<td class="num"><b>'+p.present+'</b> / '+p.workdays+'</td>'+
-             '<td class="num muted">'+p.sick+' / '+p.vacation+' / '+p.absent+'</td>'+
+             '<td class="num muted">'+p.sick+' / '+p.vacation+' / '+p.absent+' / '+(p.dayoff||0)+'</td>'+
+             '<td class="num">'+(p.payDays!=null?p.payDays:p.present)+'</td>'+
              '<td class="num"><b>'+money(p.accrued)+' ₸</b></td></tr>';
         });
         h+='</tbody></table>';
@@ -351,6 +362,21 @@
       if(q) q.oninput=function(){ FILTER=this.value; render(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
       var oo=document.getElementById('onlyOpen');
       if(oo) oo.onchange=function(){ ONLY_OPEN=this.checked; render(); };
+      var apBtn=document.getElementById('apSave');
+      if(apBtn) apBtn.onclick=function(){
+        var coef={};
+        [].forEach.call(document.querySelectorAll('.ap'), function(i){ coef[i.getAttribute('data-k')]=+String(i.value).replace(',','.')||0; });
+        var btn=this, msg=document.getElementById('apMsg');
+        btn.disabled=true; btn.textContent='Сохраняю…';
+        fetch(WORKER+'/att-pay-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({coef:coef})})
+          .then(function(r){return r.json();})
+          .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+            btn.textContent='✓ Сохранено'; btn.style.color='#4bce97'; btn.style.borderColor='#2e5c44';
+            msg.textContent='Начисления пересчитываются…';
+            setTimeout(function(){ loadPayroll(); }, 600);
+          })
+          .catch(function(e){ btn.disabled=false; btn.textContent='Сохранить правила'; alert('Не сохранилось: '+(e&&e.message||e)); });
+      };
       [].forEach.call(document.querySelectorAll('.iedit'), function(b){
         b.onclick=function(){ INV_EDIT=+this.getAttribute('data-id'); render(); };
       });
