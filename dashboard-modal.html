@@ -73,6 +73,7 @@
     <div style="display:flex;gap:10px">
       <button class="btn" id="pricingBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">💲 Цены и коэффициенты</button>
       <button class="btn" id="workers" type="button" style="border-color:#4f7cff;color:#a9c2ff">⚙ Зарплата / Работники</button>
+      <button class="btn" id="financeBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">₸ Финансы</button>
     </div>
     <button class="btn" id="close" type="button">Закрыть</button>
   </div>
@@ -146,12 +147,17 @@
 
   function range(){ return { from: RANGE.from, to: RANGE.to }; }
 
+  var PROFIT=null; // точная прибыль по оплате (страница /profit) за тот же период
   function load(){
     boot('Считаю показатели за '+periodLabel()+'…');
     var r=range();
-    fetch(WORKER+'/dashboard?from='+r.from+'&to='+r.to).then(function(x){return x.json();}).then(function(j){
+    Promise.all([
+      fetch(WORKER+'/dashboard?from='+r.from+'&to='+r.to).then(function(x){return x.json();}),
+      fetch(WORKER+'/profit-summary?from='+r.from+'&to='+r.to).then(function(x){return x.json();}).catch(function(){return null;})
+    ]).then(function(res){
+      var j=res[0];
       if(!j||j.error){ boot('Ошибка: '+((j&&j.error)||'?')); return; }
-      DATA=j; render();
+      DATA=j; PROFIT=(res[1]&&res[1].ok)?res[1]:null; render();
     }).catch(function(e){ boot('Сеть недоступна: '+(e&&e.message||e)); });
   }
 
@@ -438,13 +444,23 @@
       h+=kpi('Оплачено', money(T.paidRev)+' ₸ · '+T.paidCount+' зак.', 'green');
       h+=kpi('Не оплачено', money(T.unpaidRev)+' ₸ · '+T.unpaidCount+' зак.', 'red');
       h+='</div>';
+      if(PROFIT){
+        var P=PROFIT;
+        var expenses=(P.cash||0)+(P.fixed||0)+(P.tax||0);
+        h+='<div class="kpis" style="margin-top:12px">';
+        h+='<div class="kpi amber" title="Наличные из снабжения (газ, электроды, маски, диски) '+money(P.cash)+' ₸ + постоянные за '+P.days+' дн. (аренда, свет, оклады, амортизация — '+money(P.fixedMonthly)+' ₸/мес) '+money(P.fixed)+' ₸ + налог '+P.taxPercent+'% '+money(P.tax)+' ₸"><div class="k">Расходы: нал + постоянные + налог</div><div class="v">'+money(expenses)+' ₸</div>'+
+           '<div style="font-size:11px;color:var(--muted);margin-top:4px">нал '+money(P.cash)+' · пост. '+money(P.fixed)+' · налог '+money(P.tax)+'</div></div>';
+        h+='<div class="kpi '+(P.net>=0?'green':'red')+'" title="По оплате: выручка, пришедшая деньгами в периоде ('+money(P.revenue)+' ₸, '+P.orders+' зак.'+(P.repairs?(' + '+P.repairs+' рем.'):'')+') минус сдельная ЗП (вкл. инженеров), материалы, наличные, постоянные и налог. Именно из неё считается премия заместителя."><div class="k">Чистая прибыль (по оплате)</div><div class="v">'+money(P.net)+' ₸</div>'+
+           (P.bonusPercent>0?('<div style="font-size:11px;color:var(--muted);margin-top:4px">премия'+(P.bonusName?(' '+esc(P.bonusName)):'')+' '+P.bonusPercent+'%: '+money(P.bonus)+' ₸</div>'):'<div style="font-size:11px;color:var(--muted);margin-top:4px">настройки: страница /profit</div>')+'</div>';
+        h+='</div>';
+      }
       h+='<div class="kpis" style="margin-top:12px">';
       h+=kpi('Средний чек', money(T.avgOrderValue)+' ₸');
       h+=kpi('Средний срок заказа', T.avgLeadDays!=null?(T.avgLeadDays+' дн.'):'—', 'amber');
       h+=kpi('Узкое место (этап)', T.bottleneck?(esc(T.bottleneck.label)+' · '+T.bottleneck.avgHours+' ч/зак.'):'—', 'amber');
       h+=kpi(EXCL_WEEKENDS?'Выручка / раб. день':'Выручка / день', money(T.revenue/(EXCL_WEEKENDS?(T.workingDays||1):calendarDays()))+' ₸');
       h+='</div>';
-      h+='<div class="small muted" style="margin-top:10px">«Прибыль (ориентир)» = выручка − сдельная зарплата − материалы. Без учёта аренды, налогов и прочих накладных — это грубый ориентир маржи. «Узкое место» — этап, который в среднем занимает больше всего часов на заказ (по данным авто-отслеживания резки/гибки/сварки/инженера).</div>';
+      h+='<div class="small muted" style="margin-top:10px">«Прибыль (ориентир)» = выручка − сдельная зарплата − материалы. Без учёта аренды, налогов и прочих накладных — это грубый ориентир маржи. «Расходы» и «Чистая прибыль (по оплате)» берутся из модуля «Финансы» (/profit): выручка там считается по дате оплаты, поэтому может отличаться от «Выручки» выше (та — по дате расчёта, включая долги). «Узкое место» — этап, который в среднем занимает больше всего часов на заказ (по данным авто-отслеживания резки/гибки/сварки/инженера).</div>';
       h+='</div>';
 
       h+='<div class="sec"><h3>Выручка и прибыль по периоду</h3><div class="chartbox"><canvas id="chartTrend"></canvas></div></div>';
@@ -560,6 +576,11 @@
   document.getElementById('workers').onclick=function(){
     t.modal({ url:'./workers-modal.html?t='+Date.now(), fullscreen:true, title:'Зарплата и работники' });
   };
+  document.getElementById('financeBtn').onclick=function(){
+    var r=range();
+    // страница живёт на Worker (другой домен) — открываем новой вкладкой с периодом панели
+    window.open(WORKER+'/profit?from='+r.from+'&to='+r.to, '_blank');
+  };
   document.getElementById('pricingBtn').onclick=function(){
     tab='pricing'; render();
   };
@@ -575,6 +596,7 @@
     // не админ: проверяем право «Панель руководителя» (начальник цеха и т.п.)
     var wb=document.getElementById('workers'); if(wb) wb.style.display='none';
     var pb=document.getElementById('pricingBtn'); if(pb) pb.style.display='none';
+    var fb=document.getElementById('financeBtn'); if(fb) fb.style.display='none';
     t.member('id').then(function(me){
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
         .then(function(r){return r.json();});
