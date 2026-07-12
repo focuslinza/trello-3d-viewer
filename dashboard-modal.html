@@ -578,8 +578,20 @@
   };
   document.getElementById('financeBtn').onclick=function(){
     var r=range();
-    // страница живёт на Worker (другой домен) — открываем новой вкладкой с периодом панели
-    window.open(WORKER+'/profit?from='+r.from+'&to='+r.to, '_blank');
+    // открываем страницу «Финансы» в этом же окне: оверлей с iframe поверх панели
+    var old=document.getElementById('finOverlay'); if(old) old.remove();
+    var ov=document.createElement('div');
+    ov.id='finOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column';
+    ov.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #3a414a">'+
+      '<button class="btn" id="finBack" type="button">← Назад к панели</button>'+
+      '<div style="font-weight:700">₸ Финансы: чистая прибыль</div></div>'+
+      '<iframe src="'+WORKER+'/profit?from='+r.from+'&to='+r.to+'" style="flex:1;border:0;width:100%"></iframe>';
+    document.body.appendChild(ov);
+    document.getElementById('finBack').onclick=function(){
+      ov.remove();
+      load(); // вернувшись, пересчитать плитки — настройки финансов могли измениться
+    };
   };
   document.getElementById('pricingBtn').onclick=function(){
     tab='pricing'; render();
