@@ -446,10 +446,10 @@
       h+='</div>';
       if(PROFIT){
         var P=PROFIT;
-        var expenses=(P.cash||0)+(P.fixed||0)+(P.tax||0);
+        var expenses=(P.cash||0)+(P.fixed||0)+(P.tax||0)+(P.taxProfit||0);
         h+='<div class="kpis" style="margin-top:12px">';
-        h+='<div class="kpi amber" title="Наличные из снабжения (газ, электроды, маски, диски) '+money(P.cash)+' ₸ + постоянные за '+P.days+' дн. (аренда, свет, оклады, амортизация — '+money(P.fixedMonthly)+' ₸/мес) '+money(P.fixed)+' ₸ + налог '+P.taxPercent+'% '+money(P.tax)+' ₸"><div class="k">Расходы: нал + постоянные + налог</div><div class="v">'+money(expenses)+' ₸</div>'+
-           '<div style="font-size:11px;color:var(--muted);margin-top:4px">нал '+money(P.cash)+' · пост. '+money(P.fixed)+' · налог '+money(P.tax)+'</div></div>';
+        h+='<div class="kpi amber" title="Наличные из снабжения (газ, электроды, маски, диски) '+money(P.cash)+' ₸ + постоянные за '+P.days+' дн. (аренда, свет, оклады, амортизация — '+money(P.fixedMonthly)+' ₸/мес) '+money(P.fixed)+' ₸ + налог с оборота '+P.taxPercent+'% '+money(P.tax)+' ₸ + налог с прибыли '+(P.taxProfitPercent||0)+'% '+money(P.taxProfit||0)+' ₸"><div class="k">Расходы: нал + постоянные + налоги</div><div class="v">'+money(expenses)+' ₸</div>'+
+           '<div style="font-size:11px;color:var(--muted);margin-top:4px">нал '+money(P.cash)+' · пост. '+money(P.fixed)+' · налоги '+money((P.tax||0)+(P.taxProfit||0))+'</div></div>';
         h+='<div class="kpi '+(P.net>=0?'green':'red')+'" title="По оплате: выручка, пришедшая деньгами в периоде ('+money(P.revenue)+' ₸, '+P.orders+' зак.'+(P.repairs?(' + '+P.repairs+' рем.'):'')+') минус сдельная ЗП (вкл. инженеров), материалы, наличные, постоянные и налог. Именно из неё считается премия заместителя."><div class="k">Чистая прибыль (по оплате)</div><div class="v">'+money(P.net)+' ₸</div>'+
            (P.bonusPercent>0?('<div style="font-size:11px;color:var(--muted);margin-top:4px">премия'+(P.bonusName?(' '+esc(P.bonusName)):'')+' '+P.bonusPercent+'%: '+money(P.bonus)+' ₸</div>'):'<div style="font-size:11px;color:var(--muted);margin-top:4px">настройки: страница /profit</div>')+'</div>';
         h+='</div>';
