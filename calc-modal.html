@@ -342,6 +342,10 @@
     // ---- context (card / company / object / dxf) ----
     var ctx={ cardId:null, cardName:'', cardNumber:'', boardId:'', status:'', companyId:null, companyName:'', objectName:'' };
     var dxfMetrics={};
+    // режим «ремонт»: калькулятор открыт из канбана «Ремонт» — карточки Trello нет,
+    // расчёт хранится в самой заявке (repairs.calc_json), сумма становится ценой клиенту
+    var MODE_REPAIR = (t.arg('mode')==='repair');
+    var REPAIR_ID = +t.arg('repairId')||null;
 
     function loadContext(){
       ctx.cardId  = t.arg('cardId')  || null;
@@ -350,6 +354,18 @@
       ctx.cardNumber = t.arg('cardNumber') || '';
       ctx.status  = t.arg('status')  || '';
       ctx._src = ctx.cardId ? 'arg' : '';
+      if(MODE_REPAIR){
+        ctx.cardName = t.arg('cardName') || ('Ремонт '+(t.arg('repairNumber')||''));
+        ctx.cardNumber = t.arg('repairNumber') || '';
+        ctx.companyName = t.arg('companyName') || '';
+        ctx.objectName = t.arg('objectName') || '';
+        ctx._src='repair';
+        if(!REPAIR_ID){ ctx._diag='Не передан repairId — откройте калькулятор из карточки на доске «Ремонт».'; finishMeta(); return Promise.resolve(); }
+        return fetch(WORKER+'/repair-calc-get?id='+REPAIR_ID).then(function(r){return r.json();}).then(function(j){
+          ctx.paid = !!(j && j.ok && j.paid);
+          ctx.paidAt = (j && j.paidAt) || null;
+        }).catch(function(){}).then(finishMeta);
+      }
       return Promise.resolve().then(function(){
         if(ctx.cardId && ctx.cardNumber) return;
         // fallback: ask the card directly from inside the modal (incl. its number)
@@ -385,10 +401,11 @@
       if(ctx.objectName) meta.push('Объект: '+ctx.objectName);
       if(ctx.status) meta.push('Статус: '+ctx.status);
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
-      document.getElementById('meta').textContent =
-        (meta.join('  ·  ') || 'без компании')
+      document.getElementById('meta').textContent = MODE_REPAIR
+        ? ((meta.join('  ·  ') || 'без компании') + '   ·   v22   ·   ремонт '+(ctx.cardNumber||('#'+REPAIR_ID)))
+        : ((meta.join('  ·  ') || 'без компании')
         + '   ·   v22   ·   card …'+String(ctx.cardId||'?').slice(-6)+' ('+(ctx._src||'нет')+')'
-        + '   ·   DXF:'+Object.keys(dxfMetrics).length;
+        + '   ·   DXF:'+Object.keys(dxfMetrics).length);
       var pw = document.getElementById('paidWarning');
       if(ctx.paid){
         pw.innerHTML = '<div class="paidWarn">⚠ Этот заказ уже отмечен <b>оплаченным</b>'+(ctx.paidAt?(' ('+String(ctx.paidAt).slice(0,10)+')'):'')+
@@ -444,6 +461,10 @@
       }
     }
     function renderDxfHint(){
+      if(MODE_REPAIR){
+        document.getElementById('dxfHint').textContent = ctx._diag || 'Режим ремонта: раскрой DXF не используется — добавьте операции и материалы вручную. Сумма расчёта станет ценой клиенту.';
+        return;
+      }
       var n=Object.keys(dxfMetrics).length;
       document.getElementById('dxfHint').textContent = ctx._diag
         ? ctx._diag
@@ -634,7 +655,10 @@
 
     // ---- restore saved inputs ----
     function restore(){
-      return t.get('card','shared','calcData',null).then(function(d){
+      var src = MODE_REPAIR
+        ? fetch(WORKER+'/repair-calc-get?id='+REPAIR_ID).then(function(r){return r.json();}).then(function(j){ return (j&&j.ok&&j.calc)||null; })
+        : t.get('card','shared','calcData',null);
+      return src.then(function(d){
         if(!d || !d.inputs) { return; }
         var i=d.inputs;
         (i.operations||[]).forEach(function(o){ opLines.appendChild(makeOpRow(o)); });
@@ -679,6 +703,24 @@
         components:components                         // ½ каждая
       };
       var calcData={ inputs:inp, subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total, savedAt:new Date().toISOString() };
+      if(MODE_REPAIR){
+        // ремонт: расчёт живёт в самой заявке; в calculations НЕ пишем,
+        // чтобы ремонт не попадал в производственную аналитику и зарплаты цеха
+        fetch(WORKER+'/repair-calc-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ id:REPAIR_ID, inputs:inp, lineItems:res.lineItems,
+            subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total }) })
+          .then(function(r){ return r.json(); })
+          .then(function(out){
+            if(!out||!out.ok) throw new Error((out&&out.error)||'сервер не подтвердил');
+            msg.className='msg ok'; msg.textContent='Сохранено. Цена клиенту: '+Math.round(out.clientTotal).toLocaleString('ru-RU')+' ₸.';
+            btn.disabled=false;
+            setTimeout(function(){ t.closeModal(); }, 900);
+          }).catch(function(e){
+            msg.className='msg err'; msg.textContent='Не сохранилось: '+(e&&e.message||'сеть');
+            btn.disabled=false;
+          });
+        return;
+      }
       // 1) save to the card (compact)
       t.set('card','shared','calcData',calcData).then(function(){
         // 2) log to central D1 via Worker

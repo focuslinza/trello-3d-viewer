@@ -342,6 +342,7 @@
           +(r.urgent?' <span title="срочная" style="font-size:11px">🔥</span>':'')
           +(r.category?' <span class="muted" style="font-size:11px">· '+esc(r.category)+'</span>':'')
           +(r.status==='new'?' <span style="font-size:11px;color:var(--amber)" title="Работа ещё не отмечена выполненной">· в работе</span>':'')
+          +(r.status==='sent'?' <span style="font-size:11px;color:#8ab4ff" title="Изделие отправлено/возвращено клиенту">· отправлен</span>':'')
           +(r.status==='rejected'?' <span style="font-size:11px;color:var(--red)">· отклонена</span>':'');
         h+='<tr'+(closed?' class="rowclosed"':'')+'><td>'+esc(r.number)+'</td>'+
            '<td>'+titleCell+'</td>'+

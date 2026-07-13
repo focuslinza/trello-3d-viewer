@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Ремонт</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --bg3:#282e33; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; --purple:#c9a8ff; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #wrap{padding:14px 14px 64px;max-width:1280px;margin:0 auto}
+    h2{margin:0;font-size:18px}
+    .muted{color:var(--muted);font-size:12.5px}
+    .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    input[type=text],select{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:13.5px}
+    .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 13px;font-size:13px;cursor:pointer}
+    .btn:hover{border-color:var(--blue)}
+    .btn.primary{background:#274469;border-color:var(--blue);color:#cfe1ff;font-weight:600}
+    .btn.green{background:#1c3329;border-color:#2e5c44;color:var(--green)}
+    .btn.danger{border-color:#7a3a32;color:#e8a59d}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    /* канбан */
+    .board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start}
+    @media (max-width:820px){ .board{grid-template-columns:1fr} }
+    .col{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:10px;min-height:120px}
+    .col.dragover{border-color:var(--blue);background:#232c3a}
+    .colhd{display:flex;justify-content:space-between;align-items:center;margin:2px 4px 10px}
+    .colhd .t{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700}
+    .colhd .n{background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:1px 9px;font-size:11.5px;color:var(--muted)}
+    .kcard{background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;cursor:pointer;user-select:none}
+    .kcard:hover{border-color:#4f5b68}
+    .kcard.dragging{opacity:.45}
+    .kcard .nm{font-weight:600;line-height:1.35}
+    .kcard .sub{font-size:11.5px;color:var(--muted);margin-top:3px}
+    .kcard .row2{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:6px}
+    .num-badge{display:inline-block;background:#2b1f45;color:var(--purple);border-radius:6px;padding:1px 8px;font-size:11.5px;font-weight:800;letter-spacing:.3px;margin-right:6px}
+    .pill{display:inline-block;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap}
+    .pill.urgent{background:#42221f;color:var(--red)}
+    .pill.paid{background:#1c3329;color:var(--green)}
+    .pill.noprice{background:#3d321c;color:var(--amber)}
+    .price{font-size:12.5px;font-weight:700}
+    .mv{background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:12px;padding:1px 7px;cursor:pointer}
+    .mv:hover{border-color:var(--blue);color:#cfe1ff}
+    /* оверлеи */
+    .ovl{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 12px;z-index:60;overflow:auto}
+    .pop{background:var(--bg2);border:1px solid var(--line);border-radius:14px;max-width:720px;width:100%;padding:18px 20px 20px}
+    .pop h3{margin:0 0 2px;font-size:16px}
+    .pop .popbar{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
+    .fld{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+    .fld label{font-size:11.5px;color:var(--muted);text-transform:uppercase}
+    .fld input,.fld select{width:100%;box-sizing:border-box}
+    label.f{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:12px;cursor:pointer}
+    .sec{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:12px}
+    .sec .sh{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;font-weight:700}
+    .chip{display:inline-block;border:1px solid var(--line);background:var(--bg3);color:var(--muted);border-radius:12px;padding:4px 11px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;user-select:none;margin:0 6px 6px 0}
+    .chip.on{background:#1c3329;color:var(--green);border-color:#2e5c44}
+    .chip.busy{opacity:.5;pointer-events:none}
+    .kv{font-size:13px;line-height:1.7}
+    .kv b{color:#e6edf3}
+    .earnbox{background:#1c3329;border:1px solid #2e5c44;border-radius:10px;padding:14px;text-align:center;margin-top:10px}
+    .earnbox .big{font-size:26px;font-weight:800;color:var(--green)}
+    .opRow{background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+    .opRow .fl{display:flex;flex-direction:column;gap:2px;font-size:10.5px;color:var(--muted);text-transform:uppercase}
+    .opRow select,.opRow input{padding:6px 8px;font-size:13px}
+    .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+    .thumbs img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer}
+    table{width:100%;border-collapse:collapse;margin-top:4px}
+    th,td{padding:6px 7px;border-bottom:1px solid var(--line);text-align:left;font-size:12.5px}
+    th{color:var(--muted);font-size:10.5px;text-transform:uppercase}
+    td.num{text-align:right;white-space:nowrap}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:11px 16px;display:flex;justify-content:space-between;align-items:center;z-index:50}
+    a{color:#8ab4ff;text-decoration:none} a:hover{text-decoration:underline}
+    .empty{color:var(--muted);padding:8px 4px;font-size:12.5px}
+    .msg{font-size:12.5px;margin-left:8px}
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div class="top">
+      <h2>Ремонт</h2>
+      <button class="btn primary" id="newBtn" type="button">+ Заявка на ремонт</button>
+      <input type="text" id="q" placeholder="Поиск: Р-№, что чинили, клиент…" style="flex:1;min-width:180px">
+      <label class="f" style="margin:0"><input type="checkbox" id="onlyUrgent"> 🔥 только срочные</label>
+    </div>
+    <div id="board"><div class="empty">Загрузка…</div></div>
+  </div>
+  <div class="bar">
+    <span class="muted" id="hint">Карточки двигаются вручную: перетащите или используйте стрелки ‹ ›.</span>
+    <button class="btn" id="close" type="button">Закрыть</button>
+  </div>
+  <div id="ovlHost"></div>
+
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    document.getElementById('close').onclick=function(){ t.closeModal(); };
+
+    var ME={id:'',name:''}, PRICED=false, IS_ADMIN=false;
+    var ROWS=[], COMPANIES=[], WORKERS=[], FILTER='', ONLY_URGENT=false;
+    var CATEGORIES_SEED=['Тележка','Стеллаж','Шкаф','Стол','Полка','Дверь/дверца','Мотор/электрика','Прочее'];
+    var COLS=[ {key:'new',title:'Новые заявки на ремонт'}, {key:'done',title:'Сделано'}, {key:'sent',title:'Отправлен'} ];
+
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
+    function post(u,b){ return fetch(WORKER+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+
+    function isDirector(){
+      return Promise.all([ t.member('id'), t.board('memberships'), t.organization('memberships').catch(function(){return null;}) ])
+        .then(function(res){ var me=res[0]||{};
+          function adminIn(o){ var ms=((o&&o.memberships)||[]).filter(function(x){return x.idMember===me.id;})[0]; return !!(ms&&ms.memberType==='admin'); }
+          return adminIn(res[1])||adminIn(res[2]);
+        }).catch(function(){ return false; });
+    }
+
+    // ---------- загрузка ----------
+    function loadAll(){
+      var u = PRICED ? '/repair-list?full=1' : '/repair-list';
+      return fetch(WORKER+u).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+        ROWS=(j.requests||[]).filter(function(r){ return r.status!=='rejected'; });
+        renderBoard();
+      }).catch(function(e){ document.getElementById('board').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+    }
+    function loadCompanies(){
+      return fetch(WORKER+'/companies-list').then(function(r){return r.json();}).then(function(j){
+        COMPANIES=(j&&j.ok&&j.companies)||[];
+        COMPANIES.sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||'')); });
+      }).catch(function(){});
+    }
+    function loadWorkers(){
+      return fetch(WORKER+'/workers-names').then(function(r){return r.json();}).then(function(j){
+        WORKERS=(j&&j.ok&&j.workers)||[];
+      }).catch(function(){});
+    }
+    function companyById(id){ return COMPANIES.filter(function(c){return c.id===id;})[0]||null; }
+
+    // ---------- канбан ----------
+    function visible(){
+      var f=FILTER.toLowerCase();
+      return ROWS.filter(function(r){
+        if(ONLY_URGENT && !r.urgent) return false;
+        if(!f) return true;
+        return (r.number+' '+r.title+' '+(r.companyName||'')+' '+(r.category||'')).toLowerCase().indexOf(f)>=0;
+      });
+    }
+    function renderBoard(){
+      var v=visible();
+      var h='<div class="board">';
+      COLS.forEach(function(c,ci){
+        var cards=v.filter(function(r){ return r.status===c.key; });
+        h+='<div class="col" data-col="'+c.key+'"><div class="colhd"><span class="t">'+c.title+'</span><span class="n">'+cards.length+'</span></div>';
+        if(c.key==='new') h+='<button class="btn" data-newin="1" type="button" style="width:100%;margin-bottom:8px">+ Заявка</button>';
+        if(!cards.length) h+='<div class="empty">Пусто</div>';
+        cards.forEach(function(r){
+          h+='<div class="kcard" draggable="true" data-id="'+r.id+'">';
+          h+='<div class="nm"><span class="num-badge">'+esc(r.number)+'</span>'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'</div>';
+          var sub=[];
+          if(r.category) sub.push(esc(r.category));
+          if(r.companyName) sub.push(esc(r.companyName)+(r.objectName?(', '+esc(r.objectName)):''));
+          if(r.status==='new' && r.byName) sub.push('заявил: '+esc(r.byName));
+          if(r.status!=='new' && r.doneByName) sub.push('сделал: '+esc(r.doneByName));
+          h+='<div class="sub">'+sub.join(' · ')+'</div>';
+          h+='<div class="row2"><span>';
+          if(PRICED){
+            if(r.clientTotal>0) h+='<span class="price">'+money(r.clientTotal)+' ₸</span>'+(r.paid?' <span class="pill paid">✓ оплачен</span>':'');
+            else h+='<span class="pill noprice">нет цены</span>';
+          }
+          h+='</span><span>';
+          if(ci>0) h+='<button class="mv" data-mv="'+r.id+'" data-to="'+COLS[ci-1].key+'" title="В колонку «'+COLS[ci-1].title+'»">‹</button> ';
+          if(ci<COLS.length-1) h+='<button class="mv" data-mv="'+r.id+'" data-to="'+COLS[ci+1].key+'" title="В колонку «'+COLS[ci+1].title+'»">›</button>';
+          h+='</span></div></div>';
+        });
+        h+='</div>';
+      });
+      h+='</div>';
+      document.getElementById('board').innerHTML=h;
+      wireBoard();
+    }
+
+    var dragId=null;
+    function wireBoard(){
+      [].forEach.call(document.querySelectorAll('[data-newin]'), function(b){ b.onclick=openCreate; });
+      [].forEach.call(document.querySelectorAll('.kcard'), function(c){
+        c.onclick=function(e){ if(e.target.classList.contains('mv'))return; openCard(+this.getAttribute('data-id')); };
+        c.ondragstart=function(e){ dragId=+this.getAttribute('data-id'); this.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; };
+        c.ondragend=function(){ this.classList.remove('dragging'); };
+      });
+      [].forEach.call(document.querySelectorAll('.col'), function(col){
+        col.ondragover=function(e){ e.preventDefault(); this.classList.add('dragover'); };
+        col.ondragleave=function(){ this.classList.remove('dragover'); };
+        col.ondrop=function(e){ e.preventDefault(); this.classList.remove('dragover');
+          if(dragId!=null) moveTo(dragId, this.getAttribute('data-col')); dragId=null; };
+      });
+      [].forEach.call(document.querySelectorAll('.mv'), function(b){
+        b.onclick=function(e){ e.stopPropagation(); moveTo(+this.getAttribute('data-mv'), this.getAttribute('data-to')); };
+      });
+    }
+
+    function moveTo(id, status){
+      var r=ROWS.filter(function(x){return x.id===id;})[0];
+      if(!r || r.status===status) return;
+      if(r.status==='new' && (status==='done'||status==='sent') && !(r.doneOperations&&r.doneOperations.length) && !r.doneByName){
+        if(!confirm('По заявке '+r.number+' ещё не отмечено, кто и что сделал — заработок исполнителю не начислится. Всё равно перенести? (Лучше открыть карточку и нажать «Отметить сделанным».)')) return;
+      }
+      var old=r.status; r.status=status; renderBoard();
+      post('/repair-set-status',{id:id,status:status}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+      }).catch(function(e){ r.status=old; renderBoard(); alert('Не удалось перенести: '+(e&&e.message||e)); });
+    }
+
+    // ---------- создание заявки ----------
+    function contactOptions(co, selected){
+      var h='<option value="">— контактное лицо —</option>';
+      ((co&&co.contacts)||[]).forEach(function(c){
+        var nm=c.name||''; if(!nm) return;
+        h+='<option value="'+esc(nm)+'"'+(nm===selected?' selected':'')+'>'+esc(nm)+(c.phone?(' · '+esc(c.phone)):'')+'</option>';
+      });
+      return h;
+    }
+    function objectOptions(co, selected){
+      var h='<option value="">— объект —</option>';
+      ((co&&co.objects)||[]).forEach(function(o){
+        var nm=o.name||''; if(!nm) return;
+        h+='<option value="'+esc(nm)+'"'+(nm===selected?' selected':'')+'>'+esc(nm)+'</option>';
+      });
+      return h;
+    }
+    function companyOptions(selected){
+      var h='<option value="">— клиент (если знаете) —</option>';
+      COMPANIES.forEach(function(c){ h+='<option value="'+esc(c.id)+'"'+(c.id===selected?' selected':'')+'>'+esc(c.name)+'</option>'; });
+      return h;
+    }
+    function categoryOptions(selected){
+      var cats=CATEGORIES_SEED.slice();
+      if(selected && cats.indexOf(selected)<0) cats.push(selected);
+      var h='';
+      cats.forEach(function(c){ h+='<option value="'+esc(c)+'"'+(c===selected?' selected':'')+'>'+esc(c)+'</option>'; });
+      h+='<option value="__new__">+ новая категория…</option>';
+      return h;
+    }
+    function closeOvl(){ document.getElementById('ovlHost').innerHTML=''; }
+
+    function openCreate(){
+      var h='<div class="ovl" id="ovl"><div class="pop">';
+      h+='<h3>Новая заявка на ремонт</h3><div class="muted">Что сломалось — сфотографируйте и опишите, заявка сразу попадёт в первую колонку.</div>';
+      h+='<div class="fld"><label>Что нужно починить</label><input type="text" id="cTitle" placeholder="например: тележка, погнуто колесо"></div>';
+      h+='<div class="fld"><label>Категория</label><select id="cCat">'+categoryOptions('')+'</select><input type="text" id="cCatNew" placeholder="Название категории" style="display:none;margin-top:6px"></div>';
+      h+='<div class="fld"><label>Клиент</label><select id="cCompany">'+companyOptions('')+'</select></div>';
+      h+='<div class="fld" id="cContactW" style="display:none"><label>Контактное лицо</label><select id="cContact"></select></div>';
+      h+='<div class="fld" id="cObjectW" style="display:none"><label>Объект</label><select id="cObject"></select></div>';
+      h+='<label class="f"><input type="checkbox" id="cUrgent"> 🔥 Срочно</label>';
+      h+='<label class="f">📷 Фото <input type="file" id="cFile" accept="image/*" capture="environment"></label>';
+      h+='<div class="popbar"><span class="msg" id="cMsg"></span><button class="btn" id="cCancel" type="button">Отмена</button><button class="btn primary" id="cSend" type="button">Отправить заявку</button></div>';
+      h+='</div></div>';
+      document.getElementById('ovlHost').innerHTML=h;
+      document.getElementById('cCancel').onclick=closeOvl;
+      document.getElementById('ovl').onclick=function(e){ if(e.target===this) closeOvl(); };
+      document.getElementById('cCat').onchange=function(){
+        var txt=document.getElementById('cCatNew');
+        if(this.value==='__new__'){ txt.style.display=''; txt.focus(); } else txt.style.display='none';
+      };
+      document.getElementById('cCompany').onchange=function(){
+        var co=companyById(this.value);
+        var cw=document.getElementById('cContactW'), ow=document.getElementById('cObjectW');
+        if(co && co.contacts && co.contacts.length){ document.getElementById('cContact').innerHTML=contactOptions(co,''); cw.style.display=''; } else cw.style.display='none';
+        if(co && co.objects && co.objects.length){ document.getElementById('cObject').innerHTML=objectOptions(co,''); ow.style.display=''; } else ow.style.display='none';
+      };
+      document.getElementById('cSend').onclick=function(){
+        var title=document.getElementById('cTitle').value.trim();
+        if(!title){ alert('Опишите, что нужно починить.'); return; }
+        var catSel=document.getElementById('cCat');
+        var category = catSel.value==='__new__' ? document.getElementById('cCatNew').value.trim() : catSel.value;
+        var companyId=document.getElementById('cCompany').value;
+        var co=companyById(companyId);
+        var btn=this, msg=document.getElementById('cMsg');
+        btn.disabled=true; msg.textContent='Отправка…'; msg.style.color='var(--muted)';
+        var fileInp=document.getElementById('cFile');
+        post('/repair-request',{ title:title, category:category, companyId:companyId||null,
+          companyName:co?co.name:'', contactName:(document.getElementById('cContact')||{}).value||'',
+          objectName:(document.getElementById('cObject')||{}).value||'',
+          urgent:document.getElementById('cUrgent').checked, byMemberId:ME.id, byName:ME.name })
+        .then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+          var chain=Promise.resolve();
+          if(fileInp.files && fileInp.files[0]){
+            chain=compressImage(fileInp.files[0]).then(function(b64){
+              return post('/receipt-save',{kind:'repair',refId:String(j.id),filename:'заявка.jpg',mime:'image/jpeg',dataB64:b64});
+            });
+          }
+          return chain;
+        }).then(function(){ closeOvl(); loadAll(); })
+        .catch(function(e){ btn.disabled=false; msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
+      };
+    }
+
+    // ---------- панель карточки ----------
+    var CUR=null;
+    function openCard(id){
+      var u = PRICED ? ('/repair-get?id='+id+'&full=1') : ('/repair-get?id='+id);
+      fetch(WORKER+u).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'не найдена');
+        CUR=j.repair; drawCard();
+      }).catch(function(e){ alert('Не удалось открыть: '+(e&&e.message||e)); });
+    }
+
+    function statusLabel(s){ return s==='new'?'новая':s==='done'?'сделано':s==='sent'?'отправлен':s==='rejected'?'отклонена':s; }
+    function opsSummary(ops){
+      var LBL={cut:'Резка',cutTube:'Резка трубы',bend:'Гибка',bendTube:'Гибка трубы',bendRod:'Гибка прута',weld:'Сварка'};
+      if(!ops||!ops.length) return '';
+      return ops.map(function(o){
+        return (LBL[o.kind]||o.kind)+' '+(o.thickness?o.thickness+'мм ':'')+(o.material?(o.material==='ss'?'нерж ':'чёрн '):'')+o.qty;
+      }).join(', ');
+    }
+
+    function drawCard(){
+      var r=CUR;
+      var h='<div class="ovl" id="ovl"><div class="pop">';
+      h+='<h3><span class="num-badge">'+esc(r.number)+'</span>'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'</h3>';
+      h+='<div class="muted">'+statusLabel(r.status)+' · создана '+esc((r.createdAt||'').slice(0,10))+(r.byName?(' · заявил: '+esc(r.byName)):'')+'</div>';
+
+      // сведения
+      h+='<div class="sec"><div class="sh">Сведения <a href="#" id="editBtn" style="font-weight:400;text-transform:none">✎ редактировать</a></div>';
+      h+='<div class="kv" id="kvView">';
+      h+='Клиент: <b>'+esc(r.companyName||'—')+'</b>';
+      if(r.contactName) h+=' · контакт: <b>'+esc(r.contactName)+'</b>';
+      if(r.objectName) h+=' · объект: <b>'+esc(r.objectName)+'</b>';
+      h+='<br>Категория: <b>'+esc(r.category||'—')+'</b>';
+      if(r.doneByName) h+='<br>Сделал: <b>'+esc(r.doneByName)+'</b>'+(r.doneAt?(' ('+esc(String(r.doneAt).slice(0,10))+')'):'')+(r.doneOperations&&r.doneOperations.length?('<br><span class="muted">'+esc(opsSummary(r.doneOperations))+'</span>'):'');
+      if(r.note) h+='<br><span class="muted">Комментарий: '+esc(r.note)+'</span>';
+      h+='</div><div id="kvEdit" style="display:none"></div>';
+      h+='<div class="thumbs" id="thumbs"></div></div>';
+
+      // отметить сделанным
+      if(r.status==='new'){
+        h+='<div class="sec"><div class="sh">Работа</div>';
+        h+='<button class="btn green" id="doneBtn" type="button">✓ Отметить сделанным</button>';
+        h+='<div id="doneForm" style="display:none"></div><div id="earnResult"></div></div>';
+      }
+
+      // блок руководителя: цена, статусы, калькулятор, счёт
+      if(PRICED){
+        h+='<div class="sec"><div class="sh">Цена клиенту</div>';
+        h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+        h+='<input type="text" id="priceInp" value="'+(r.clientTotal!=null?r.clientTotal:'')+'" placeholder="сумма ₸" style="width:130px;text-align:right">';
+        h+='<button class="btn" id="priceSave" type="button">Сохранить</button>';
+        h+='<button class="btn primary" id="calcBtn" type="button">🧮 Калькулятор</button>';
+        h+='<span class="msg" id="priceMsg">'+(r.hasCalc?'есть сохранённый расчёт калькулятора':'')+'</span></div>';
+        if(r.hasCalc) h+='<div class="muted" style="margin-top:6px">Ручная правка суммы не меняет расчёт калькулятора; при следующем «Сохранить» в калькуляторе сумма пересчитается из него.</div>';
+        h+='</div>';
+
+        h+='<div class="sec"><div class="sh">Статусы</div><div id="chips">';
+        [['invoiceSent','счёт выслан'],['paid','оплачен'],['delivered','сдали'],['actSigned','акт подписан']].forEach(function(p){
+          h+='<span class="chip'+(r[p[0]]?' on':'')+'" data-f="'+p[0]+'">'+(r[p[0]]?'✓ ':'')+p[1]+'</span>';
+        });
+        h+='</div><div class="muted">«Оплачен» проставляется и автоматически из выписки банка по номеру счёта.</div></div>';
+
+        h+='<div class="sec"><div class="sh">Заработок по заказу</div><div id="earnBlock" class="muted">Загрузка…</div></div>';
+
+        h+='<div class="sec"><div class="sh">Счета</div>';
+        h+='<button class="btn primary" id="invBtn" type="button">🧾 Счёт на оплату</button>';
+        h+='<div id="invList" class="muted" style="margin-top:8px">Загрузка…</div></div>';
+      } else if(r.status!=='new' && r.doneOperations && r.doneOperations.length){
+        // работник-исполнитель видит свой заработок
+        h+='<div class="sec" id="myEarnSec" style="display:none"><div class="sh">Мой заработок за эту работу</div><div id="earnBlock"></div></div>';
+      }
+
+      h+='<div class="popbar">';
+      if(IS_ADMIN){
+        h+='<button class="btn" id="rejBtn" type="button" title="Отклонить заявку (уйдёт с доски, останется в базе)">Отклонить</button>';
+        h+='<button class="btn" id="archBtn" type="button" title="В архив: скрыть отовсюду, данные останутся">🗄 Архив</button>';
+        h+='<button class="btn danger" id="delBtn" type="button" title="Удалить безвозвратно (для тестовых)">✕ Удалить</button>';
+      }
+      h+='<button class="btn" id="popClose" type="button">Закрыть</button></div>';
+      h+='</div></div>';
+      document.getElementById('ovlHost').innerHTML=h;
+      wireCard();
+    }
+
+    function wireCard(){
+      var r=CUR;
+      document.getElementById('popClose').onclick=function(){ closeOvl(); loadAll(); };
+      document.getElementById('ovl').onclick=function(e){ if(e.target===this){ closeOvl(); loadAll(); } };
+      document.getElementById('editBtn').onclick=function(e){ e.preventDefault(); toggleEdit(); };
+      loadThumbs(r.id);
+
+      if(r.status==='new'){
+        document.getElementById('doneBtn').onclick=function(){
+          var box=document.getElementById('doneForm');
+          if(box.style.display==='none'){ box.style.display=''; drawDoneForm(); } else box.style.display='none';
+        };
+      }
+
+      if(PRICED){
+        document.getElementById('priceSave').onclick=function(){
+          var val=+String(document.getElementById('priceInp').value).replace(/[^\d.]/g,'')||0;
+          var msg=document.getElementById('priceMsg'); msg.textContent='Сохранение…';
+          post('/repair-price',{id:r.id, clientTotal:val, materialsTotal:r.materialsTotal||0})
+            .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+              r.clientTotal=val; msg.textContent='Сохранено ✓'; msg.style.color='var(--green)'; })
+            .catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
+        };
+        document.getElementById('calcBtn').onclick=function(){
+          t.modal({ title:'Калькулятор — '+r.number, url:'./calc-modal.html?t='+Date.now(), fullscreen:true, accentColor:'#0c66e4',
+            args:{ mode:'repair', repairId:r.id, repairNumber:r.number, cardName:(r.number+' · '+r.title),
+                   companyName:r.companyName||'', objectName:r.objectName||'' } });
+        };
+        document.getElementById('invBtn').onclick=function(){
+          if(!(+r.clientTotal>0)){
+            alert('У заявки '+r.number+' не задана цена клиенту — сначала посчитайте в калькуляторе или введите сумму. Без цены строка счёта была бы нулевой.');
+            return;
+          }
+          t.modal({ title:'Счёт на оплату', url:'./invoice-modal.html?t='+Date.now(), fullscreen:true, accentColor:'#0c66e4',
+            args:{ mode:'repair', repairId:r.id, companyId:r.companyId||'' } });
+        };
+        [].forEach.call(document.querySelectorAll('#chips .chip'), function(c){
+          c.onclick=function(){
+            var f=this.getAttribute('data-f'), nv=!r[f], el=this; el.classList.add('busy');
+            if(f==='invoiceSent' && nv && !(+r.clientTotal>0)){
+              if(!confirm('Цена клиенту ещё не задана. Отметить счёт высланным всё равно?')){ el.classList.remove('busy'); return; }
+            }
+            post('/repair-flags',{id:r.id, field:f, value:nv?1:0}).then(function(j){
+              if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+              r[f]=nv; drawCard();
+            }).catch(function(e){ el.classList.remove('busy'); alert('Не удалось: '+(e&&e.message||e)); });
+          };
+        });
+        loadEarnings(r.id);
+        loadInvoices(r.id);
+      } else {
+        var sec=document.getElementById('myEarnSec');
+        if(sec) loadEarnings(r.id); // покажется, только если исполнитель — я
+      }
+
+      if(IS_ADMIN){
+        document.getElementById('rejBtn').onclick=function(){
+          if(!confirm('Отклонить заявку '+r.number+'? Она уйдёт с доски (останется в базе и бухгалтерии).')) return;
+          post('/repair-set-status',{id:r.id,status:'rejected'}).then(function(){ closeOvl(); loadAll(); });
+        };
+        document.getElementById('archBtn').onclick=function(){
+          if(!confirm('Убрать заявку в архив? Она исчезнет из списков и аналитики; данные останутся.')) return;
+          post('/repair-archive',{id:r.id}).then(function(){ closeOvl(); loadAll(); });
+        };
+        document.getElementById('delBtn').onclick=function(){
+          if(!confirm('УДАЛИТЬ заявку безвозвратно вместе с фото? Для рабочих заявок используйте архив.')) return;
+          post('/repair-delete',{id:r.id}).then(function(){ closeOvl(); loadAll(); });
+        };
+      }
+    }
+
+    function loadThumbs(id){
+      fetch(WORKER+'/receipts-list?kind=repair&refId='+id).then(function(r){return r.json();}).then(function(j){
+        var el=document.getElementById('thumbs'); if(!el) return;
+        var rc=(j&&j.ok&&j.receipts)||[];
+        el.innerHTML=rc.map(function(x){
+          var u=WORKER+'/receipt-get?id='+x.id;
+          return '<a href="'+u+'" target="_blank"><img src="'+u+'" title="'+esc(x.filename||'')+'"></a>';
+        }).join('');
+      }).catch(function(){});
+    }
+
+    function loadEarnings(id){
+      fetch(WORKER+'/repair-earnings?id='+id).then(function(r){return r.json();}).then(function(j){
+        var el=document.getElementById('earnBlock'); if(!el) return;
+        if(!j||!j.ok){ el.textContent='Не удалось загрузить.'; return; }
+        if(!j.hasWork){ el.innerHTML='<span class="muted">Работа ещё не отмечена выполненной — заработок появится после «Отметить сделанным».</span>'; return; }
+        if(PRICED){
+          el.innerHTML='Исполнитель: <b>'+esc(j.doneByName||'—')+'</b>'+(j.doneAt?(' <span class="muted">('+esc(String(j.doneAt).slice(0,10))+')</span>'):'')+
+            '<br>Операции: <span class="muted">'+esc(opsSummary(j.operations))+'</span>'+
+            '<br>Заработок исполнителя: <b style="color:var(--green)">'+money(j.earned)+' ₸</b> <span class="muted">(по текущим тарифам и доле)</span>';
+        } else {
+          // работнику показываем только ЕГО заработок
+          if(j.doneByMemberId && j.doneByMemberId===ME.id){
+            var sec=document.getElementById('myEarnSec'); if(sec) sec.style.display='';
+            el.innerHTML='<div class="earnbox">Ваш заработок за эту работу<br><span class="big">'+money(j.earned)+' ₸</span></div>';
+          }
+        }
+      }).catch(function(){});
+    }
+
+    function loadInvoices(id){
+      fetch(WORKER+'/invoice-list?repairId='+id).then(function(r){return r.json();}).then(function(j){
+        var el=document.getElementById('invList'); if(!el) return;
+        var rows=(j&&j.ok&&j.rows)||[];
+        if(!rows.length){ el.innerHTML='<span class="muted">По этой заявке счета ещё не выставлялись.</span>'; return; }
+        var h='<table><thead><tr><th>Счёт</th><th>Дата</th><th class="num">Сумма</th></tr></thead><tbody>';
+        rows.forEach(function(x){
+          h+='<tr><td><b>№'+esc(x.number)+'</b></td><td>'+esc(x.date_text||String(x.date_iso||'').slice(0,10))+'</td><td class="num">'+money(x.total)+' ₸</td></tr>';
+        });
+        h+='</tbody></table>';
+        el.innerHTML=h;
+      }).catch(function(){});
+    }
+
+    // ----- редактирование сведений -----
+    function toggleEdit(){
+      var v=document.getElementById('kvView'), e=document.getElementById('kvEdit');
+      if(e.style.display==='none'){ v.style.display='none'; e.style.display=''; drawEdit(); }
+      else { e.style.display='none'; v.style.display=''; }
+    }
+    function drawEdit(){
+      var r=CUR, e=document.getElementById('kvEdit');
+      var co=companyById(r.companyId);
+      var h='';
+      if(r.status!=='new') h+='<div class="muted" style="color:var(--amber);margin-bottom:4px">⚠ Заявка уже не новая — правьте, только если это исправление ошибки.</div>';
+      h+='<div class="fld"><label>Название</label><input type="text" id="eTitle" value="'+esc(r.title)+'"></div>';
+      h+='<div class="fld"><label>Категория</label><select id="eCat">'+categoryOptions(r.category)+'</select><input type="text" id="eCatNew" placeholder="Название категории" style="display:none;margin-top:6px"></div>';
+      h+='<div class="fld"><label>Клиент</label><select id="eCompany">'+companyOptions(r.companyId)+'</select></div>';
+      h+='<div class="fld"><label>Контактное лицо</label><select id="eContact">'+contactOptions(co, r.contactName)+'</select></div>';
+      h+='<div class="fld"><label>Объект</label><select id="eObject">'+objectOptions(co, r.objectName)+'</select></div>';
+      h+='<label class="f"><input type="checkbox" id="eUrgent"'+(r.urgent?' checked':'')+'> 🔥 Срочно</label>';
+      h+='<div style="margin-top:10px"><button class="btn primary" id="eSave" type="button">Сохранить</button> <span class="msg" id="eMsg"></span></div>';
+      e.innerHTML=h;
+      document.getElementById('eCat').onchange=function(){
+        var txt=document.getElementById('eCatNew');
+        if(this.value==='__new__'){ txt.style.display=''; txt.focus(); } else txt.style.display='none';
+      };
+      document.getElementById('eCompany').onchange=function(){
+        var c2=companyById(this.value);
+        document.getElementById('eContact').innerHTML=contactOptions(c2,'');
+        document.getElementById('eObject').innerHTML=objectOptions(c2,'');
+      };
+      document.getElementById('eSave').onclick=function(){
+        var title=document.getElementById('eTitle').value.trim();
+        if(!title){ alert('Укажите название заявки.'); return; }
+        var catSel=document.getElementById('eCat');
+        var category = catSel.value==='__new__' ? document.getElementById('eCatNew').value.trim() : catSel.value;
+        var cid=document.getElementById('eCompany').value;
+        var c2=companyById(cid);
+        var msg=document.getElementById('eMsg'); msg.textContent='Сохранение…'; msg.style.color='var(--muted)';
+        post('/repair-update',{ id:CUR.id, title:title, category:category,
+          companyId:cid||null, companyName:c2?c2.name:'',
+          contactName:document.getElementById('eContact').value||'',
+          objectName:document.getElementById('eObject').value||'',
+          urgent:document.getElementById('eUrgent').checked })
+        .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+          msg.textContent='Сохранено ✓'; msg.style.color='var(--green)';
+          setTimeout(function(){ openCard(CUR.id); }, 500);
+        }).catch(function(e2){ msg.textContent='Ошибка: '+(e2&&e2.message||e2); msg.style.color='var(--red)'; });
+      };
+    }
+
+    // ----- «отметить сделанным» -----
+    var OP_KINDS = [
+      {value:'cut', label:'Резка листа', qtyLabel:'Длина реза, м', needsThickness:true},
+      {value:'cutTube', label:'Резка трубы/профиля', qtyLabel:'Длина реза, м', needsThickness:true},
+      {value:'bend', label:'Гибка листа', qtyLabel:'Количество, шт', needsThickness:true},
+      {value:'bendTube', label:'Гибка трубы', qtyLabel:'Количество, шт', needsThickness:true},
+      {value:'bendRod', label:'Гибка прута', qtyLabel:'Количество, шт', needsThickness:true},
+      {value:'weld', label:'Сварка', qtyLabel:'Длина шва, см', needsThickness:true, needsMaterial:true}
+    ];
+    var TH_LIST=[0.5,0.8,1,1.5,2,3,4,5,8,10,12,16];
+    var opRows=[{}];
+
+    function drawDoneForm(){
+      var box=document.getElementById('doneForm');
+      var h='<div class="muted" style="margin:8px 0 2px">Что сделали (по этим данным сервер посчитает заработок):</div>';
+      opRows.forEach(function(row,i){
+        var kind=row.kind||'cut';
+        var meta=OP_KINDS.filter(function(k){return k.value===kind;})[0]||OP_KINDS[0];
+        h+='<div class="opRow">';
+        h+='<div class="fl">Работа<select class="opKind" data-i="'+i+'">';
+        OP_KINDS.forEach(function(k){ h+='<option value="'+k.value+'"'+(k.value===kind?' selected':'')+'>'+k.label+'</option>'; });
+        h+='</select></div>';
+        if(meta.needsMaterial){
+          h+='<div class="fl">Материал<select class="opMat" data-i="'+i+'">'+
+             '<option value="black"'+(row.material==='ss'?'':' selected')+'>Чёрный металл</option>'+
+             '<option value="ss"'+(row.material==='ss'?' selected':'')+'>Нержавейка</option></select></div>';
+        }
+        if(meta.needsThickness){
+          h+='<div class="fl">Толщина, мм<select class="opTh" data-i="'+i+'">';
+          TH_LIST.forEach(function(v){ h+='<option value="'+v+'"'+(String(row.thickness)===String(v)?' selected':'')+'>'+v+'</option>'; });
+          h+='</select></div>';
+        }
+        h+='<div class="fl">'+meta.qtyLabel+'<input type="text" class="opQty" data-i="'+i+'" value="'+(row.qty||'')+'" style="width:80px"></div>';
+        if(opRows.length>1) h+='<button type="button" class="btn opDel" data-i="'+i+'" style="padding:4px 9px">✕</button>';
+        h+='</div>';
+      });
+      h+='<button type="button" class="btn" id="opAdd" style="margin-top:8px">+ ещё операция</button>';
+      h+='<div class="fld"><label>Кто сделал ремонт</label><select id="doneWorker"><option value="">— выберите работника —</option>'+
+         WORKERS.map(function(w){ return '<option value="'+esc(w.id)+'" data-name="'+esc(w.name)+'">'+esc(w.name)+'</option>'; }).join('')+'</select></div>';
+      h+='<div class="fld"><label>Комментарий</label><input type="text" id="doneNote" placeholder="Что сделали (кратко)"></div>';
+      h+='<label class="f">📷 Фото <input type="file" id="doneFile" accept="image/*" capture="environment"></label>';
+      h+='<button class="btn green" id="doneSubmit" type="button" style="margin-top:10px">Готово — посчитать заработок</button>';
+      box.innerHTML=h;
+
+      [].forEach.call(box.querySelectorAll('.opKind'), function(s){ s.onchange=function(){ opRows[+this.getAttribute('data-i')].kind=this.value; drawDoneForm(); }; });
+      [].forEach.call(box.querySelectorAll('.opMat'), function(s){ s.onchange=function(){ opRows[+this.getAttribute('data-i')].material=this.value; }; });
+      [].forEach.call(box.querySelectorAll('.opTh'), function(s){ s.onchange=function(){ opRows[+this.getAttribute('data-i')].thickness=+this.value; }; opRows[+s.getAttribute('data-i')].thickness=+s.value; });
+      [].forEach.call(box.querySelectorAll('.opQty'), function(inp){ inp.oninput=function(){ opRows[+this.getAttribute('data-i')].qty=this.value; }; });
+      [].forEach.call(box.querySelectorAll('.opDel'), function(b){ b.onclick=function(){ opRows.splice(+this.getAttribute('data-i'),1); drawDoneForm(); }; });
+      document.getElementById('opAdd').onclick=function(){ opRows.push({}); drawDoneForm(); };
+      document.getElementById('doneSubmit').onclick=submitDone;
+    }
+
+    function submitDone(){
+      var rows=opRows.filter(function(r){ return r.kind && +r.qty>0; });
+      var workerSel=document.getElementById('doneWorker');
+      if(!workerSel.value){ alert('Выберите, кто сделал ремонт — это нужно для правильного начисления заработка.'); return; }
+      var doneByName=workerSel.options[workerSel.selectedIndex].getAttribute('data-name');
+      var note=document.getElementById('doneNote').value.trim();
+      var fileInp=document.getElementById('doneFile');
+      var btn=document.getElementById('doneSubmit'); btn.disabled=true; btn.textContent='Считаю…';
+      post('/repair-mark-done',{ id:CUR.id, byMemberId:workerSel.value, byName:doneByName, note:note, operations:rows })
+        .then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'не удалось сохранить');
+          document.getElementById('earnResult').innerHTML='<div class="earnbox">Заработок за эту работу<br><span class="big">'+money(j.earned)+' ₸</span></div>';
+          document.getElementById('doneForm').style.display='none';
+          var chain=Promise.resolve();
+          if(fileInp.files && fileInp.files[0]){
+            chain=compressImage(fileInp.files[0]).then(function(b64){
+              return post('/receipt-save',{kind:'repair',refId:String(CUR.id),filename:'ремонт.jpg',mime:'image/jpeg',dataB64:b64});
+            });
+          }
+          return chain;
+        }).then(function(){ setTimeout(function(){ openCard(CUR.id); loadAll(); }, 2500); })
+        .catch(function(e){ btn.disabled=false; btn.textContent='Готово — посчитать заработок'; alert('Не удалось: '+(e&&e.message||e)); });
+    }
+
+    function compressImage(file){
+      return new Promise(function(resolve,reject){
+        var fr=new FileReader();
+        fr.onload=function(){
+          var img=new Image();
+          img.onload=function(){
+            var maxSide=1280, w=img.width, hgt=img.height;
+            var k=Math.min(1, maxSide/Math.max(w,hgt));
+            var cnv=document.createElement('canvas');
+            cnv.width=Math.round(w*k); cnv.height=Math.round(hgt*k);
+            cnv.getContext('2d').drawImage(img,0,0,cnv.width,cnv.height);
+            resolve(cnv.toDataURL('image/jpeg',0.72).split(',')[1]);
+          };
+          img.onerror=reject; img.src=fr.result;
+        };
+        fr.onerror=reject; fr.readAsDataURL(file);
+      });
+    }
+
+    // ---------- init ----------
+    document.getElementById('newBtn').onclick=openCreate;
+    document.getElementById('q').oninput=function(){ FILTER=this.value; renderBoard(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
+    document.getElementById('onlyUrgent').onchange=function(){ ONLY_URGENT=this.checked; renderBoard(); };
+
+    t.member('id','fullName','username').then(function(m){
+      ME.id=(m&&m.id)||''; ME.name=(m&&(m.fullName||m.username))||'';
+      return isDirector();
+    }).then(function(admin){
+      IS_ADMIN=admin;
+      if(admin){ PRICED=true; return; }
+      return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(ME.id))
+        .then(function(r){return r.json();})
+        .then(function(j){ PRICED=!!(j&&j.canRepair); })
+        .catch(function(){ PRICED=false; });
+    }).then(function(){
+      return Promise.all([loadCompanies(), loadWorkers()]);
+    }).then(loadAll)
+    .catch(function(e){ document.getElementById('board').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+  </script>
+</body>
+</html>

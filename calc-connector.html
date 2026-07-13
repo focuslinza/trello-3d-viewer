@@ -94,23 +94,12 @@
             });
           }
         };
-        var repairReqBtn = {
-          icon: { dark: ICON_BASE + 'ic-repairreq-w.png', light: ICON_BASE + 'ic-repairreq-b.png' },
-          text: 'Заявка на ремонт',
-          callback: function (t) {
-            return t.modal({
-              url: './repair-request-modal.html?t=' + Date.now(),
-              fullscreen: true,
-              title: 'Заявка на ремонт'
-            });
-          }
-        };
         var repairBtn = {
           icon: { dark: ICON_BASE + 'ic-repair-w.png', light: ICON_BASE + 'ic-repair-b.png' },
           text: 'Ремонт',
           callback: function (t) {
             return t.modal({
-              url: './repair-modal.html?t=' + Date.now(),
+              url: './repair-board-modal.html?t=' + Date.now(),
               fullscreen: true,
               title: 'Ремонт'
             });
@@ -169,10 +158,9 @@
           }).catch(function(){ return { canInvoice:false, canSupply:false, canCrm:false, canTimesheet:false, canDashboard:false, canRepair:false }; });
         }
         return isAdmin().then(function(admin){
-          if (admin) return [earnBtn, repairReqBtn, repairBtn, reqBtn, supBtn, tabelBtn, buhBtn, crmBtn, dashBtn];
+          if (admin) return [earnBtn, repairBtn, reqBtn, supBtn, tabelBtn, buhBtn, crmBtn, dashBtn];
           return perms().then(function(p){
-            var out = [earnBtn, repairReqBtn, reqBtn]; // заявки на ремонт/снабжение — любой работник
-            if (p.canRepair) out.push(repairBtn);
+            var out = [earnBtn, repairBtn, reqBtn]; // ремонт (канбан) и заявки на снабжение — любой работник
             if (p.canSupply) out.push(supBtn);
             if (p.canTimesheet || p.canInvoice) out.push(tabelBtn); // табель: начальник цеха (заполняет) и бухгалтер (смотрит)
             if (p.canInvoice) out.push(buhBtn);
