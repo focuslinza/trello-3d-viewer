@@ -78,7 +78,6 @@
   <div id="wrap">
     <div class="top">
       <h2>Ремонт</h2>
-      <button class="btn primary" id="newBtn" type="button">+ Заявка на ремонт</button>
       <input type="text" id="q" placeholder="Поиск: Р-№, что чинили, клиент…" style="flex:1;min-width:180px">
       <label class="f" style="margin:0"><input type="checkbox" id="onlyUrgent"> 🔥 только срочные</label>
     </div>
@@ -636,7 +635,6 @@
     }
 
     // ---------- init ----------
-    document.getElementById('newBtn').onclick=openCreate;
     document.getElementById('q').oninput=function(){ FILTER=this.value; renderBoard(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
     document.getElementById('onlyUrgent').onchange=function(){ ONLY_URGENT=this.checked; renderBoard(); };
 
