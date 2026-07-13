@@ -726,7 +726,10 @@
           .then(function(r){ return r.json(); })
           .then(function(out){
             if(!out||!out.ok) throw new Error((out&&out.error)||'сервер не подтвердил');
-            msg.className='msg ok'; msg.textContent='Сохранено. Цена клиенту: '+Math.round(out.clientTotal).toLocaleString('ru-RU')+' ₸.';
+            msg.className='msg ok';
+            msg.textContent = CAN_SEE_COST
+              ? ('Сохранено. Цена клиенту: '+Math.round(res.total||0).toLocaleString('ru-RU')+' ₸.')
+              : 'Сохранено.';
             btn.disabled=false;
             setTimeout(function(){ t.closeModal(); }, 900);
           }).catch(function(e){
@@ -769,10 +772,12 @@
         return adminIn(res[1]) || adminIn(res[2]);
       }).catch(function(){ return false; });
     }
+    var CAN_SEE_COST = true; // применится в applyCostPermission()
     function applyCostPermission(){
       if(EMBED){
         // канбан «Ремонт» уже проверил права и передал их в URL
         var ok = EMBED_QS.get('canSeeCost') === '1';
+        CAN_SEE_COST = ok;
         if(!ok){
           document.body.classList.add('nocost');
           var n0=document.getElementById('nocostNote'); if(n0) n0.style.display='';
@@ -786,6 +791,7 @@
             .then(function(j){ return !!(j&&j.canSeeCost); }).catch(function(){ return false; });
         });
       }).then(function(canSee){
+        CAN_SEE_COST = canSee;
         if(!canSee){
           document.body.classList.add('nocost');
           var n=document.getElementById('nocostNote'); if(n) n.style.display='';

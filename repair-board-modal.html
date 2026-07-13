@@ -94,7 +94,7 @@
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     document.getElementById('close').onclick=function(){ t.closeModal(); };
 
-    var ME={id:'',name:''}, PRICED=false, IS_ADMIN=false;
+    var ME={id:'',name:''}, PRICED=false, IS_ADMIN=false, CAN_SEE_COST=false;
     var ROWS=[], COMPANIES=[], WORKERS=[], FILTER='', ONLY_URGENT=false;
     var CATEGORIES_SEED=['Тележка','Стеллаж','Шкаф','Стол','Полка','Дверь/дверца','Мотор/электрика','Прочее'];
     var COLS=[ {key:'new',title:'Новые заявки на ремонт'}, {key:'done',title:'Сделано'}, {key:'sent',title:'Отправлен'} ];
@@ -358,6 +358,7 @@
       if(r.status==='new'){
         h+='<div class="sec"><div class="sh">Работа</div>';
         h+='<button class="btn green" id="doneBtn" type="button">✓ Отметить сделанным</button>';
+        h+='<div class="muted" style="margin-top:6px">Откроется калькулятор — внесите, что сделали (работы и материалы). После сохранения останется выбрать исполнителя. <a href="#" id="doneNoCalc">Внести без калькулятора</a></div>';
         h+='<div id="doneForm" style="display:none"></div><div id="earnResult"></div></div>';
       }
 
@@ -406,24 +407,24 @@
       document.getElementById('ovl').onclick=function(e){ if(e.target===this){ closeOvl(); loadAll(); } };
       document.getElementById('editBtn').onclick=function(e){ e.preventDefault(); toggleEdit(); };
       loadThumbs(r.id);
+      // вернулись из калькулятора по кнопке «Отметить сделанным» — сразу открыть форму с операциями из расчёта
+      if(PENDING_DONE===r.id && r.status==='new'){
+        PENDING_DONE=null;
+        opRows=[{}]; OPS_FROM_CALC=false;
+        toggleDoneForm();
+      }
 
       if(r.status==='new'){
+        // Основной путь: «Отметить сделанным» открывает калькулятор — исполнитель вносит,
+        // что сделал (работник видит его без цен). После «Сохранить» возврат сюда,
+        // форма «сделано» подставит операции из расчёта — останется выбрать исполнителя.
         document.getElementById('doneBtn').onclick=function(){
-          var box=document.getElementById('doneForm');
-          if(box.style.display==='none'){
-            box.style.display='';
-            // подставить операции из расчёта калькулятора (если он есть и форма ещё пустая)
-            var pristine = opRows.length===1 && !opRows[0].kind && !opRows[0].qty;
-            if(pristine){
-              fetch(WORKER+'/repair-calc-ops?id='+r.id).then(function(x){return x.json();}).then(function(j){
-                if(j && j.ok && j.operations && j.operations.length){
-                  opRows = j.operations;
-                  OPS_FROM_CALC = true;
-                }
-                drawDoneForm();
-              }).catch(function(){ drawDoneForm(); });
-            } else drawDoneForm();
-          } else box.style.display='none';
+          PENDING_DONE=r.id;
+          openCalcEmbed(r);
+        };
+        document.getElementById('doneNoCalc').onclick=function(e){
+          e.preventDefault();
+          toggleDoneForm();
         };
       }
 
@@ -437,14 +438,7 @@
             .catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
         };
         document.getElementById('calcBtn').onclick=function(){
-          openEmbed('./calc-modal.html?embed=1&mode=repair'+
-            '&repairId='+r.id+
-            '&repairNumber='+encodeURIComponent(r.number)+
-            '&cardName='+encodeURIComponent(r.number+' · '+r.title)+
-            '&companyName='+encodeURIComponent(r.companyName||'')+
-            '&objectName='+encodeURIComponent(r.objectName||'')+
-            '&canSeeCost=1&memberId='+encodeURIComponent(ME.id)+
-            '&t='+Date.now());
+          openCalcEmbed(r);
         };
         document.getElementById('invBtn').onclick=function(){
           if(!(+r.clientTotal>0)){
@@ -596,6 +590,37 @@
     var TH_LIST=[0.5,0.8,1,1.5,2,3,4,5,8,10,12,16];
     var opRows=[{}];
     var OPS_FROM_CALC=false;
+    var PENDING_DONE=null; // id заявки, для которой после калькулятора надо открыть форму «сделано»
+
+    function openCalcEmbed(r){
+      openEmbed('./calc-modal.html?embed=1&mode=repair'+
+        '&repairId='+r.id+
+        '&repairNumber='+encodeURIComponent(r.number)+
+        '&cardName='+encodeURIComponent(r.number+' · '+r.title)+
+        '&companyName='+encodeURIComponent(r.companyName||'')+
+        '&objectName='+encodeURIComponent(r.objectName||'')+
+        '&canSeeCost='+(CAN_SEE_COST?'1':'0')+
+        '&memberId='+encodeURIComponent(ME.id)+
+        '&t='+Date.now());
+    }
+
+    function toggleDoneForm(){
+      var box=document.getElementById('doneForm'); if(!box) return;
+      if(box.style.display==='none'){
+        box.style.display='';
+        // подставить операции из расчёта калькулятора (если он есть и форма ещё пустая)
+        var pristine = opRows.length===1 && !opRows[0].kind && !opRows[0].qty;
+        if(pristine){
+          fetch(WORKER+'/repair-calc-ops?id='+CUR.id).then(function(x){return x.json();}).then(function(j){
+            if(j && j.ok && j.operations && j.operations.length){
+              opRows = j.operations;
+              OPS_FROM_CALC = true;
+            }
+            drawDoneForm();
+          }).catch(function(){ drawDoneForm(); });
+        } else drawDoneForm();
+      } else box.style.display='none';
+    }
 
     function drawDoneForm(){
       var box=document.getElementById('doneForm');
@@ -691,11 +716,11 @@
       return isDirector();
     }).then(function(admin){
       IS_ADMIN=admin;
-      if(admin){ PRICED=true; return; }
+      if(admin){ PRICED=true; CAN_SEE_COST=true; return; }
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(ME.id))
         .then(function(r){return r.json();})
-        .then(function(j){ PRICED=!!(j&&j.canRepair); })
-        .catch(function(){ PRICED=false; });
+        .then(function(j){ PRICED=!!(j&&j.canRepair); CAN_SEE_COST=!!(j&&(j.canSeeCost||j.canRepair)); })
+        .catch(function(){ PRICED=false; CAN_SEE_COST=false; });
     }).then(function(){
       return Promise.all([loadCompanies(), loadWorkers()]);
     }).then(loadAll)
