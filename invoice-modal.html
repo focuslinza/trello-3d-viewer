@@ -93,6 +93,12 @@
   var showOrphans = false;
   var showPaid = false;
   var showHidden = false;
+  // режим «ремонт»: окно открыто из панели «Ремонт» — карточка Trello не обязательна,
+  // клиент и заявка могут быть предвыбраны аргументами
+  var MODE_REPAIR = (t.arg('mode')==='repair');
+  var PRESELECT_REPAIR = +t.arg('repairId')||null;
+  var PRESELECT_COMPANY = t.arg('companyId')||null;
+  var nameToId = {};
 
   function boot(msg){ var b=document.getElementById('boot'); if(b) b.textContent=msg; }
 
@@ -111,9 +117,12 @@
   // живёт в D1 (см. CRM) — берём его оттуда тем же способом, что окно CRM и карточка «Компания
   // и контакты», а не из старого board-pluginData /plugindata, которое CRM очищает при переносе.
   function loadDirectory(){
-    var u = WORKER+'/plugindata?cardId='+encodeURIComponent(ctx.cardId)+(ctx.boardId?'&boardId='+encodeURIComponent(ctx.boardId):'');
+    var pdP = ctx.cardId
+      ? fetch(WORKER+'/plugindata?cardId='+encodeURIComponent(ctx.cardId)+(ctx.boardId?'&boardId='+encodeURIComponent(ctx.boardId):''))
+          .then(function(r){ ctx._http=r.status; return r.json(); }).catch(function(e){ return { _err:(e&&e.message||'сеть') }; })
+      : Promise.resolve({ ok:true, cardData:{} }); // режим «ремонт»: карточки нет — pluginData не нужен
     return Promise.all([
-      fetch(u).then(function(r){ ctx._http=r.status; return r.json(); }).catch(function(e){ return { _err:(e&&e.message||'сеть') }; }),
+      pdP,
       fetch(WORKER+'/companies-list').then(function(r){return r.json();}).catch(function(e){ return { ok:false, _err:(e&&e.message||'сеть') }; })
     ]).then(function(res){
       var j=res[0], j2=res[1];
@@ -121,12 +130,14 @@
       ctx.cardCompanyId = cd.companyId||null;
       ctx.allCompanies = ((j2&&j2.ok&&j2.companies)||[]).slice().sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||'')); });
       ctx._diag = { http:ctx._http, ok:!!(j&&j.ok), d1ok:!!(j2&&j2.ok), companyId:ctx.cardCompanyId, companies:ctx.allCompanies.length };
-      // default selected = card's company if it exists in the directory
-      if(ctx.cardCompanyId && ctx.allCompanies.some(function(c){return c.id===ctx.cardCompanyId;})) {
-        selectedCompanyId=ctx.cardCompanyId;
+      nameToId = {}; ctx.allCompanies.forEach(function(c){ if(c.name) nameToId[c.name]=c.id; });
+      var want = (MODE_REPAIR && PRESELECT_COMPANY) ? PRESELECT_COMPANY : ctx.cardCompanyId;
+      // default selected = card's company (или клиент ремонта) if it exists in the directory
+      if(want && ctx.allCompanies.some(function(c){return c.id===want;})) {
+        selectedCompanyId=want;
         ctx.linkProblem = null;
       } else {
-        ctx.linkProblem = !ctx.cardCompanyId ? 'none' : 'missing'; // 'none' = карточка вообще не привязана; 'missing' = привязана, но такого клиента нет в списке
+        ctx.linkProblem = !want ? 'none' : 'missing'; // 'none' = карточка вообще не привязана; 'missing' = привязана, но такого клиента нет в списке
         if(ctx.allCompanies.length) selectedCompanyId=ctx.allCompanies[0].id;
       }
       setBuyerFromSelected();
@@ -138,20 +149,31 @@
     ctx.buyer = co ? { name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'', kind:(co.type||co.kind||'company') } : null;
   }
 
-  // load ALL saved calculations once; we split them into "this client" vs "unlinked"
+  // load ALL saved calculations once; we split them into "this client" vs "unlinked".
+  // Вместе с заказами подгружаем и заявки на РЕМОНТ с заданной ценой — они становятся
+  // такими же строками счёта (Р-N), можно смешивать производство и ремонт в одном счёте.
   function loadAllOrders(){
-    return fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
-      ALL_ORDERS = ((j&&j.rows)||[]).map(function(row){
+    var pOrders = fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
+      return ((j&&j.rows)||[]).map(function(row){
         return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'' };
       });
-    }).catch(function(){ ALL_ORDERS=[]; });
+    }).catch(function(){ return []; });
+    var pRepairs = fetch(WORKER+'/repair-list?full=1').then(function(r){return r.json();}).then(function(j){
+      return ((j&&j.requests)||[]).filter(function(r){ return +r.clientTotal>0 && r.status!=='rejected'; }).map(function(r){
+        return { cardId:'R'+r.id, isRepair:true, repairId:r.id, name:r.title+(r.objectName?(' — '+r.objectName):''), number:r.number, link:null,
+                 total:+r.clientTotal||0, company_id:r.companyId||null, company_name:r.companyName||'',
+                 paid:(r.paid?1:0), paid_at:r.paidAt||null, hidden:0, qty:1, checked:false, personName:'',
+                 _rTitle:r.title, _rCat:r.category||'', _rObj:r.objectName||'' };
+      });
+    }).catch(function(){ return []; });
+    return Promise.all([pOrders, pRepairs]).then(function(res){ ALL_ORDERS = res[0].concat(res[1]); });
   }
 
   // Имя заказчика-человека (контакт, отмеченный на карточке в «Компания и контакты»):
   // подтягиваем для заказов ТЕКУЩЕГО клиента, чтобы дописать в счёте
   // «Изготовление стола… (Ануар)». Ошибки не критичны — просто без имени.
   function loadPersonNames(){
-    var orders = clientOrders().filter(function(o){ return !o.personName && !o._personTried; });
+    var orders = clientOrders().filter(function(o){ return !o.isRepair && !o.personName && !o._personTried; });
     if(!orders.length) return Promise.resolve();
     var co = companyById(selectedCompanyId);
     var contactsById = {};
@@ -174,7 +196,7 @@
 
   // fill missing card numbers (idShort) + open-links for displayed orders
   function loadCardNumbers(){
-    var ids = ALL_ORDERS.filter(function(o){ return !o.number || !o.link; }).map(function(o){ return o.cardId; });
+    var ids = ALL_ORDERS.filter(function(o){ return !o.isRepair && (!o.number || !o.link); }).map(function(o){ return o.cardId; });
     if(!ids.length) return Promise.resolve();
     return fetch(WORKER+'/card-numbers',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ids:ids }) })
       .then(function(r){return r.json();}).then(function(j){
@@ -189,14 +211,29 @@
   // a separate window keeps THIS invoice modal open underneath.
   function openCard(cardId){
     var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]||{};
+    if(o.isRepair) return; // у ремонта нет карточки Trello
     var url=o.link || ('https://trello.com/c/'+cardId);
     window.open(url, '_blank', 'noopener,width=1100,height=850');
   }
 
   var validIds = {};
-  function clientOrders(){ return ALL_ORDERS.filter(function(o){ return o.company_id===selectedCompanyId && !o.paid && !o.hidden; }); }
-  function clientPaid(){ return ALL_ORDERS.filter(function(o){ return o.company_id===selectedCompanyId && o.paid && !o.hidden; }); }
-  function orphanOrders(){ return ALL_ORDERS.filter(function(o){ return (!o.company_id || !validIds[o.company_id]) && !o.paid && !o.hidden; }); }
+  // принадлежность заказа выбранному клиенту: по id, а для ремонтов без id — по совпадению имени
+  function belongsToSelected(o){
+    if(o.company_id===selectedCompanyId) return true;
+    if(o.isRepair && !o.company_id && o.company_name){ return nameToId[o.company_name]===selectedCompanyId; }
+    return false;
+  }
+  function clientOrders(){ return ALL_ORDERS.filter(function(o){ return belongsToSelected(o) && !o.paid && !o.hidden; }); }
+  function clientPaid(){ return ALL_ORDERS.filter(function(o){ return belongsToSelected(o) && o.paid && !o.hidden; }); }
+  function orphanOrders(){ return ALL_ORDERS.filter(function(o){
+    if(o.paid || o.hidden) return false;
+    if(o.isRepair){
+      if(o.company_id && validIds[o.company_id]) return false;
+      if(!o.company_id && o.company_name && nameToId[o.company_name]) return false;
+      return true;
+    }
+    return (!o.company_id || !validIds[o.company_id]);
+  }); }
   function hiddenOrders(){ return ALL_ORDERS.filter(function(o){ return o.hidden; }); }
   function selectedOrders(){ return clientOrders().filter(function(o){return o.checked;}); }
   function grandTotal(){ return selectedOrders().reduce(function(s,o){return s+o.total;},0); }
@@ -227,7 +264,7 @@
               (ctx.buyer.addr?esc(ctx.buyer.addr)+' · ':'')+
               (ctx.buyer.phone?'тел. '+esc(ctx.buyer.phone):'')+'</div>';
       }
-      if(selectedCompanyId!==ctx.cardCompanyId){
+      if(!MODE_REPAIR && selectedCompanyId!==ctx.cardCompanyId){
         var warnTxt = ctx.linkProblem==='none'
           ? 'На этой карточке клиент вообще не выбран — показан первый по алфавиту, просто чтобы не оставлять список пустым. Откройте «Компания и контакты» на карточке и выберите клиента, затем откройте это окно заново.'
           : 'Карточка привязана к клиенту, которого нет в текущем списке (возможно, старая или задвоенная запись) — показан первый по алфавиту вместо него. Откройте «Компания и контакты» на карточке и выберите клиента заново, затем откройте это окно заново.';
@@ -241,20 +278,23 @@
     // orders of the selected client (unpaid)
     var co = clientOrders();
     var paidList = clientPaid();
-    html+='<div class="sec"><h3>Заказы клиента — что включить в счёт</h3>';
+    html+='<div class="sec"><h3>Заказы и ремонты клиента — что включить в счёт</h3>';
     if(!co.length){
-      html+='<div class="muted">У выбранного клиента нет неоплаченных заказов'+(paidList.length?' (оплаченные скрыты — см. ниже)':'')+'. Если заказ есть, но привязан к другому/пустому клиенту — разверните «Заказы без привязки» и привяжите.</div>';
+      html+='<div class="muted">У выбранного клиента нет неоплаченных заказов и ремонтов'+(paidList.length?' (оплаченные скрыты — см. ниже)':'')+'. Если заказ есть, но привязан к другому/пустому клиенту — разверните «Заказы без привязки» и привяжите. Ремонт без заданной цены здесь не показывается — сначала укажите цену клиенту в панели «Ремонт».</div>';
     } else {
-      html+='<div class="small muted" style="margin-bottom:6px">Отметьте заказы — каждый станет строкой счёта. «Кол-во» — сколько это продуктов; цена за единицу = сумма заказа ÷ кол-во. Когда клиент оплатит — нажмите «оплачен», и заказ уйдёт из списка.</div>';
-      html+='<table><thead><tr><th></th><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Кол-во</th><th class="num">Сумма заказа</th><th></th></tr></thead><tbody>';
+      html+='<div class="small muted" style="margin-bottom:6px">Отметьте заказы — каждый станет строкой счёта. Ремонтные заявки (Р-N) можно включать в тот же счёт вместе с производством. «Кол-во» — сколько это продуктов; цена за единицу = сумма заказа ÷ кол-во. Когда клиент оплатит — нажмите «оплачен», и заказ уйдёт из списка.</div>';
+      html+='<table><thead><tr><th></th><th>№</th><th>Наименование (заказ)</th><th class="num">Кол-во</th><th class="num">Сумма заказа</th><th></th></tr></thead><tbody>';
       co.forEach(function(o){
+        var numCell = o.isRepair
+          ? '<span style="display:inline-block;background:#2b1f45;color:#c9a8ff;border-radius:6px;padding:1px 8px;font-size:11.5px;font-weight:800">'+esc(o.number)+'</span>'
+          : '<span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span>';
         html+='<tr>'+
           '<td><input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'></td>'+
-          '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
-          '<td>'+esc(o.name)+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+'</td>'+
+          '<td class="small">'+numCell+'</td>'+
+          '<td>'+esc(o.name)+(o.isRepair?' <span class="pill">ремонт</span>':'')+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+'</td>'+
           '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'"></td>'+
           '<td class="num">'+money(o.total)+' ₸</td>'+
-          '<td style="white-space:nowrap"><button class="btn ghost paybtn" data-id="'+esc(o.cardId)+'" type="button" title="Клиент оплатил этот заказ">оплачен</button> <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" title="Убрать заказ из списка (не оплата)">убрать</button></td>'+
+          '<td style="white-space:nowrap"><button class="btn ghost paybtn" data-id="'+esc(o.cardId)+'" type="button" title="Клиент оплатил этот заказ">оплачен</button>'+(o.isRepair?'':' <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" title="Убрать заказ из списка (не оплата)">убрать</button>')+'</td>'+
         '</tr>';
       });
       html+='</tbody></table>';
@@ -266,8 +306,8 @@
         html+='<table style="margin-top:6px;opacity:.75"><thead><tr><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Сумма</th><th>Оплачен</th><th></th></tr></thead><tbody>';
         paidList.forEach(function(o){
           html+='<tr>'+
-            '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
-            '<td>'+esc(o.name)+'</td>'+
+            '<td class="small">'+(o.isRepair?esc(o.number):'<span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span>')+'</td>'+
+            '<td>'+esc(o.name)+(o.isRepair?' <span class="pill">ремонт</span>':'')+'</td>'+
             '<td class="num">'+money(o.total)+' ₸</td>'+
             '<td class="small muted">'+esc(o.paid_at?String(o.paid_at).slice(0,10):'да')+'</td>'+
             '<td><button class="btn ghost unpaybtn" data-id="'+esc(o.cardId)+'" type="button" title="Вернуть в неоплаченные">вернуть</button></td>'+
@@ -303,8 +343,8 @@
         html+='<table style="margin-top:8px"><thead><tr><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Сумма</th><th></th></tr></thead><tbody>';
         orph.forEach(function(o){
           html+='<tr>'+
-            '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
-            '<td>'+esc(o.name)+'</td>'+
+            '<td class="small">'+(o.isRepair?esc(o.number):'<span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span>')+'</td>'+
+            '<td>'+esc(o.name)+(o.isRepair?' <span class="pill">ремонт</span>':'')+'</td>'+
             '<td class="num">'+money(o.total)+' ₸</td>'+
             '<td><button class="btn ghost relink" data-id="'+esc(o.cardId)+'" type="button">привязать к «'+esc(selName)+'»</button></td>'+
           '</tr>';
@@ -347,6 +387,16 @@
   function relink(cardId){
     var co=companyById(selectedCompanyId); if(!co) return;
     var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0];
+    if(o && o.isRepair){
+      // привязка ремонта к клиенту — через /repair-update (title/категория/объект сохраняем как есть)
+      fetch(WORKER+'/repair-update',{ method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ id:o.repairId, title:o._rTitle, category:o._rCat, companyId:co.id, companyName:co.name||'', objectName:o._rObj }) })
+        .then(function(r){return r.json();}).then(function(j){
+          if(j&&j.ok){ o.company_id=co.id; o.company_name=co.name||''; o.checked=true; render(); }
+          else alert('Не удалось привязать: '+((j&&j.error)||'?'));
+        }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
+      return;
+    }
     fetch(WORKER+'/calc-relink',{ method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ cardId:cardId, companyId:co.id, companyName:co.name||'' }) })
       .then(function(r){return r.json();}).then(function(j){
@@ -357,16 +407,19 @@
 
   function markPaid(cardId, paid){
     var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]; if(!o) return;
-    fetch(WORKER+'/calc-paid',{ method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ cardId:cardId, paid:paid?1:0 }) })
-      .then(function(r){return r.json();}).then(function(j){
+    var p = o.isRepair
+      ? fetch(WORKER+'/repair-flags',{ method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ id:o.repairId, field:'paid', value:paid?1:0 }) })
+      : fetch(WORKER+'/calc-paid',{ method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ cardId:cardId, paid:paid?1:0 }) });
+    p.then(function(r){return r.json();}).then(function(j){
         if(j&&j.ok){ o.paid=paid?1:0; if(o.paid) o.checked=false; render(); }
         else alert('Не удалось изменить статус: '+((j&&j.error)||'?'));
       }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
   }
 
   function markHidden(cardId, hidden){
-    var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]; if(!o) return;
+    var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]; if(!o||o.isRepair) return;
     fetch(WORKER+'/calc-hide',{ method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ cardId:cardId, hidden:hidden?1:0 }) })
       .then(function(r){return r.json();}).then(function(j){
@@ -432,7 +485,8 @@
             buyer:data.buyer||null,
             items:data.items||[],
             total:grandTotal(),
-            cardIds:selectedOrders().map(function(o){ return o.cardId; })
+            cardIds:selectedOrders().filter(function(o){ return !o.isRepair; }).map(function(o){ return o.cardId; }),
+            repairIds:selectedOrders().filter(function(o){ return o.isRepair; }).map(function(o){ return o.repairId; })
           })
         }).catch(function(){});
       } catch(e){}
@@ -446,13 +500,23 @@
   document.getElementById('gen').onclick=generate;
 
   loadContext()
-    .then(function(){ if(!ctx.cardId){ boot('Не удалось определить карточку.'); return Promise.reject('no card'); } })
+    .then(function(){ if(!ctx.cardId && !MODE_REPAIR){ boot('Не удалось определить карточку.'); return Promise.reject('no card'); } })
     .then(loadDirectory).then(loadAllOrders).then(loadCardNumbers).then(loadNumber)
     .then(function(){
       validIds = {}; ctx.allCompanies.forEach(function(c){ validIds[c.id]=true; });
       // pre-check the current card's order if it belongs to the selected client
       var cur = ALL_ORDERS.filter(function(o){ return o.cardId===ctx.cardId; })[0];
       if(cur && cur.company_id===selectedCompanyId) cur.checked=true;
+      // режим «ремонт»: предвыбрать заявку, из которой открыли окно, и её клиента
+      if(PRESELECT_REPAIR){
+        var rr = ALL_ORDERS.filter(function(o){ return o.isRepair && o.repairId===PRESELECT_REPAIR; })[0];
+        if(rr){
+          if(rr.company_id && validIds[rr.company_id]) selectedCompanyId=rr.company_id;
+          else if(rr.company_name && nameToId[rr.company_name]) selectedCompanyId=nameToId[rr.company_name];
+          setBuyerFromSelected();
+          if(belongsToSelected(rr)) rr.checked=true;
+        }
+      }
     })
     .then(function(){
       // Имена заказчиков грузим независимо от успеха первого рендера — даже если

@@ -338,6 +338,7 @@
       rows.forEach(function(r){
         var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
         var titleCell=esc(r.title)
+          +(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')
           +(r.urgent?' <span title="срочная" style="font-size:11px">🔥</span>':'')
           +(r.category?' <span class="muted" style="font-size:11px">· '+esc(r.category)+'</span>':'')
           +(r.status==='new'?' <span style="font-size:11px;color:var(--amber)" title="Работа ещё не отмечена выполненной">· в работе</span>':'')
@@ -423,7 +424,7 @@
           return;
         }
         h+='<tr><td><b>№'+esc(r.number)+'</b></td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+'</td>'+
-           '<td class="num">'+(r.cards||0)+'</td>'+
+           '<td class="num">'+(r.cards||0)+(r.repairs?' <span style="color:#c9a8ff" title="ремонтных заявок в счёте">+'+r.repairs+'Р</span>':'')+'</td>'+
            '<td class="num">'+money(r.total)+' ₸</td>'+
            '<td class="num">'+money(r.received)+' ₸</td>'+
            '<td class="num">'+(r.pct!=null?r.pct+'%':'—')+'</td>'+

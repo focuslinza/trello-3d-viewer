@@ -113,6 +113,7 @@
         h+='<td>'+(r.doneByName?esc(r.doneByName):'—')+'<div class="opline">'+esc(opsSummary(r.doneOperations))+'</div></td>';
         h+='<td class="num"><input type="text" class="priceInp" data-id="'+r.id+'" value="'+(r.clientTotal!=null?r.clientTotal:'')+'" placeholder="сумма"></td>';
         h+='<td>'+chip(r,'invoiceSent','счёт')+' '+chip(r,'paid','оплачен')+
+           ' <button class="btn rinv" data-id="'+r.id+'" type="button" title="Сформировать PDF-счёт на оплату (можно вместе с производственными заказами клиента)" style="padding:2px 8px;font-size:11px">🧾</button>'+
            (IS_ADMIN?(' <button class="btn rarch" data-id="'+r.id+'" type="button" title="В архив: скрыть из списка и аналитики, данные останутся" style="padding:2px 8px;font-size:11px">🗄</button>'+
                       ' <button class="btn rdel" data-id="'+r.id+'" type="button" title="Удалить безвозвратно (для тестовых заявок)" style="padding:2px 8px;font-size:11px;color:#e9b3b3;border-color:#5a3a3a">✕</button>'):'')+
            '</td>';
@@ -131,6 +132,22 @@
 
     function wire(){
       var oo=document.getElementById('onlyOpen'); if(oo) oo.onchange=function(){ ONLY_OPEN=this.checked; render(); };
+      [].forEach.call(document.querySelectorAll('.rinv'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id');
+          var r0=ROWS.find(function(x){return x.id===id;}); if(!r0) return;
+          if(!(+r0.clientTotal>0)){
+            alert('У заявки '+r0.number+' не задана цена клиенту — введите сумму в колонке «Цена клиенту» и повторите. Без цены строка счёта была бы нулевой.');
+            return;
+          }
+          t.modal({
+            title: 'Счёт на оплату',
+            url: './invoice-modal.html?t=' + Date.now(),
+            fullscreen: true,
+            accentColor: '#0c66e4',
+            args: { mode: 'repair', repairId: id, companyId: r0.companyId || '' }
+          });
+        };
+      });
       [].forEach.call(document.querySelectorAll('.rarch'), function(b){
         b.onclick=function(){ var id=+this.getAttribute('data-id');
           if(!confirm('Убрать заявку в архив? Она исчезнет из списка и аналитики; данные останутся в базе.')) return;
