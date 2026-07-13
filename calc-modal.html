@@ -130,7 +130,7 @@
             <option value="2">2 дня</option>
           </select>
         </div>
-        <div class="fld">
+        <div class="fld" id="shleifFld">
           <label>Шлейф, % от сварки</label>
           <input type="number" id="shleif" value="50" min="0" step="5" style="width:120px" />
         </div>
@@ -360,6 +360,19 @@
     // расчёт хранится в самой заявке (repairs.calc_json), сумма становится ценой клиенту
     var MODE_REPAIR = (t.arg('mode')==='repair');
     var REPAIR_ID = +t.arg('repairId')||null;
+    if(MODE_REPAIR){
+      // в ремонтах инженеры обычно не участвуют — по умолчанию 0%
+      // (сохранённый расчёт при загрузке всё равно вернёт своё значение)
+      var _engSel=document.getElementById('eng'); if(_engSel) _engSel.value='0';
+      // шлейф остаётся стандартные 50% от сварки, но поле не показываем — меньше лишнего
+      var _sh=document.getElementById('shleif');
+      if(_sh && _sh.closest && _sh.closest('.fld')) _sh.closest('.fld').style.display='none';
+    }
+    if(MODE_REPAIR){
+      // в ремонтах инженеры обычно не участвуют — по умолчанию 0%
+      // (сохранённый расчёт с другим значением всё равно восстановится из базы)
+      var _eng0=document.getElementById('eng'); if(_eng0) _eng0.value='0';
+    }
 
     function loadContext(){
       ctx.cardId  = t.arg('cardId')  || null;
@@ -374,6 +387,13 @@
         ctx.companyName = t.arg('companyName') || '';
         ctx.objectName = t.arg('objectName') || '';
         ctx._src='repair';
+        // в ремонтах инженеры почти не участвуют — по умолчанию 0%
+        // (если в сохранённом расчёте выбран другой процент, restore() вернёт его)
+        var engSel=document.getElementById('eng'); if(engSel) engSel.value='0';
+        // шлейф и налог в ремонте не показываем — считаются по значениям по умолчанию
+        // (шлейф 50% от сварки, налог из «Цены и коэффициенты»); в расчёте они участвуют как обычно
+        var sf=document.getElementById('shleifFld'); if(sf) sf.style.display='none';
+        var tf=document.getElementById('taxFld'); if(tf) tf.style.display='none';
         if(!REPAIR_ID){ ctx._diag='Не передан repairId — откройте калькулятор из карточки на доске «Ремонт».'; finishMeta(); return Promise.resolve(); }
         return fetch(WORKER+'/repair-calc-get?id='+REPAIR_ID).then(function(r){return r.json();}).then(function(j){
           ctx.paid = !!(j && j.ok && j.paid);
