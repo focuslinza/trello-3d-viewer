@@ -51,8 +51,9 @@
     function fmtDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
     var RANGE={ from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now), preset:'month' };
     var ROWS=[], TOTALS={}, FILTER='', ONLY_OPEN=false;
-    var VIEW='orders'; // orders | invoices | payroll
+    var VIEW='orders'; // orders | invoices | payroll | repairs
     var INV_ROWS=[], INV_TOTALS={}, INV_SHARE=0.5;
+    var REP_ROWS=[], REP_TOTALS={};
     var PAY=null, PAY_OPEN={};
     var INV_EDIT=null; // id счёта в режиме правки
 
@@ -92,6 +93,7 @@
     function load(){
       if(VIEW==='invoices') return loadInvoices();
       if(VIEW==='payroll') return loadPayroll();
+      if(VIEW==='repairs') return loadRepairs();
       var b=document.getElementById('boot'); if(b) b.textContent='Загружаю заказы…';
       fetch(WORKER+'/acct-list?from='+RANGE.from+'&to='+RANGE.to)
         .then(function(r){return r.json();})
@@ -128,6 +130,18 @@
         .catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
     }
 
+    function loadRepairs(){
+      var b=document.getElementById('boot'); if(b) b.textContent='Загружаю ремонты…';
+      fetch(WORKER+'/repair-acct-list?from='+RANGE.from+'&to='+RANGE.to)
+        .then(function(r){return r.json();})
+        .then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+          REP_ROWS=j.rows||[]; REP_TOTALS=j.totals||{};
+          render();
+        })
+        .catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+    }
+
     function chip(r, field, label){
       var on=r[field];
       return '<span class="chip'+(on?' on':'')+'" data-card="'+esc(r.cardId)+'" data-f="'+field+'">'+(on?'✓ ':'')+label+'</span>';
@@ -149,6 +163,7 @@
          '<div class="tab'+(VIEW==='orders'?' active':'')+'" data-view="orders">Заказы</div>'+
          '<div class="tab'+(VIEW==='invoices'?' active':'')+'" data-view="invoices">Счета на оплату</div>'+
          '<div class="tab'+(VIEW==='payroll'?' active':'')+'" data-view="payroll">Зарплаты</div>'+
+         '<div class="tab'+(VIEW==='repairs'?' active':'')+'" data-view="repairs">Ремонт</div>'+
          '</div>';
       h+='<div class="tabs">';
       [['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].forEach(function(p){
@@ -170,6 +185,12 @@
       }
       if(VIEW==='payroll'){
         h+=renderPayrollBody();
+        app.innerHTML=h;
+        bindCommon();
+        return;
+      }
+      if(VIEW==='repairs'){
+        h+=renderRepairsBody();
         app.innerHTML=h;
         bindCommon();
         return;
@@ -289,6 +310,73 @@
         h+='</tbody></table>';
       }
       return h;
+    }
+
+    function rchip(r, field, label){
+      var on=r[field];
+      return '<span class="chip rchip'+(on?' on':'')+'" data-id="'+r.id+'" data-f="'+field+'">'+(on?'✓ ':'')+label+'</span>';
+    }
+
+    function renderRepairsBody(){
+      var T=REP_TOTALS||{};
+      var h='<div class="kpis">';
+      h+='<div class="kpi"><div class="k">Ремонтов</div><div class="v">'+(T.orders||0)+'</div></div>';
+      h+='<div class="kpi"><div class="k">На сумму</div><div class="v">'+money(T.revenue)+' ₸</div></div>';
+      h+='<div class="kpi green"><div class="k">Оплачено</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
+      h+='<div class="kpi red"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
+      h+='<div class="kpi amber"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
+      h+='</div>';
+      h+='<div class="muted" style="margin:-6px 0 10px">Заявки на ремонт с их статусами — вместо колонки «Внесен в гугл» на доске «Ремонт». Цену клиенту задаёт руководитель в разделе «Ремонт» панели руководителя.</div>';
+      var f=FILTER.toLowerCase();
+      var rows=(REP_ROWS||[]).filter(function(r){
+        if(ONLY_OPEN && r.invoiceSent && r.paid && r.delivered && r.actSigned) return false;
+        if(!f) return true;
+        return (r.number+' '+r.title+' '+(r.client||'')+' '+(r.category||'')).toLowerCase().indexOf(f)>=0;
+      });
+      if(!rows.length) return h+'<div class="empty">Нет заявок на ремонт по выбранным условиям.</div>';
+      h+='<table><thead><tr><th>№</th><th>Заявка</th><th>Клиент</th><th class="num">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th></tr></thead><tbody>';
+      rows.forEach(function(r){
+        var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
+        var titleCell=esc(r.title)
+          +(r.urgent?' <span title="срочная" style="font-size:11px">🔥</span>':'')
+          +(r.category?' <span class="muted" style="font-size:11px">· '+esc(r.category)+'</span>':'')
+          +(r.status==='new'?' <span style="font-size:11px;color:var(--amber)" title="Работа ещё не отмечена выполненной">· в работе</span>':'')
+          +(r.status==='rejected'?' <span style="font-size:11px;color:var(--red)">· отклонена</span>':'');
+        h+='<tr'+(closed?' class="rowclosed"':'')+'><td>'+esc(r.number)+'</td>'+
+           '<td>'+titleCell+'</td>'+
+           '<td>'+esc(r.client)+'</td>'+
+           '<td class="num">'+(r.priced?money(r.total)+' ₸':'<span class="muted" title="Цена клиенту ещё не задана в разделе «Ремонт» панели руководителя">—</span>')+'</td>'+
+           '<td>'+rchip(r,'invoiceSent','выслан')+'</td>'+
+           '<td>'+rchip(r,'paid','оплачен')+'</td>'+
+           '<td>'+rchip(r,'delivered','сдали')+'</td>'+
+           '<td>'+rchip(r,'actSigned','акт')+'</td>'+
+           '<td class="muted">'+esc(r.date)+'</td></tr>';
+      });
+      h+='</tbody></table>';
+      return h;
+    }
+
+    function _bindRepairChips(){
+      [].forEach.call(document.querySelectorAll('.rchip'), function(c){
+        c.onclick=function(){
+          var id=+this.getAttribute('data-id'), field=this.getAttribute('data-f');
+          var r=REP_ROWS.filter(function(x){return x.id===id;})[0]; if(!r) return;
+          var newVal=!r[field]; var el=this; el.classList.add('busy');
+          if(field==='invoiceSent' && newVal && !r.priced){
+            if(!confirm('У заявки '+r.number+' ещё не задана цена клиенту. Отметить счёт высланным всё равно?')){ el.classList.remove('busy'); return; }
+          }
+          fetch(WORKER+'/repair-flags',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,field:field,value:newVal?1:0})})
+            .then(function(x){return x.json();}).then(function(j){
+              if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+              r[field]=newVal;
+              if(field==='paid'){ r.paidAt=newVal?new Date().toISOString():null; }
+              var T={orders:0,revenue:0,paidRev:0,unpaidRev:0,closed:0};
+              REP_ROWS.forEach(function(x){ T.orders++; T.revenue+=x.total; if(x.paid)T.paidRev+=x.total; else T.unpaidRev+=x.total;
+                if(x.invoiceSent&&x.paid&&x.delivered&&x.actSigned)T.closed++; });
+              REP_TOTALS=T; render();
+            }).catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); el.classList.remove('busy'); });
+        };
+      });
     }
 
     function invStatusLabel(r){
@@ -424,6 +512,7 @@
 
     function bindChips(){
       _bindChipsBody();
+      _bindRepairChips();
     }
 
         canUse().then(function(allowed){
