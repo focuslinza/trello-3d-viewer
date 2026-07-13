@@ -170,7 +170,21 @@
 
   <script>
   (function(){
-    var t = window.TrelloPowerUp.iframe();
+    // Встроенный режим (embed=1): калькулятор открыт как iframe ПОВЕРХ канбана «Ремонт»,
+    // а не как модалка Trello — так «Закрыть» возвращает в карточку заявки, а не на доску.
+    // Параметры приходят в URL, закрытие — postMessage родителю; Trello API здесь недоступен.
+    var EMBED_QS = new URLSearchParams(window.location.search);
+    var EMBED = EMBED_QS.get('embed') === '1';
+    var t = EMBED ? {
+      arg: function(k){ return EMBED_QS.get(k) || ''; },
+      closeModal: function(){ try { window.parent.postMessage({ metalshopEmbedClose: 1 }, '*'); } catch(e){} },
+      member: function(){ return Promise.resolve({ id: EMBED_QS.get('memberId') || '' }); },
+      board: function(){ return Promise.reject(new Error('embed')); },
+      organization: function(){ return Promise.reject(new Error('embed')); },
+      card: function(){ return Promise.reject(new Error('embed')); },
+      get: function(){ return Promise.resolve(null); },
+      set: function(){ return Promise.resolve(); }
+    } : window.TrelloPowerUp.iframe();
     var CALC = window.CALC;
     var WORKER = window.WORKER_URL;
     var fmt = function(n){ return (Math.round((+n||0))).toLocaleString('ru-RU'); };
@@ -756,6 +770,15 @@
       }).catch(function(){ return false; });
     }
     function applyCostPermission(){
+      if(EMBED){
+        // канбан «Ремонт» уже проверил права и передал их в URL
+        var ok = EMBED_QS.get('canSeeCost') === '1';
+        if(!ok){
+          document.body.classList.add('nocost');
+          var n0=document.getElementById('nocostNote'); if(n0) n0.style.display='';
+        }
+        return Promise.resolve(ok);
+      }
       return isDirector().then(function(admin){
         if(admin) return true;
         return t.member('id').then(function(m){

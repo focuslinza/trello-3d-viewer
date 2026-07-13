@@ -61,7 +61,20 @@
   </div>
 
 <script>
-  var t = window.TrelloPowerUp.iframe();
+  // Встроенный режим (embed=1): окно счёта открыто как iframe поверх канбана «Ремонт»;
+  // параметры — из URL, закрытие — postMessage родителю (возврат в карточку заявки).
+  var EMBED_QS = new URLSearchParams(window.location.search);
+  var EMBED = EMBED_QS.get('embed') === '1';
+  var t = EMBED ? {
+    arg: function(k){ return EMBED_QS.get(k) || ''; },
+    closeModal: function(){ try { window.parent.postMessage({ metalshopEmbedClose: 1 }, '*'); } catch(e){} },
+    member: function(){ return Promise.resolve({ id: EMBED_QS.get('memberId') || '' }); },
+    board: function(){ return Promise.reject(new Error('embed')); },
+    organization: function(){ return Promise.reject(new Error('embed')); },
+    card: function(){ return Promise.reject(new Error('embed')); },
+    get: function(){ return Promise.resolve(null); },
+    set: function(){ return Promise.resolve(); }
+  } : window.TrelloPowerUp.iframe();
   var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
 
   // ----- our two companies (Поставщик) -----
