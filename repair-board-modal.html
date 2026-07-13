@@ -319,6 +319,7 @@
     // ---------- панель карточки ----------
     var CUR=null;
     function openCard(id){
+      opRows=[{}]; OPS_FROM_CALC=false; // форма «сделано» не должна тянуть строки из прошлой карточки
       var u = PRICED ? ('/repair-get?id='+id+'&full=1') : ('/repair-get?id='+id);
       fetch(WORKER+u).then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok) throw new Error((j&&j.error)||'не найдена');
@@ -409,7 +410,20 @@
       if(r.status==='new'){
         document.getElementById('doneBtn').onclick=function(){
           var box=document.getElementById('doneForm');
-          if(box.style.display==='none'){ box.style.display=''; drawDoneForm(); } else box.style.display='none';
+          if(box.style.display==='none'){
+            box.style.display='';
+            // подставить операции из расчёта калькулятора (если он есть и форма ещё пустая)
+            var pristine = opRows.length===1 && !opRows[0].kind && !opRows[0].qty;
+            if(pristine){
+              fetch(WORKER+'/repair-calc-ops?id='+r.id).then(function(x){return x.json();}).then(function(j){
+                if(j && j.ok && j.operations && j.operations.length){
+                  opRows = j.operations;
+                  OPS_FROM_CALC = true;
+                }
+                drawDoneForm();
+              }).catch(function(){ drawDoneForm(); });
+            } else drawDoneForm();
+          } else box.style.display='none';
         };
       }
 
@@ -581,10 +595,12 @@
     ];
     var TH_LIST=[0.5,0.8,1,1.5,2,3,4,5,8,10,12,16];
     var opRows=[{}];
+    var OPS_FROM_CALC=false;
 
     function drawDoneForm(){
       var box=document.getElementById('doneForm');
-      var h='<div class="muted" style="margin:8px 0 2px">Что сделали (по этим данным сервер посчитает заработок):</div>';
+      var h='<div class="muted" style="margin:8px 0 2px">Что сделали по факту — по этим данным начисляется <b>зарплата исполнителя</b> (цена клиенту считается отдельно, в калькуляторе):</div>';
+      if(OPS_FROM_CALC) h+='<div class="muted" style="margin:0 0 2px;color:var(--green)">Операции подставлены из расчёта калькулятора — поправьте, если по факту сделали иначе.</div>';
       opRows.forEach(function(row,i){
         var kind=row.kind||'cut';
         var meta=OP_KINDS.filter(function(k){return k.value===kind;})[0]||OP_KINDS[0];
