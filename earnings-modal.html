@@ -128,17 +128,27 @@
         stages.forEach(function(s){
           var srcLbl = s.source==='auto'?'<span class="src">авто</span>': s.source==='default'?'<span class="src">умолч.</span>': s.source==='manual'?'<span class="src man">вручную</span>':'<span class="src none">нет</span>';
           var pool=workersFor(unitGroup(s.key));
-          var opts='<option value="">— выбрать —</option>'+pool.map(function(w){ return '<option value="'+w.id+'"'+(w.id===s.assigneeId?' selected':'')+'>'+esc(w.name)+'</option>'; }).join('');
+          var ids = s.assigneeIds || (s.assigneeId ? [s.assigneeId] : []);
+          function optsFor(sel){ return '<option value="">— выбрать —</option>'+pool.map(function(w){ return '<option value="'+w.id+'"'+(w.id===sel?' selected':'')+'>'+esc(w.name)+'</option>'; }).join(''); }
+          var opts=optsFor(ids[0]||null);
           var defChecked = (data.defaults && data.defaults[s.key] && data.defaults[s.key]===s.assigneeId) ? ' checked' : '';
           var shareLbl = Math.round((+s.share||0)*1000)/10 + '%';
           var timeCell = s.hours!=null ? (s.hours+' ч'+(s.assigneeId&&s.earned&&s.hours? ' / '+fmt(s.earned/s.hours)+' ₸/ч':'')) : '<span class="muted">—</span>';
           // paint row shows the mode (set in the calculator), read-only here
           var paintToggle = s.paint ? ('<div class="stages">'+(data.paintInShop?('красили в цеху → '+shareLbl+' начисляется'):'красили на стороне → не начисляется')+' · меняется в калькуляторе</div>') : '';
-          var earnCell = s.paintOutside ? '<span class="muted">на стороне</span>' : (s.assigneeId? fmt(s.earned)+' ₸':'<span class="muted">—</span>');
+          var earnCell = s.paintOutside ? '<span class="muted">на стороне</span>'
+            : (ids.length ? (fmt(s.earned)+' ₸'+(ids.length>1?('<div class="stages">по '+fmt(s.earned/ids.length)+' ₸ каждому из '+ids.length+'</div>'):'')) : '<span class="muted">—</span>');
+          // у инженерного этапа можно выбрать ВТОРОГО инженера — большие проекты
+          // делаются вдвоём, вознаграждение делится поровну
+          var secondSel = (s.key==='eng')
+            ? ('<select class="asg" data-stage="'+s.key+'" style="margin-top:4px">'+
+               '<option value="">— второй инженер (не обяз.) —</option>'+
+               pool.map(function(w){ return '<option value="'+w.id+'"'+(w.id===(ids[1]||null)?' selected':'')+'>'+esc(w.name)+'</option>'; }).join('')+'</select>')
+            : '';
           html+='<tr>'+
             '<td>'+esc(s.label||s.key)+'<div class="stages">'+srcLbl+' · доля '+shareLbl+(s.autoName?(' · двигал: '+esc(s.autoName)):'')+'</div>'+paintToggle+'</td>'+
             '<td class="num">'+fmt(s.cost)+' ₸</td>'+
-            '<td><select class="asg" data-stage="'+s.key+'">'+opts+'</select>'+
+            '<td><select class="asg" data-stage="'+s.key+'">'+opts+'</select>'+secondSel+
               '<label class="chk" style="margin-top:4px"><input type="checkbox" class="def" data-stage="'+s.key+'"'+defChecked+'> по умолчанию</label></td>'+
             '<td class="num earn">'+earnCell+'</td>'+
             '<td class="num eff">'+timeCell+'</td>'+
@@ -288,7 +298,16 @@
         '<div class="totrow"><span>На каждого из '+(m.crew.length||0)+'</span><b class="earn">'+fmt(per)+' ₸</b></div>';
     }
     function saveAssignees(){
-      var st={}; [].forEach.call(document.querySelectorAll('.asg'), function(sel){ if(sel.value) st[sel.getAttribute('data-stage')]=sel.value; });
+      // у этапа может быть несколько селектов (два инженера) — собираем в массив,
+      // одиночный исполнитель сохраняется строкой как раньше
+      var st={};
+      [].forEach.call(document.querySelectorAll('.asg'), function(sel){
+        if(!sel.value) return;
+        var k=sel.getAttribute('data-stage');
+        if(st[k]===undefined) st[k]=sel.value;
+        else if(Array.isArray(st[k])){ if(st[k].indexOf(sel.value)<0) st[k].push(sel.value); }
+        else if(st[k]!==sel.value) st[k]=[st[k], sel.value];
+      });
       var m=document.getElementById('asgmsg'); if(m) m.textContent='Сохранение…';
       fetch(WORKER+'/order-assignees-save',{ method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ cardId:ctx.cardId, assignees:{ stages:st } }) })
