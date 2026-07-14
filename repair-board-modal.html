@@ -96,7 +96,7 @@
     document.getElementById('close').onclick=function(){ t.closeModal(); };
 
     var ME={id:'',name:''}, PRICED=false, IS_ADMIN=false, CAN_SEE_COST=false;
-    var ROWS=[], COMPANIES=[], WORKERS=[], FILTER='', ONLY_URGENT=false;
+    var ROWS=[], COMPANIES=[], WORKERS=[], FILTER='', ONLY_URGENT=false, THUMBS={};
     var CATEGORIES_SEED=['Тележка','Стеллаж','Шкаф','Стол','Полка','Дверь/дверца','Мотор/электрика','Прочее'];
     var COLS=[ {key:'new',title:'Новые заявки на ремонт'}, {key:'done',title:'Сделано'}, {key:'sent',title:'Отправлен'} ];
 
@@ -119,6 +119,13 @@
         if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
         ROWS=(j.requests||[]).filter(function(r){ return r.status!=='rejected'; });
         renderBoard();
+        // миниатюры: одним батч-запросом id первого фото каждой заявки
+        var ids=ROWS.map(function(r){return r.id;});
+        if(ids.length){
+          fetch(WORKER+'/repair-thumbs?ids='+ids.join(',')).then(function(r){return r.json();}).then(function(t){
+            if(t&&t.ok){ THUMBS=t.thumbs||{}; renderBoard(); }
+          }).catch(function(){});
+        }
       }).catch(function(e){ document.getElementById('board').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
     }
     function loadCompanies(){
@@ -177,6 +184,11 @@
         if(!cards.length) h+='<div class="empty">Пусто</div>';
         cards.forEach(function(r){
           h+='<div class="kcard" draggable="true" data-id="'+r.id+'">';
+          if(THUMBS[String(r.id)]){
+            h+='<div style="margin:-9px -11px 8px;overflow:hidden;border-radius:9px 9px 0 0;background:#151a1e">'+
+               '<img src="'+WORKER+'/receipt-get?id='+THUMBS[String(r.id)]+'" loading="lazy" alt="" '+
+               'style="display:block;width:100%;max-height:150px;object-fit:cover"></div>';
+          }
           h+='<div class="nm"><span class="num-badge">'+esc(r.number)+'</span>'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'</div>';
           var sub=[];
           if(r.category) sub.push(esc(r.category));
@@ -744,7 +756,9 @@
       post('/repair-import-trello',{boardName:name}).then(function(j){
         btn.disabled=false; btn.textContent='⬇ Импорт с Trello';
         if(!j||!j.ok){ alert('Не получилось: '+((j&&j.error)||'сервер не ответил')); return; }
-        alert('Импорт завершён.\nПеренесено: '+j.imported+' (новые: '+j.byStatus['new']+', сделано: '+j.byStatus.done+', отправлен: '+j.byStatus.sent+')\nПропущено («гугл» и прочие колонки): '+j.skippedGoogleOrOther+'\nУже были перенесены ранее: '+j.skippedExisting);
+        var m='Импорт завершён.\nПеренесено: '+j.imported+' (новые: '+j.byStatus['new']+', сделано: '+j.byStatus.done+', отправлен: '+j.byStatus.sent+')\nПропущено («гугл» и прочие колонки): '+j.skippedGoogleOrOther+'\nУже были перенесены ранее: '+j.skippedExisting+'\nФото загружено: '+(j.photosAdded||0);
+        if(j.photosPending) m+='\n\nОсталось догрузить фото: '+j.photosPending+' — нажмите «Импорт с Trello» ещё раз.';
+        alert(m);
         loadAll();
       }).catch(function(e){ btn.disabled=false; btn.textContent='⬇ Импорт с Trello'; alert('Сеть: '+(e&&e.message||e)); });
     };
