@@ -319,7 +319,7 @@
     // ---------- панель карточки ----------
     var CUR=null;
     function openCard(id){
-      opRows=[{}]; OPS_FROM_CALC=false; // форма «сделано» не должна тянуть строки из прошлой карточки
+      opRows=[{}]; OPS_FROM_CALC=false; perfRows=['']; DONE_FROM_CALC=false; // форма «сделано» не должна тянуть данные из прошлой карточки
       var u = PRICED ? ('/repair-get?id='+id+'&full=1') : ('/repair-get?id='+id);
       fetch(WORKER+u).then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok) throw new Error((j&&j.error)||'не найдена');
@@ -362,16 +362,14 @@
         h+='<div id="doneForm" style="display:none"></div><div id="earnResult"></div></div>';
       }
 
-      // блок руководителя: цена, статусы, калькулятор, счёт
+      // блок руководителя: цена (из калькулятора), статусы, счёт
       if(PRICED){
         h+='<div class="sec"><div class="sh">Цена клиенту</div>';
-        h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-        h+='<input type="text" id="priceInp" value="'+(r.clientTotal!=null?r.clientTotal:'')+'" placeholder="сумма ₸" style="width:130px;text-align:right">';
-        h+='<button class="btn" id="priceSave" type="button">Сохранить</button>';
-        h+='<button class="btn primary" id="calcBtn" type="button">🧮 Калькулятор</button>';
-        h+='<span class="msg" id="priceMsg">'+(r.hasCalc?'есть сохранённый расчёт калькулятора':'')+'</span></div>';
-        if(r.hasCalc) h+='<div class="muted" style="margin-top:6px">Ручная правка суммы не меняет расчёт калькулятора; при следующем «Сохранить» в калькуляторе сумма пересчитается из него.</div>';
-        h+='</div>';
+        h+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">';
+        h+='<span class="price" style="font-size:16px">'+(r.clientTotal>0?money(r.clientTotal)+' ₸':'—')+'</span>';
+        h+='<span class="muted">'+(r.hasCalc?'из расчёта калькулятора':'расчёта ещё нет')+'</span>';
+        h+='<button class="btn" id="calcBtn" type="button">🧮 '+(r.hasCalc?'Открыть расчёт':'Посчитать')+'</button>';
+        h+='</div><div class="muted" style="margin-top:6px">Цена образуется в калькуляторе при «Отметить сделанным»; здесь её можно посмотреть и поправить расчёт.</div></div>';
 
         h+='<div class="sec"><div class="sh">Статусы</div><div id="chips">';
         [['invoiceSent','счёт выслан'],['paid','оплачен'],['delivered','сдали'],['actSigned','акт подписан']].forEach(function(p){
@@ -407,11 +405,12 @@
       document.getElementById('ovl').onclick=function(e){ if(e.target===this){ closeOvl(); loadAll(); } };
       document.getElementById('editBtn').onclick=function(e){ e.preventDefault(); toggleEdit(); };
       loadThumbs(r.id);
-      // вернулись из калькулятора по кнопке «Отметить сделанным» — сразу открыть форму с операциями из расчёта
+      // вернулись из калькулятора по кнопке «Отметить сделанным» — операции уже в расчёте,
+      // спрашиваем только исполнителей/комментарий/фото
       if(PENDING_DONE===r.id && r.status==='new'){
         PENDING_DONE=null;
-        opRows=[{}]; OPS_FROM_CALC=false;
-        toggleDoneForm();
+        opRows=[{}]; OPS_FROM_CALC=false; perfRows=[''];
+        toggleDoneForm(true);
       }
 
       if(r.status==='new'){
@@ -429,14 +428,6 @@
       }
 
       if(PRICED){
-        document.getElementById('priceSave').onclick=function(){
-          var val=+String(document.getElementById('priceInp').value).replace(/[^\d.]/g,'')||0;
-          var msg=document.getElementById('priceMsg'); msg.textContent='Сохранение…';
-          post('/repair-price',{id:r.id, clientTotal:val, materialsTotal:r.materialsTotal||0})
-            .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?');
-              r.clientTotal=val; msg.textContent='Сохранено ✓'; msg.style.color='var(--green)'; })
-            .catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
-        };
         document.getElementById('calcBtn').onclick=function(){
           openCalcEmbed(r);
         };
@@ -503,14 +494,21 @@
         if(!j||!j.ok){ el.textContent='Не удалось загрузить.'; return; }
         if(!j.hasWork){ el.innerHTML='<span class="muted">Работа ещё не отмечена выполненной — заработок появится после «Отметить сделанным».</span>'; return; }
         if(PRICED){
-          el.innerHTML='Исполнитель: <b>'+esc(j.doneByName||'—')+'</b>'+(j.doneAt?(' <span class="muted">('+esc(String(j.doneAt).slice(0,10))+')</span>'):'')+
+          var perf=(j.performers&&j.performers.length)?j.performers:[{name:j.doneByName}];
+          var who=perf.map(function(p){return esc(p.name||'—');}).join(', ');
+          el.innerHTML='Исполнител'+(perf.length>1?'и':'ь')+': <b>'+who+'</b>'+(j.doneAt?(' <span class="muted">('+esc(String(j.doneAt).slice(0,10))+')</span>'):'')+
             '<br>Операции: <span class="muted">'+esc(opsSummary(j.operations))+'</span>'+
-            '<br>Заработок исполнителя: <b style="color:var(--green)">'+money(j.earned)+' ₸</b> <span class="muted">(по текущим тарифам и доле)</span>';
+            '<br>Заработок: <b style="color:var(--green)">'+money(j.earned)+' ₸</b>'+
+            (perf.length>1?(' <span class="muted">— по '+money(j.perHead)+' ₸ каждому</span>'):'')+
+            ' <span class="muted">(по текущим тарифам и доле)</span>';
         } else {
-          // работнику показываем только ЕГО заработок
-          if(j.doneByMemberId && j.doneByMemberId===ME.id){
+          // работнику показываем только ЕГО заработок (долю)
+          var mine=(j.performers||[]).some(function(p){return p.memberId===ME.id;}) || j.doneByMemberId===ME.id;
+          if(mine){
             var sec=document.getElementById('myEarnSec'); if(sec) sec.style.display='';
-            el.innerHTML='<div class="earnbox">Ваш заработок за эту работу<br><span class="big">'+money(j.earned)+' ₸</span></div>';
+            var myAmt=(j.performers&&j.performers.length>1)?j.perHead:j.earned;
+            el.innerHTML='<div class="earnbox">Ваш заработок за эту работу<br><span class="big">'+money(myAmt)+' ₸</span>'+
+              ((j.performers&&j.performers.length>1)?('<div class="muted" style="margin-top:4px">ваша доля — работа делилась на '+j.performers.length+'</div>'):'')+'</div>';
           }
         }
       }).catch(function(){});
@@ -589,6 +587,8 @@
     ];
     var TH_LIST=[0.5,0.8,1,1.5,2,3,4,5,8,10,12,16];
     var opRows=[{}];
+    var perfRows=[''];           // выбранные исполнители (id работников)
+    var DONE_FROM_CALC=false;    // форма после калькулятора: операции не спрашиваем — они в расчёте
     var OPS_FROM_CALC=false;
     var PENDING_DONE=null; // id заявки, для которой после калькулятора надо открыть форму «сделано»
 
@@ -604,11 +604,13 @@
         '&t='+Date.now());
     }
 
-    function toggleDoneForm(){
+    function toggleDoneForm(fromCalc){
       var box=document.getElementById('doneForm'); if(!box) return;
       if(box.style.display==='none'){
         box.style.display='';
-        // подставить операции из расчёта калькулятора (если он есть и форма ещё пустая)
+        DONE_FROM_CALC=!!fromCalc;
+        if(DONE_FROM_CALC){ drawDoneForm(); return; }
+        // ручной путь («внести без калькулятора»): подставить операции из расчёта, если он есть
         var pristine = opRows.length===1 && !opRows[0].kind && !opRows[0].qty;
         if(pristine){
           fetch(WORKER+'/repair-calc-ops?id='+CUR.id).then(function(x){return x.json();}).then(function(j){
@@ -624,58 +626,84 @@
 
     function drawDoneForm(){
       var box=document.getElementById('doneForm');
-      var h='<div class="muted" style="margin:8px 0 2px">Что сделали по факту — по этим данным начисляется <b>зарплата исполнителя</b> (цена клиенту считается отдельно, в калькуляторе):</div>';
-      if(OPS_FROM_CALC) h+='<div class="muted" style="margin:0 0 2px;color:var(--green)">Операции подставлены из расчёта калькулятора — поправьте, если по факту сделали иначе.</div>';
-      opRows.forEach(function(row,i){
-        var kind=row.kind||'cut';
-        var meta=OP_KINDS.filter(function(k){return k.value===kind;})[0]||OP_KINDS[0];
-        h+='<div class="opRow">';
-        h+='<div class="fl">Работа<select class="opKind" data-i="'+i+'">';
-        OP_KINDS.forEach(function(k){ h+='<option value="'+k.value+'"'+(k.value===kind?' selected':'')+'>'+k.label+'</option>'; });
-        h+='</select></div>';
-        if(meta.needsMaterial){
-          h+='<div class="fl">Материал<select class="opMat" data-i="'+i+'">'+
-             '<option value="black"'+(row.material==='ss'?'':' selected')+'>Чёрный металл</option>'+
-             '<option value="ss"'+(row.material==='ss'?' selected':'')+'>Нержавейка</option></select></div>';
-        }
-        if(meta.needsThickness){
-          h+='<div class="fl">Толщина, мм<select class="opTh" data-i="'+i+'">';
-          TH_LIST.forEach(function(v){ h+='<option value="'+v+'"'+(String(row.thickness)===String(v)?' selected':'')+'>'+v+'</option>'; });
+      var h='';
+      if(DONE_FROM_CALC){
+        h+='<div class="muted" style="margin:8px 0 2px;color:var(--green)">Работы и материалы взяты из вашего расчёта в калькуляторе — вводить их второй раз не нужно. Осталось указать, кто делал.</div>';
+      } else {
+        h+='<div class="muted" style="margin:8px 0 2px">Что сделали по факту — по этим данным начисляется <b>зарплата исполнителя</b> (цена клиенту считается отдельно, в калькуляторе):</div>';
+        if(OPS_FROM_CALC) h+='<div class="muted" style="margin:0 0 2px;color:var(--green)">Операции подставлены из расчёта калькулятора — поправьте, если по факту сделали иначе.</div>';
+        opRows.forEach(function(row,i){
+          var kind=row.kind||'cut';
+          var meta=OP_KINDS.filter(function(k){return k.value===kind;})[0]||OP_KINDS[0];
+          h+='<div class="opRow">';
+          h+='<div class="fl">Работа<select class="opKind" data-i="'+i+'">';
+          OP_KINDS.forEach(function(k){ h+='<option value="'+k.value+'"'+(k.value===kind?' selected':'')+'>'+k.label+'</option>'; });
           h+='</select></div>';
-        }
-        h+='<div class="fl">'+meta.qtyLabel+'<input type="text" class="opQty" data-i="'+i+'" value="'+(row.qty||'')+'" style="width:80px"></div>';
-        if(opRows.length>1) h+='<button type="button" class="btn opDel" data-i="'+i+'" style="padding:4px 9px">✕</button>';
+          if(meta.needsMaterial){
+            h+='<div class="fl">Материал<select class="opMat" data-i="'+i+'">'+
+               '<option value="black"'+(row.material==='ss'?'':' selected')+'>Чёрный металл</option>'+
+               '<option value="ss"'+(row.material==='ss'?' selected':'')+'>Нержавейка</option></select></div>';
+          }
+          if(meta.needsThickness){
+            h+='<div class="fl">Толщина, мм<select class="opTh" data-i="'+i+'">';
+            TH_LIST.forEach(function(v){ h+='<option value="'+v+'"'+(String(row.thickness)===String(v)?' selected':'')+'>'+v+'</option>'; });
+            h+='</select></div>';
+          }
+          h+='<div class="fl">'+meta.qtyLabel+'<input type="text" class="opQty" data-i="'+i+'" value="'+(row.qty||'')+'" style="width:80px"></div>';
+          if(opRows.length>1) h+='<button type="button" class="btn opDel" data-i="'+i+'" style="padding:4px 9px">✕</button>';
+          h+='</div>';
+        });
+        h+='<button type="button" class="btn" id="opAdd" style="margin-top:8px">+ ещё операция</button>';
+      }
+      // исполнители (можно несколько — заработок делится поровну)
+      h+='<div class="fld"><label>Кто сделал ремонт'+(perfRows.length>1?' (заработок делится поровну)':'')+'</label></div>';
+      perfRows.forEach(function(pid,i){
+        h+='<div style="display:flex;gap:8px;align-items:center;margin-top:'+(i?'6px':'0')+'">';
+        h+='<select class="perfSel" data-i="'+i+'" style="flex:1"><option value="">— выберите работника —</option>'+
+           WORKERS.map(function(w){ return '<option value="'+esc(w.id)+'" data-name="'+esc(w.name)+'"'+(w.id===pid?' selected':'')+'>'+esc(w.name)+'</option>'; }).join('')+'</select>';
+        if(perfRows.length>1) h+='<button type="button" class="btn perfDel" data-i="'+i+'" style="padding:4px 9px">✕</button>';
         h+='</div>';
       });
-      h+='<button type="button" class="btn" id="opAdd" style="margin-top:8px">+ ещё операция</button>';
-      h+='<div class="fld"><label>Кто сделал ремонт</label><select id="doneWorker"><option value="">— выберите работника —</option>'+
-         WORKERS.map(function(w){ return '<option value="'+esc(w.id)+'" data-name="'+esc(w.name)+'">'+esc(w.name)+'</option>'; }).join('')+'</select></div>';
+      h+='<button type="button" class="btn" id="perfAdd" style="margin-top:8px">+ ещё исполнитель</button>';
       h+='<div class="fld"><label>Комментарий</label><input type="text" id="doneNote" placeholder="Что сделали (кратко)"></div>';
       h+='<label class="f">📷 Фото <input type="file" id="doneFile" accept="image/*" capture="environment"></label>';
       h+='<button class="btn green" id="doneSubmit" type="button" style="margin-top:10px">Готово — посчитать заработок</button>';
       box.innerHTML=h;
 
-      [].forEach.call(box.querySelectorAll('.opKind'), function(s){ s.onchange=function(){ opRows[+this.getAttribute('data-i')].kind=this.value; drawDoneForm(); }; });
-      [].forEach.call(box.querySelectorAll('.opMat'), function(s){ s.onchange=function(){ opRows[+this.getAttribute('data-i')].material=this.value; }; });
-      [].forEach.call(box.querySelectorAll('.opTh'), function(s){ s.onchange=function(){ opRows[+this.getAttribute('data-i')].thickness=+this.value; }; opRows[+s.getAttribute('data-i')].thickness=+s.value; });
-      [].forEach.call(box.querySelectorAll('.opQty'), function(inp){ inp.oninput=function(){ opRows[+this.getAttribute('data-i')].qty=this.value; }; });
-      [].forEach.call(box.querySelectorAll('.opDel'), function(b){ b.onclick=function(){ opRows.splice(+this.getAttribute('data-i'),1); drawDoneForm(); }; });
-      document.getElementById('opAdd').onclick=function(){ opRows.push({}); drawDoneForm(); };
+      if(!DONE_FROM_CALC){
+        [].forEach.call(box.querySelectorAll('.opKind'), function(s){ s.onchange=function(){ opRows[+this.getAttribute('data-i')].kind=this.value; drawDoneForm(); }; });
+        [].forEach.call(box.querySelectorAll('.opMat'), function(s){ s.onchange=function(){ opRows[+this.getAttribute('data-i')].material=this.value; }; });
+        [].forEach.call(box.querySelectorAll('.opTh'), function(s){ s.onchange=function(){ opRows[+this.getAttribute('data-i')].thickness=+this.value; }; opRows[+s.getAttribute('data-i')].thickness=+s.value; });
+        [].forEach.call(box.querySelectorAll('.opQty'), function(inp){ inp.oninput=function(){ opRows[+this.getAttribute('data-i')].qty=this.value; }; });
+        [].forEach.call(box.querySelectorAll('.opDel'), function(b){ b.onclick=function(){ opRows.splice(+this.getAttribute('data-i'),1); drawDoneForm(); }; });
+        document.getElementById('opAdd').onclick=function(){ opRows.push({}); drawDoneForm(); };
+      }
+      [].forEach.call(box.querySelectorAll('.perfSel'), function(s){ s.onchange=function(){ perfRows[+this.getAttribute('data-i')]=this.value; }; });
+      [].forEach.call(box.querySelectorAll('.perfDel'), function(b){ b.onclick=function(){ perfRows.splice(+this.getAttribute('data-i'),1); drawDoneForm(); }; });
+      document.getElementById('perfAdd').onclick=function(){ perfRows.push(''); drawDoneForm(); };
       document.getElementById('doneSubmit').onclick=submitDone;
     }
 
     function submitDone(){
-      var rows=opRows.filter(function(r){ return r.kind && +r.qty>0; });
-      var workerSel=document.getElementById('doneWorker');
-      if(!workerSel.value){ alert('Выберите, кто сделал ремонт — это нужно для правильного начисления заработка.'); return; }
-      var doneByName=workerSel.options[workerSel.selectedIndex].getAttribute('data-name');
+      var performers=[];
+      [].forEach.call(document.querySelectorAll('.perfSel'), function(s){
+        if(!s.value) return;
+        var nm=s.options[s.selectedIndex].getAttribute('data-name');
+        if(!performers.some(function(p){return p.memberId===s.value;})) performers.push({ memberId:s.value, name:nm });
+      });
+      if(!performers.length){ alert('Выберите хотя бы одного исполнителя — это нужно для начисления заработка.'); return; }
+      var rows = DONE_FROM_CALC ? [] : opRows.filter(function(r){ return r.kind && +r.qty>0; });
+      if(!DONE_FROM_CALC && !rows.length){ alert('Добавьте хотя бы одну операцию с количеством — иначе заработок будет нулевым.'); return; }
       var note=document.getElementById('doneNote').value.trim();
       var fileInp=document.getElementById('doneFile');
       var btn=document.getElementById('doneSubmit'); btn.disabled=true; btn.textContent='Считаю…';
-      post('/repair-mark-done',{ id:CUR.id, byMemberId:workerSel.value, byName:doneByName, note:note, operations:rows })
+      post('/repair-mark-done',{ id:CUR.id, performers:performers, note:note, operations:rows })
         .then(function(j){
           if(!j||!j.ok) throw new Error((j&&j.error)||'не удалось сохранить');
-          document.getElementById('earnResult').innerHTML='<div class="earnbox">Заработок за эту работу<br><span class="big">'+money(j.earned)+' ₸</span></div>';
+          var eh = (j.performers>1)
+            ? ('Заработок за эту работу: <span class="big">'+money(j.earned)+' ₸</span><br>по '+money(j.perHead)+' ₸ каждому из '+j.performers+' исполнителей')
+            : ('Заработок за эту работу<br><span class="big">'+money(j.earned)+' ₸</span>');
+          document.getElementById('earnResult').innerHTML='<div class="earnbox">'+eh+'</div>';
           document.getElementById('doneForm').style.display='none';
           var chain=Promise.resolve();
           if(fileInp.files && fileInp.files[0]){
