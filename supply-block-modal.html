@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Блокировка: нет материала</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:13.5px}
+    #app{max-width:560px;margin:0 auto;padding:18px 16px 90px}
+    h2{margin:0 0 4px;font-size:17px}
+    .muted{color:var(--muted);font-size:12.5px}
+    .fld{display:flex;flex-direction:column;gap:4px;margin-top:12px}
+    .fld label{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+    input[type=text]{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:9px 10px;font-size:13.5px;width:100%;box-sizing:border-box}
+    label.fchk{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:14px;cursor:pointer}
+    .ctx{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:12px;font-size:12.5px;line-height:1.6}
+    .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:9px 16px;font-size:13px;cursor:pointer}
+    .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+    .btn:disabled{opacity:.55;cursor:default}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end;gap:10px;align-items:center}
+    #msg{font-size:12.5px;color:var(--muted);margin-right:auto}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2>🚫 Блокировка: нет материала</h2>
+    <div class="muted">Блокировка ставится вместе с заявкой на снабжение — снабженец сразу увидит, что купить, и заказ не потеряется.</div>
+    <div class="ctx" id="ctx">Загрузка…</div>
+    <div class="fld"><label>Какого материала не хватает</label><input type="text" id="fName" placeholder="например: лист 3мм нерж 304, 1250×2500"></div>
+    <div class="fld"><label>Сколько нужно</label><input type="text" id="fQty" placeholder="например: 2 листа"></div>
+    <div class="fld"><label>Комментарий</label><input type="text" id="fComment" placeholder="есть 8 из 16 шт, остальное — из нового листа"></div>
+    <label class="fchk"><input type="checkbox" id="fUrgent" checked> 🔥 Срочно (заказ стоит)</label>
+    <label class="fchk">📎 Фото или документ <input type="file" id="fFiles" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" multiple></label>
+    <div class="muted" style="margin-top:8px">Заказчик запишется автоматически. Заявка попадёт в «Снабжение → Новая заявка» со ссылкой на эту карточку.</div>
+  </div>
+  <div class="bar">
+    <span id="msg"></span>
+    <button class="btn" id="cancel" type="button">Отмена (без блокировки)</button>
+    <button class="btn primary" id="send" type="button">Создать заявку и заблокировать</button>
+  </div>
+  <script src="./config.js"></script>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    var A = t.arg('data') || {};
+    // args: cardId, cardName, cardNumber, cardUrl, opIndex, opLabel
+    var ME = { id:'', name:'' };
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+    document.getElementById('ctx').innerHTML =
+      'Заказ: <b>№'+esc(A.cardNumber||'?')+' · '+esc(A.cardName||'')+'</b><br>Операция: <b>'+esc(A.opLabel||'')+'</b>';
+
+    t.member('id','fullName','username').then(function(m){
+      ME.id=(m&&m.id)||''; ME.name=(m&&(m.fullName||m.username))||'';
+    }).catch(function(){});
+
+    function fileToB64(file){
+      return new Promise(function(res,rej){ var fr=new FileReader();
+        fr.onload=function(){ res(String(fr.result).split(',')[1]); }; fr.onerror=rej; fr.readAsDataURL(file); });
+    }
+    function compressImage(file){
+      return new Promise(function(resolve,reject){
+        var fr=new FileReader();
+        fr.onload=function(){ var img=new Image();
+          img.onload=function(){ var maxSide=1280,w=img.width,hgt=img.height,k=Math.min(1,maxSide/Math.max(w,hgt));
+            var cnv=document.createElement('canvas'); cnv.width=Math.round(w*k); cnv.height=Math.round(hgt*k);
+            cnv.getContext('2d').drawImage(img,0,0,cnv.width,cnv.height);
+            resolve(cnv.toDataURL('image/jpeg',0.72).split(',')[1]); };
+          img.onerror=reject; img.src=fr.result; };
+        fr.onerror=reject; fr.readAsDataURL(file);
+      });
+    }
+    function prepFile(file){
+      if(/^image\//.test(file.type||'')) return compressImage(file).then(function(b64){ return { b64:b64, mime:'image/jpeg', filename:file.name||'фото.jpg' }; });
+      if(file.size > 650000) return Promise.reject(new Error('Файл «'+file.name+'» слишком большой (макс ~650 КБ). Фото можно любое — оно сожмётся.'));
+      return fileToB64(file).then(function(b64){ return { b64:b64, mime:file.type||'application/octet-stream', filename:file.name||'файл' }; });
+    }
+    function summaryOf(route){
+      var ops=(route&&route.ops)||[];
+      var d=ops.filter(function(o){return o.status==='done';}).length;
+      var blocked=ops.filter(function(o){return o.block&&o.block.reason;});
+      return { d:d, t:ops.length, b:blocked.length?1:0, r:blocked.length?String(blocked[0].block.reason).slice(0,60):'' };
+    }
+
+    document.getElementById('cancel').onclick=function(){ t.closeModal(); };
+    document.getElementById('send').onclick=function(){
+      var name=document.getElementById('fName').value.trim();
+      if(!name){ alert('Укажите, какого материала не хватает — снабженец должен понять, что покупать.'); return; }
+      var qty=document.getElementById('fQty').value.trim();
+      var userComment=document.getElementById('fComment').value.trim();
+      var urgent=document.getElementById('fUrgent').checked?1:0;
+      var comment='🚫 БЛОКИРОВКА заказа №'+(A.cardNumber||'?')+' «'+(A.cardName||'')+'», операция «'+(A.opLabel||'')+'»'+(userComment?(' — '+userComment):'');
+      var btn=this, msg=document.getElementById('msg');
+      btn.disabled=true; msg.textContent='Создаю заявку…';
+
+      // 1) заявка на снабжение (в колонку «Новая заявка»)
+      fetch(WORKER+'/supply-request',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ name:name, qty:qty, comment:comment, link:(A.cardUrl||''),
+          urgent:urgent, byMemberId:ME.id, byName:ME.name })})
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+        var files=document.getElementById('fFiles').files;
+        var chain=Promise.resolve();
+        [].forEach.call(files, function(f,i){
+          chain=chain.then(function(){
+            msg.textContent='Файл '+(i+1)+' из '+files.length+'…';
+            return prepFile(f).then(function(p){
+              return fetch(WORKER+'/receipt-save',{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({kind:'req',refId:String(j.id),filename:p.filename,mime:p.mime,dataB64:p.b64})})
+                .then(function(r){return r.json();})
+                .then(function(jr){ if(!jr||!jr.ok) throw new Error((jr&&jr.error)||'файл не сохранился'); });
+            });
+          });
+        });
+        return chain;
+      })
+      // 2) ставим блокировку на операцию маршрута
+      .then(function(){
+        msg.textContent='Ставлю блокировку…';
+        return fetch(WORKER+'/route-get?cardId='+encodeURIComponent(A.cardId||'')).then(function(r){return r.json();});
+      })
+      .then(function(rg){
+        var route=(rg&&rg.ok&&rg.route)||null;
+        if(!route || !route.ops || !route.ops[+A.opIndex]) return null; // маршрут изменили параллельно — заявка всё равно создана
+        route.ops[+A.opIndex].block={ reason:'нет материала: '+name+' (заявка на снабжение создана)' };
+        route.updatedAt=Date.now();
+        return fetch(WORKER+'/route-save',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ cardId:A.cardId, route:route })})
+          .then(function(r){return r.json();})
+          .then(function(){ return t.set('card','shared','routeSummary', summaryOf(route)).catch(function(){}); });
+      })
+      .then(function(){ msg.textContent='Готово ✓'; msg.style.color='var(--green)'; setTimeout(function(){ t.closeModal(); }, 600); })
+      .catch(function(e){ btn.disabled=false; msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
+    };
+  </script>
+</body>
+</html>

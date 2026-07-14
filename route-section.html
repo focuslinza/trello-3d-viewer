@@ -48,7 +48,7 @@
     var DEFAULT_CHECKED = { cut:1, bend:1, weld:1, shleif:1 };
     var STATUS_NEXT = { queued:'active', active:'done', done:'queued' };
     var STATUS_LBL  = { queued:'○ в очереди', active:'▶ в работе', done:'✓ готово' };
-    var ROUTE=null, WORKERS=[], CARD_ID=null, editing=false;
+    var ROUTE=null, WORKERS=[], CARD_ID=null, CARD_META={name:'',url:'',num:''}, editing=false;
 
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -141,14 +141,24 @@
       });
       [].forEach.call(document.querySelectorAll('.blkbtn'), function(b){
         b.onclick=function(){
-          var o=ROUTE.ops[+this.getAttribute('data-i')];
-          if(o.block){ o.block=null; }
-          else{
-            var r=prompt('Причина блокировки (например: нет материала, есть 8 из 16 шт):','нет материала');
-            if(r==null) return;
-            o.block={ reason: String(r).trim()||'блокировка' };
+          var i=+this.getAttribute('data-i');
+          var o=ROUTE.ops[i];
+          if(o.block){
+            // снятие блокировки — материал привезли, работаем дальше
+            o.block=null;
+            save().then(renderRoute);
+            return;
           }
-          save().then(renderRoute);
+          // постановка блокировки: обязательно создаётся заявка на снабжение,
+          // чтобы снабженец сразу увидел, что купить (окно всё сделает само)
+          t.modal({
+            title: '🚫 Блокировка: нет материала',
+            url: './supply-block-modal.html?t=' + Date.now(),
+            fullscreen: false,
+            accentColor: '#c9372c',
+            args: { data: { cardId: CARD_ID, cardName: CARD_META.name, cardNumber: CARD_META.num,
+                            cardUrl: CARD_META.url, opIndex: i, opLabel: o.label } }
+          });
         };
       });
       t.sizeTo('#wrap');
@@ -158,8 +168,9 @@
     function loadAll(){
       if(loading || editing) return Promise.resolve();
       loading=true;
-      return t.card('id').then(function(c){
+      return t.card('id','name','url','idShort').then(function(c){
         CARD_ID=c.id;
+        CARD_META={ name:(c&&c.name)||'', url:(c&&c.url)||'', num:(c&&c.idShort)!=null?String(c.idShort):'' };
         return Promise.all([
           fetch(WORKER+'/route-get?cardId='+encodeURIComponent(CARD_ID)).then(function(r){return r.json();}).catch(function(){return {};}),
           fetch(WORKER+'/workers-names').then(function(r){return r.json();}).catch(function(){return {};})
