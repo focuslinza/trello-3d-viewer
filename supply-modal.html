@@ -396,8 +396,9 @@
           out+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 12px">';
           bySec[sec].forEach(function(code){
             var it=CAT[code]; var val=(over[code]!=null&&over[code]!=='')?over[code]:it.u;
+            var spec=(it.spec||'').trim();
             out+='<div style="display:flex;align-items:center;gap:6px;justify-content:space-between">'+
-                 '<label style="font-size:12.5px">'+esc(it.lbl)+'</label>'+
+                 '<label style="font-size:12.5px">'+esc(it.lbl)+(spec?' <span class="small muted" title="Параметры позиции (размер листа / сечение)">'+esc(spec)+' мм</span>':'')+'</label>'+
                  '<span style="white-space:nowrap"><input type="number" step="any" class="'+cls+'" data-code="'+code+'" value="'+prNum(val)+'" style="'+IST+';width:92px;text-align:right"> <span class="small muted">₸</span></span></div>';
           });
           out+='</div></div>';
@@ -428,6 +429,7 @@
         it=it||{};
         var r='<div class="scustrow" data-t="'+t+'" data-code="'+esc(it.code||'')+'" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px">';
         r+=fld('Название', txtf('lbl', it.lbl, 'width:100%'), 'flex:1;min-width:170px');
+        r+=fld('Параметры, мм', txtf('spec', it.spec, 'width:110px'), 'width:110px');
         r+=fld('Раздел', secPicker(it.sec, known), 'width:190px');
         if(t==='mat'){
           r+=fld('Цена, ₸', numf('u', it.u));
@@ -466,8 +468,9 @@
         var t=row.getAttribute('data-t'), code=row.getAttribute('data-code');
         var lbl=fv(row,'lbl').trim(); if(!lbl) return;
         var sec=fv(row,'sec').trim();
-        if(t==='mat') customMat.push({ code:code, lbl:lbl, sec:sec||'ДРУГИЕ МАТЕРИАЛЫ', u:+fv(row,'u')||0, ost:(+fv(row,'ost')||0)/100, rah:(+fv(row,'rah')||0)/100 });
-        else customCmp.push({ code:code, lbl:lbl, sec:sec||'ДРУГИЕ КОМПОНЕНТЫ', u:+fv(row,'u')||0, ost:0, rah:(+fv(row,'rah')||0)/100, m:(fv(row,'m')!==''?+fv(row,'m'):1) });
+        var spec=fv(row,'spec').trim();
+        if(t==='mat') customMat.push({ code:code, lbl:lbl, spec:spec, sec:sec||'ДРУГИЕ МАТЕРИАЛЫ', u:+fv(row,'u')||0, ost:(+fv(row,'ost')||0)/100, rah:(+fv(row,'rah')||0)/100 });
+        else customCmp.push({ code:code, lbl:lbl, spec:spec, sec:sec||'ДРУГИЕ КОМПОНЕНТЫ', u:+fv(row,'u')||0, ost:0, rah:(+fv(row,'rah')||0)/100, m:(fv(row,'m')!==''?+fv(row,'m'):1) });
       });
       return { mat:mat, cmp:cmp, customMat:customMat, customCmp:customCmp };
     }
