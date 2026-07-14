@@ -427,26 +427,20 @@
       }
       function custRow(t,it,known){
         it=it||{};
+        // проценты (отходы/расходники/работа) снабженцу не показываем — это
+        // коэффициенты руководства; при сохранении они берутся из прежних значений
         var r='<div class="scustrow" data-t="'+t+'" data-code="'+esc(it.code||'')+'" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px">';
         r+=fld('Название', txtf('lbl', it.lbl, 'width:100%'), 'flex:1;min-width:170px');
         r+=fld('Параметры, мм', txtf('spec', it.spec, 'width:110px'), 'width:110px');
         r+=fld('Раздел', secPicker(it.sec, known), 'width:190px');
-        if(t==='mat'){
-          r+=fld('Цена, ₸', numf('u', it.u));
-          r+=fld('Отходы, %', numf('ost', prPct(it.ost,15), 'width:72px'));
-          r+=fld('Расходники, %', numf('rah', prPct(it.rah,4), 'width:100px'));
-        } else {
-          r+=fld('Цена, ₸', numf('u', it.u));
-          r+=fld('Расходники, %', numf('rah', prPct(it.rah,7), 'width:100px'));
-          r+=fld('Работа, ×', numf('m', (it.m!=null?it.m:1), 'width:72px'));
-        }
+        r+=fld('Цена, ₸', numf('u', it.u));
         r+='<button class="sdelcust btn" data-t="'+t+'" data-code="'+esc(it.code||'')+'" type="button" style="padding:6px 10px" title="Удалить позицию">✕</button>';
         r+='</div>';
         return r;
       }
 
       h+='<h3 style="margin-top:18px">Свои материалы</h3>';
-      h+='<div class="small muted" style="margin-bottom:6px">Появился новый материал — добавьте его здесь, и он сразу станет доступен в калькуляторе. «Отходы %» — надбавка на обрезки (обычно 15, трубы/профиль 20), «Расходники %» — сопутствующие затраты (обычно 4).</div>';
+      h+='<div class="small muted" style="margin-bottom:6px">Появился новый материал — добавьте его здесь, и он сразу станет доступен в калькуляторе.</div>';
       PR.customMat.forEach(function(it){ h+=custRow('mat', it, matSections); });
       h+='<button class="btn" data-sadd="mat" type="button" style="margin-top:4px">+ материал</button>';
 
@@ -463,14 +457,26 @@
       [].forEach.call(document.querySelectorAll('.smp'), function(el){ if(el.value!=='') mat[el.getAttribute('data-code')]=+el.value; });
       [].forEach.call(document.querySelectorAll('.scp'), function(el){ if(el.value!=='') cmp[el.getAttribute('data-code')]=+el.value; });
       var customMat=[], customCmp=[];
+      // коэффициенты (отходы/расходники/работа) в форме не показываются —
+      // берём прежние значения по коду позиции, для новых — стандартные
+      var oldMat={}, oldCmp={};
+      (PR.customMat||[]).forEach(function(it){ oldMat[it.code]=it; });
+      (PR.customCmp||[]).forEach(function(it){ oldCmp[it.code]=it; });
       function fv(row,f){ var el=row.querySelector('[data-f="'+f+'"]'); return el?el.value:''; }
       [].forEach.call(document.querySelectorAll('.scustrow'), function(row){
         var t=row.getAttribute('data-t'), code=row.getAttribute('data-code');
         var lbl=fv(row,'lbl').trim(); if(!lbl) return;
         var sec=fv(row,'sec').trim();
         var spec=fv(row,'spec').trim();
-        if(t==='mat') customMat.push({ code:code, lbl:lbl, spec:spec, sec:sec||'ДРУГИЕ МАТЕРИАЛЫ', u:+fv(row,'u')||0, ost:(+fv(row,'ost')||0)/100, rah:(+fv(row,'rah')||0)/100 });
-        else customCmp.push({ code:code, lbl:lbl, spec:spec, sec:sec||'ДРУГИЕ КОМПОНЕНТЫ', u:+fv(row,'u')||0, ost:0, rah:(+fv(row,'rah')||0)/100, m:(fv(row,'m')!==''?+fv(row,'m'):1) });
+        if(t==='mat'){
+          var om=oldMat[code]||{};
+          customMat.push({ code:code, lbl:lbl, spec:spec, sec:sec||'ДРУГИЕ МАТЕРИАЛЫ', u:+fv(row,'u')||0,
+            ost:(om.ost!=null?om.ost:0.15), rah:(om.rah!=null?om.rah:0.04) });
+        } else {
+          var oc=oldCmp[code]||{};
+          customCmp.push({ code:code, lbl:lbl, spec:spec, sec:sec||'ДРУГИЕ КОМПОНЕНТЫ', u:+fv(row,'u')||0,
+            ost:(oc.ost!=null?oc.ost:0), rah:(oc.rah!=null?oc.rah:0.07), m:(oc.m!=null?oc.m:1) });
+        }
       });
       return { mat:mat, cmp:cmp, customMat:customMat, customCmp:customCmp };
     }
