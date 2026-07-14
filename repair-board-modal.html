@@ -80,6 +80,7 @@
       <h2>Ремонт</h2>
       <input type="text" id="q" placeholder="Поиск: Р-№, что чинили, клиент…" style="flex:1;min-width:180px">
       <label class="f" style="margin:0"><input type="checkbox" id="onlyUrgent"> 🔥 только срочные</label>
+      <button class="btn" id="importBtn" type="button" style="display:none" title="Разово перенести карточки со старой Trello-доски «Ремонт» в эти колонки">⬇ Импорт с Trello</button>
     </div>
     <div id="board"><div class="empty">Загрузка…</div></div>
   </div>
@@ -736,6 +737,17 @@
     }
 
     // ---------- init ----------
+    document.getElementById('importBtn').onclick=function(){
+      var name=prompt('С какой Trello-доски перенести карточки? Колонки сопоставятся по названиям («Новые…», «Сделано», «отправлен»), «Внесен в гугл» будет пропущена. Повторный импорт дублей не создаёт.', 'Ремонт');
+      if(name==null) return;
+      var btn=this; btn.disabled=true; btn.textContent='Импорт…';
+      post('/repair-import-trello',{boardName:name}).then(function(j){
+        btn.disabled=false; btn.textContent='⬇ Импорт с Trello';
+        if(!j||!j.ok){ alert('Не получилось: '+((j&&j.error)||'сервер не ответил')); return; }
+        alert('Импорт завершён.\nПеренесено: '+j.imported+' (новые: '+j.byStatus['new']+', сделано: '+j.byStatus.done+', отправлен: '+j.byStatus.sent+')\nПропущено («гугл» и прочие колонки): '+j.skippedGoogleOrOther+'\nУже были перенесены ранее: '+j.skippedExisting);
+        loadAll();
+      }).catch(function(e){ btn.disabled=false; btn.textContent='⬇ Импорт с Trello'; alert('Сеть: '+(e&&e.message||e)); });
+    };
     document.getElementById('q').oninput=function(){ FILTER=this.value; renderBoard(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
     document.getElementById('onlyUrgent').onchange=function(){ ONLY_URGENT=this.checked; renderBoard(); };
 
@@ -750,6 +762,7 @@
         .then(function(j){ PRICED=!!(j&&j.canRepair); CAN_SEE_COST=!!(j&&(j.canSeeCost||j.canRepair)); })
         .catch(function(){ PRICED=false; CAN_SEE_COST=false; });
     }).then(function(){
+      if(IS_ADMIN) document.getElementById('importBtn').style.display='';
       return Promise.all([loadCompanies(), loadWorkers()]);
     }).then(loadAll)
     .catch(function(e){ document.getElementById('board').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
