@@ -36,7 +36,6 @@
 <body>
   <div id="app"><div class="muted">Загрузка счёта…</div></div>
   <div class="bar">
-    <button class="btn" id="close" type="button">Закрыть</button>
     <button class="btn primary" id="pdf" type="button" style="display:none">⬇ Скачать PDF</button>
   </div>
   <script>
@@ -46,10 +45,6 @@
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function money(v){ return (window.INVOICE&&window.INVOICE.money)?window.INVOICE.money(v):(Math.round(+v||0)).toLocaleString('ru-RU'); }
     function parse(s,d){ try{ var v=JSON.parse(s); return v==null?d:v; }catch(e){ return d; } }
-
-    document.getElementById('close').onclick=function(){
-      try{ parent.postMessage({metalshopEmbedClose:1},'*'); }catch(e){}
-    };
 
     function statusPill(p){
       if(!p) return '';
@@ -72,40 +67,64 @@
         h+='</div>';
       }
       var r=CUR;
-      var sup=parse(r.supplier_json,{})||{}, buy=parse(r.buyer_json,{})||{}, items=parse(r.items_json,[])||[];
       var p=PAYINFO[r.number];
       h+='<h2>Счёт на оплату №'+esc(r.number)+' от '+esc(r.date_text||r.date_iso||'')+'</h2>';
       h+='<div class="pillrow">'+
          (r.sent_at?('<span class="pill g">📤 выслан '+esc(String(r.sent_at).slice(0,16).replace('T',' '))+(r.sent_to?(' → '+esc(r.sent_to)):'')+'</span>'):'<span class="pill">не выслан</span>')+
          statusPill(p)+'</div>';
-      h+='<div class="doc"><h3>Счёт на оплату № '+esc(r.number)+' от '+esc(r.date_text||'')+'</h3>';
-      h+='<div><b>Поставщик:</b> '+esc([sup.bin?('БИН/ИИН '+sup.bin):'', sup.name||'', sup.addr||''].filter(Boolean).join(', '))+'</div>';
-      h+='<div style="margin-top:4px"><b>Покупатель:</b> '+esc([buy.bin?('БИН/ИИН '+buy.bin):'', buy.name||'', buy.addr||''].filter(Boolean).join(', '))+'</div>';
-      h+='<div style="margin-top:4px"><b>Договор:</b> '+esc(r.contract||'Без договора')+'</div>';
-      h+='<table><thead><tr><th>№</th><th>Код</th><th>Наименование</th><th class="num">Кол-во</th><th>Ед.</th><th class="num">Цена</th><th class="num">Сумма</th></tr></thead><tbody>';
-      items.forEach(function(it,i){
-        var s=(+it.qty||0)*(+it.price||0);
-        h+='<tr><td>'+(i+1)+'</td><td>'+esc(it.code||'')+'</td><td>'+esc(it.name||'')+'</td><td class="num">'+money(it.qty)+'</td><td>'+esc(it.unit||'Услуга')+'</td><td class="num">'+money(it.price)+'</td><td class="num">'+money(s)+'</td></tr>';
+      // заказы в счёте: клик открывает карточку Trello в новой вкладке —
+      // посмотрели заказ, закрыли вкладку, вернулись сюда
+      var items0=parse(r.items_json,[])||[], cardIds0=parse(r.card_ids_json,[])||[];
+      var orderChips=[];
+      items0.forEach(function(it){
+        if(it && it.cardId) orderChips.push({ cardId:it.cardId, code:it.code||'', name:it.name||'' });
       });
-      h+='</tbody></table><div class="tot">Итого: '+money(r.total)+' ₸</div></div>';
+      if(!orderChips.length && cardIds0.length) cardIds0.forEach(function(id){ orderChips.push({ cardId:id, code:'', name:'карточка заказа' }); });
+      if(orderChips.length){
+        h+='<div class="pillrow" style="margin-top:2px">'+orderChips.map(function(o){
+          var lbl=(o.code?('№'+esc(o.code)+' · '):'')+esc(String(o.name).slice(0,48))+(String(o.name).length>48?'…':'');
+          return '<a href="https://trello.com/c/'+esc(o.cardId)+'" target="_blank" class="pill" '+
+            'style="text-decoration:none;color:#cfe1ff;border-color:var(--blue);cursor:pointer" '+
+            'title="Открыть карточку заказа в новой вкладке (закройте её, чтобы вернуться к счёту)">📋 '+lbl+' ↗</a>';
+        }).join('')+'</div>';
+      }
+      // сам счёт показываем настоящим PDF — как он уйдёт клиенту
+      // (банковская шапка, сумма прописью, подпись директора)
+      h+='<div id="pdfhost" style="margin-top:8px;background:#525659;border-radius:12px;overflow:hidden;height:calc(100vh - 210px);min-height:420px">'+
+         '<div class="muted" style="padding:14px">Собираю PDF…</div></div>';
       el.innerHTML=h;
       [].forEach.call(document.querySelectorAll('.tabbtn'), function(b){
         b.onclick=function(){ CUR=ROWS[+this.getAttribute('data-i')]; render(); };
       });
       document.getElementById('pdf').style.display='';
+      showPdf(r);
+    }
+
+    function buildDoc(r){
+      pdfMake.vfs = window.DEJAVU_VFS;
+      pdfMake.fonts = { DejaVu:{ normal:'DejaVuSans.ttf', bold:'DejaVuSans-Bold.ttf', italics:'DejaVuSans.ttf', bolditalics:'DejaVuSans-Bold.ttf' } };
+      return window.INVOICE.buildInvoiceDoc({ number:r.number, date:r.date_text||'', contract:r.contract||'',
+        supplier:parse(r.supplier_json,null), buyer:parse(r.buyer_json,null),
+        items:parse(r.items_json,[]), total:+r.total||0 });
+    }
+    var PDF_URL=null;
+    function showPdf(r){
+      var host=document.getElementById('pdfhost');
+      if(!window.pdfMake || !window.INVOICE){ host.innerHTML='<div class="muted" style="padding:14px">Генератор PDF не загрузился — проверьте интернет. Скачивание может работать через кнопку ниже.</div>'; return; }
+      try {
+        pdfMake.createPdf(buildDoc(r)).getBlob(function(blob){
+          if(CUR!==r) return; // уже переключились на другой счёт
+          if(PDF_URL){ try{ URL.revokeObjectURL(PDF_URL); }catch(e){} }
+          PDF_URL=URL.createObjectURL(blob);
+          host.innerHTML='<iframe src="'+PDF_URL+'#toolbar=0&navpanes=0" style="width:100%;height:100%;border:0"></iframe>';
+        });
+      } catch(e){ host.innerHTML='<div class="muted" style="padding:14px">Не удалось собрать PDF: '+esc(e&&e.message||e)+'</div>'; }
     }
 
     document.getElementById('pdf').onclick=function(){
       if(!CUR || !window.pdfMake){ alert('Генератор PDF не загрузился — проверьте интернет.'); return; }
-      pdfMake.vfs = window.DEJAVU_VFS;
-      pdfMake.fonts = { DejaVu:{ normal:'DejaVuSans.ttf', bold:'DejaVuSans-Bold.ttf', italics:'DejaVuSans.ttf', bolditalics:'DejaVuSans-Bold.ttf' } };
-      var r=CUR;
-      var data={ number:r.number, date:r.date_text||'', contract:r.contract||'',
-        supplier:parse(r.supplier_json,null), buyer:parse(r.buyer_json,null),
-        items:parse(r.items_json,[]), total:+r.total||0 };
-      var dd=window.INVOICE.buildInvoiceDoc(data);
-      var buy=data.buyer||{};
-      pdfMake.createPdf(dd).download('Счет_'+data.number+'_'+String(buy.name||'клиент').replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30)+'.pdf');
+      var r=CUR, buy=parse(r.buyer_json,{})||{};
+      pdfMake.createPdf(buildDoc(r)).download('Счет_'+r.number+'_'+String(buy.name||'клиент').replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30)+'.pdf');
     };
 
     var qs = Q.get('number') ? ('number='+encodeURIComponent(Q.get('number'))) : ('cardId='+encodeURIComponent(Q.get('cardId')||''));
