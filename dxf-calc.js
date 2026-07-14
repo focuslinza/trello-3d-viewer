@@ -137,6 +137,86 @@ window.DXFCALC = (function () {
     return loops;
   }
 
+  // Многие CAD (новые AutoCAD, SolidWorks, Inventor) кладут геометрию детали
+  // внутрь БЛОКА, а в ENTITIES оставляют лишь ссылку INSERT. Разворачиваем
+  // блоки в плоский список сущностей, применяя смещение/поворот/масштаб.
+  function matMul(A,B){ // сначала B, потом A;  x'=a*x+c*y+e; y'=b*x+d*y+f
+    return { a:A.a*B.a+A.c*B.b, b:A.b*B.a+A.d*B.b,
+             c:A.a*B.c+A.c*B.d, d:A.b*B.c+A.d*B.d,
+             e:A.a*B.e+A.c*B.f+A.e, f:A.b*B.e+A.d*B.f+A.f };
+  }
+  function matPoint(M,p){ return { x: M.a*p.x + M.c*p.y + M.e, y: M.b*p.x + M.d*p.y + M.f, bulge: p.bulge }; }
+  function insertMatrix(ins, basePoint){
+    var sx = (ins.xScale!=null?ins.xScale:1) || 1;
+    var sy = (ins.yScale!=null?ins.yScale:sx) || sx;
+    var rot = (ins.rotation||0)*Math.PI/180;
+    var cos=Math.cos(rot), sin=Math.sin(rot);
+    var pos = ins.position || {x:0,y:0};
+    var base = basePoint || {x:0,y:0};
+    // p' = pos + R·S·(p - base)
+    var M = { a:cos*sx, b:sin*sx, c:-sin*sy, d:cos*sy, e:0, f:0 };
+    M.e = pos.x - (M.a*base.x + M.c*base.y);
+    M.f = pos.y - (M.b*base.x + M.d*base.y);
+    return M;
+  }
+  function transformEntity(e, M){
+    var det = M.a*M.d - M.b*M.c;
+    var scaleAvg = Math.sqrt(Math.abs(det)) || 1;
+    var uniform = Math.abs((M.a*M.a+M.b*M.b) - (M.c*M.c+M.d*M.d)) < 1e-6;
+    var out = {};
+    for (var k in e) out[k] = e[k];
+    if (e.vertices) out.vertices = e.vertices.map(function(p){
+      var q = matPoint(M, p);
+      if (det < 0 && q.bulge) q.bulge = -q.bulge; // зеркало меняет направление дуг
+      return q;
+    });
+    if ((e.type==='CIRCLE' || e.type==='ARC') && e.center){
+      if (e.type==='ARC' && (det < 0 || !uniform)){
+        // зеркальный/неравномерный масштаб: считаем дугу точками в системе блока
+        // и переносим точки — длина реза остаётся верной
+        var pts = arcPoints(e.center, e.radius, e.startAngle, e.endAngle).map(function(p){ return matPoint(M,p); });
+        return { type:'LWPOLYLINE', layer:e.layer, shape:false, vertices:pts };
+      }
+      out.center = matPoint(M, e.center);
+      out.radius = (e.radius||0) * scaleAvg;
+      if (e.type==='ARC'){
+        var rot = Math.atan2(M.b, M.a);
+        out.startAngle = e.startAngle + rot;
+        out.endAngle = e.endAngle + rot;
+      }
+    }
+    if (e.fitPoints) out.fitPoints = e.fitPoints.map(function(p){ return matPoint(M,p); });
+    if (e.controlPoints) out.controlPoints = e.controlPoints.map(function(p){ return matPoint(M,p); });
+    return out;
+  }
+  var IDENT = { a:1,b:0,c:0,d:1,e:0,f:0 };
+  function expandEntities(dxf){
+    var blocks = dxf.blocks || {};
+    var out = [];
+    function walk(list, M, inheritLayer, depth){
+      if (!list || depth > 8) return;
+      list.forEach(function(e){
+        if (!e) return;
+        if (e.type === 'INSERT'){
+          var blk = blocks[e.name];
+          if (!blk || !blk.entities) return;
+          var M2 = matMul(M, insertMatrix(e, blk.position));
+          // сущности на слое «0» внутри блока наследуют слой вставки
+          walk(blk.entities, M2, e.layer || inheritLayer, depth + 1);
+          return;
+        }
+        var e2 = (M === IDENT) ? e : transformEntity(e, M);
+        if ((!e2.layer || e2.layer === '0') && inheritLayer && M !== IDENT){
+          var copy = {}; for (var k in e2) copy[k] = e2[k];
+          copy.layer = inheritLayer; e2 = copy;
+        }
+        out.push(e2);
+      });
+    }
+    walk(dxf.entities || [], IDENT, '', 0);
+    return out;
+  }
+
   function compute(dxf){
     var insunits = dxf.header && dxf.header['$INSUNITS'];
     var u = unitToMeters(insunits);
@@ -145,7 +225,7 @@ window.DXFCALC = (function () {
     var polylines=[]; // {pts, kind}
     function track(p){ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; }
 
-    (dxf.entities||[]).forEach(function(e){
+    expandEntities(dxf).forEach(function(e){
       var layer=e.layer||'';
       var bend=isBendLayer(layer), ignored=isIgnoredLayer(layer);
       var pts=null, closed=false;
