@@ -59,6 +59,7 @@
     var ORDERS_CACHE = {}; // companyId -> {totals, orders}
     var VIEW = { mode:'list', companyId:null, filter:'' };
 
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
     function esc(s){ return CRM.esc(s); }
 
@@ -117,6 +118,10 @@
       var h='<h2>'+esc(c.name||'(без названия)')+
         ((c.type||c.kind)==='person'?' <span class="muted" style="font-weight:400;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:2px 9px">частное лицо</span>':'')+'</h2>';
       h+='<div id="ordersBlock"><div class="muted">Загружаю заказы…</div></div>';
+      h+='<div style="display:flex;gap:8px;margin:12px 0 4px;flex-wrap:wrap">'+
+         '<button class="btn" id="anBtn" type="button">📊 Аналитика по клиенту</button>'+
+         '<button class="btn" id="docBtn" type="button">📁 Документы и договора</button></div>'+
+         '<div id="anBlock"></div><div id="docBlock"></div>';
       // реквизиты — набор полей зависит от типа клиента
       h+='<h3>Реквизиты</h3><div class="grid2">';
       CRM.fieldsForType(c.type||c.kind).forEach(function(f){
@@ -150,6 +155,8 @@
       h+='<div style="margin-top:16px"><button class="btn" id="editC" type="button">✎ Редактировать клиента</button> <button class="btn" id="delC" type="button" style="border-color:#7a3a32;color:#e8a59d">Удалить</button></div>';
       app.innerHTML=h;
       document.getElementById('back').style.display='';
+      document.getElementById('anBtn').onclick=function(){ loadAnalytics(c); };
+      document.getElementById('docBtn').onclick=function(){ loadDocs(c); };
       document.getElementById('editC').onclick=function(){ openEdit(c); };
       document.getElementById('delC').onclick=function(){
         if(!confirm('Удалить клиента «'+(c.name||'')+'» из справочника? Заказы в Trello не пострадают.')) return;
@@ -256,6 +263,114 @@
           VIEW.mode='card'; VIEW.companyId=c.id; render();
         }).catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); btn.disabled=false; btn.textContent='💾 Сохранить'; });
       };
+    }
+
+    // ---------- аналитика по клиенту ----------
+    function loadAnalytics(c){
+      var el=document.getElementById('anBlock');
+      el.innerHTML='<div class="muted" style="margin-top:8px">Считаю…</div>';
+      fetch(WORKER+'/company-analytics?companyId='+encodeURIComponent(c.id))
+        .then(function(r){return r.json();})
+        .then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+          var T=j.totals;
+          var h='<h3 style="margin-top:14px">Аналитика</h3>';
+          h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px">';
+          function kpi(l,v,color){ return '<div style="background:var(--bg2,#22272b);border:1px solid var(--line);border-radius:10px;padding:9px 12px"><div style="font-size:10.5px;color:var(--muted);text-transform:uppercase">'+l+'</div><div style="font-size:16px;font-weight:700;'+(color?('color:'+color):'')+'">'+v+'</div></div>'; }
+          h+=kpi('Заказов', T.orders + (T.repairs?(' + '+T.repairs+' рем.'):''));
+          h+=kpi('Выручка (заказы)', money(T.revenue)+' ₸');
+          if(T.repairRevenue) h+=kpi('Выручка (ремонт)', money(T.repairRevenue)+' ₸');
+          h+=kpi('Выставлено счетов', money(T.invoiced)+' ₸');
+          h+=kpi('Оплачено (по банку)', money(T.received)+' ₸', '#4bce97');
+          h+=kpi('Сдельная по заказам', money(T.piece)+' ₸');
+          h+=kpi('Материалы', money(T.materials)+' ₸');
+          h+=kpi('Прибыль (оценка)', money(T.profit)+' ₸', T.profit>=0?'#4bce97':'#f28b82');
+          h+='</div>';
+          h+='<div class="muted" style="margin-top:6px;font-size:11.5px">Прибыль = выручка − сдельная − материалы − накладные ('+T.overheadRate+'% от выручки, из 90-дневного оборота); налоги и точные постоянные — в «Финансах».</div>';
+          if(j.sections.length){
+            h+='<h3>На чём выручка</h3><table><thead><tr><th>Статья</th><th class="num" style="text-align:right">Выручка</th><th style="width:45%"></th></tr></thead><tbody>';
+            var mx=j.sections[0].revenue||1;
+            j.sections.forEach(function(s2){
+              h+='<tr><td>'+esc(s2.section)+'</td><td style="text-align:right">'+money(s2.revenue)+' ₸</td>'+
+                 '<td><div style="background:#2f5ac7;height:10px;border-radius:5px;width:'+Math.max(2,Math.round(s2.revenue/mx*100))+'%"></div></td></tr>';
+            });
+            h+='</tbody></table>';
+          }
+          if(j.invoices.length){
+            h+='<h3>Счета</h3><table><thead><tr><th>№</th><th>Дата</th><th style="text-align:right">Сумма</th><th style="text-align:right">Оплачено</th><th>Статус</th></tr></thead><tbody>';
+            j.invoices.forEach(function(iv){
+              var st = iv.pct>=100?'<span style="color:#4bce97">оплачен</span>':iv.pct>0?('<span style="color:#e8c07d">частично ('+iv.pct+'%)</span>'):(iv.sentAt?'выслан '+esc(iv.sentAt):'не оплачен');
+              h+='<tr><td>№'+esc(iv.number)+'</td><td>'+esc(iv.date)+'</td><td style="text-align:right">'+money(iv.total)+' ₸</td><td style="text-align:right">'+money(iv.received)+' ₸</td><td>'+st+'</td></tr>';
+            });
+            h+='</tbody></table>';
+          }
+          if(j.orders.length){
+            h+='<h3>Заказы: выручка и прибыль</h3><table><thead><tr><th>№</th><th>Заказ</th><th style="text-align:right">Сумма</th><th style="text-align:right">Прибыль</th><th>Оплата</th><th>Дата</th></tr></thead><tbody>';
+            j.orders.forEach(function(o){
+              h+='<tr><td>'+esc(o.number)+'</td><td>'+esc(String(o.name).slice(0,60))+'</td><td style="text-align:right">'+money(o.total)+' ₸</td>'+
+                 '<td style="text-align:right;color:'+(o.profit>=0?'#4bce97':'#f28b82')+'">'+money(o.profit)+' ₸</td>'+
+                 '<td>'+(o.paid?'✓':'—')+'</td><td class="muted">'+esc(o.date)+'</td></tr>';
+            });
+            h+='</tbody></table>';
+          }
+          el.innerHTML=h;
+        })
+        .catch(function(e){ el.innerHTML='<div class="muted">Ошибка аналитики: '+esc(e&&e.message||e)+'</div>'; });
+    }
+
+    // ---------- документы и договора клиента ----------
+    function fileToB64(file){
+      return new Promise(function(res,rej){ var fr=new FileReader();
+        fr.onload=function(){ res(String(fr.result).split(',')[1]); }; fr.onerror=rej; fr.readAsDataURL(file); });
+    }
+    function loadDocs(c){
+      var el=document.getElementById('docBlock');
+      el.innerHTML='<div class="muted" style="margin-top:8px">Загружаю документы…</div>';
+      fetch(WORKER+'/receipts-list?kind=company&refId='+encodeURIComponent(c.id))
+        .then(function(r){return r.json();})
+        .then(function(j){
+          var list=(j&&j.receipts)||[];
+          var h='<h3 style="margin-top:14px">Документы и договора</h3>';
+          if(!list.length) h+='<div class="muted">Пока пусто. Загрузите договор, доверенность или карточку предприятия — они всегда будут под рукой у этого клиента.</div>';
+          else{
+            h+='<table><thead><tr><th>Файл</th><th style="width:120px">Загружен</th><th style="width:40px"></th></tr></thead><tbody>';
+            list.forEach(function(f){
+              h+='<tr><td><a href="'+WORKER+'/receipt-get?id='+f.id+'" target="_blank">📄 '+esc(f.filename||'файл')+'</a></td>'+
+                 '<td class="muted">'+esc(String(f.createdAt||'').slice(0,10))+'</td>'+
+                 '<td><button class="btn docdel" data-id="'+f.id+'" type="button" title="Удалить документ" style="padding:2px 8px">✕</button></td></tr>';
+            });
+            h+='</tbody></table>';
+          }
+          h+='<label class="btn" style="display:inline-block;margin-top:8px;cursor:pointer">📎 Загрузить документ (PDF/фото/док, до ~650 КБ)<input type="file" id="docFile" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" multiple style="display:none"></label>'+
+             '<span class="muted" id="docMsg" style="margin-left:10px"></span>';
+          el.innerHTML=h;
+          document.getElementById('docFile').onchange=function(){
+            var files=this.files; if(!files.length) return;
+            var msg=document.getElementById('docMsg');
+            var chain=Promise.resolve();
+            [].forEach.call(files, function(f,i){
+              chain=chain.then(function(){
+                msg.textContent='Файл '+(i+1)+' из '+files.length+'…';
+                if(f.size>650000 && !/^image\//.test(f.type||'')) return Promise.reject(new Error('«'+f.name+'» больше ~650 КБ'));
+                return fileToB64(f).then(function(b64){
+                  return fetch(WORKER+'/receipt-save',{method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({kind:'company',refId:String(c.id),filename:f.name||'документ',mime:f.type||'application/octet-stream',dataB64:b64})})
+                    .then(function(r){return r.json();})
+                    .then(function(jr){ if(!jr||!jr.ok) throw new Error((jr&&jr.error)||'не сохранился'); });
+                });
+              });
+            });
+            chain.then(function(){ loadDocs(c); }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='#f28b82'; });
+          };
+          [].forEach.call(el.querySelectorAll('.docdel'), function(b){
+            b.onclick=function(){
+              if(!confirm('Удалить документ безвозвратно?')) return;
+              fetch(WORKER+'/receipt-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:+this.getAttribute('data-id')})})
+                .then(function(){ loadDocs(c); });
+            };
+          });
+        })
+        .catch(function(e){ el.innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
     }
 
     function render(){ if(VIEW.mode==='card') renderCard(); else renderList(); }
