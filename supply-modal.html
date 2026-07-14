@@ -5,6 +5,7 @@
   <title>Снабжение</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
+  <script src="./calc-engine.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
     html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
@@ -360,18 +361,173 @@
         }).catch(function(){ el.innerHTML='<span class="muted">?</span>'; });
     }
 
+    // ---------- вкладка «Цены материалов» (для снабженца) ----------
+    // Редактируются ТОЛЬКО цены материалов/компонентов и свои позиции.
+    // Коэффициенты, тарифы работ и доли здесь не показываются и не затрагиваются:
+    // сохранение идёт через /pricing-save-materials, который сливает изменения
+    // с остальными настройками, а не перезаписывает их.
+    var PR=null;       // загруженный pricing (переопределения)
+    var PR_BUSY=false;
+    var CALC=window.CALC||{};
+    function prNum(v){ return (v==null||v==='')?'':(+v); }
+    function prPct(v,def){ return (v!=null&&v!=='')?Math.round(+v*1000)/10:def; }
+
+    function loadPrices(){
+      if(PR||PR_BUSY) return;
+      PR_BUSY=true;
+      fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
+        PR=(j&&j.ok&&j.pricing)||{};
+        PR.mat=PR.mat||{}; PR.cmp=PR.cmp||{}; PR.customMat=PR.customMat||[]; PR.customCmp=PR.customCmp||[];
+        PR_BUSY=false; if(TAB==='prices') render();
+      }).catch(function(){ PR={mat:{},cmp:{},customMat:[],customCmp:[]}; PR_BUSY=false; if(TAB==='prices') render(); });
+    }
+
+    function renderPrices(){
+      if(!PR){ loadPrices(); return '<div class="empty">Загрузка цен…</div>'; }
+      var MAT=CALC.MAT||{}, CMP=CALC.CMP||{};
+      var IST='background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px';
+      var h='<div class="small muted" style="margin:4px 0 10px">Держите цены закупки актуальными — по ним считаются все новые расчёты и заказы. Изменения применяются после «Сохранить цены»; уже сохранённые заказы не пересчитываются.</div>';
+
+      function priceGrid(CAT, over, cls){
+        var bySec={}; Object.keys(CAT).forEach(function(code){ var it=CAT[code]; (bySec[it.sec]=bySec[it.sec]||[]).push(code); });
+        var out='';
+        Object.keys(bySec).forEach(function(sec){
+          out+='<div style="margin-top:10px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700;margin-bottom:6px">'+esc(sec)+'</div>';
+          out+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 12px">';
+          bySec[sec].forEach(function(code){
+            var it=CAT[code]; var val=(over[code]!=null&&over[code]!=='')?over[code]:it.u;
+            out+='<div style="display:flex;align-items:center;gap:6px;justify-content:space-between">'+
+                 '<label style="font-size:12.5px">'+esc(it.lbl)+'</label>'+
+                 '<span style="white-space:nowrap"><input type="number" step="any" class="'+cls+'" data-code="'+code+'" value="'+prNum(val)+'" style="'+IST+';width:92px;text-align:right"> <span class="small muted">₸</span></span></div>';
+          });
+          out+='</div></div>';
+        });
+        return out;
+      }
+
+      h+='<h3 style="margin-top:8px">Материалы (₸ за м² / п.м)</h3>'+priceGrid(MAT, PR.mat, 'smp');
+      h+='<h3 style="margin-top:16px">Компоненты (₸ за шт / краска за м²)</h3>'+priceGrid(CMP, PR.cmp, 'scp');
+
+      function uniq(list){ var seen={}, out=[]; list.forEach(function(s){ if(s&&!seen[s]){ seen[s]=1; out.push(s); } }); return out; }
+      function sectionsOf(CAT){ return uniq(Object.keys(CAT).map(function(c){ return CAT[c].sec; })); }
+      var matSections=uniq(sectionsOf(MAT).concat(PR.customMat.map(function(it){return it.sec;})));
+      var cmpSections=uniq(sectionsOf(CMP).concat(PR.customCmp.map(function(it){return it.sec;})));
+
+      function fld(cap,inner,wrap){ return '<div style="display:flex;flex-direction:column;gap:2px;'+(wrap||'')+'"><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap">'+esc(cap)+'</span>'+inner+'</div>'; }
+      function txtf(f,val,w){ return '<input data-f="'+f+'" value="'+esc(val==null?'':val)+'" style="'+IST+';'+(w||'')+'">'; }
+      function numf(f,val,w){ return '<input data-f="'+f+'" type="number" step="any" value="'+(val==null||val===''?'':val)+'" style="'+IST+';text-align:right;'+(w||'width:84px')+'">'; }
+      function secPicker(val,known){
+        var match=known.indexOf(val)>=0, isNew=!match;
+        var sel='<select class="ssecsel" style="'+IST+';width:100%">';
+        known.forEach(function(s){ sel+='<option value="'+esc(s)+'"'+(match&&s===val?' selected':'')+'>'+esc(s)+'</option>'; });
+        sel+='<option value="__new__"'+(isNew||!known.length?' selected':'')+'>+ новый раздел…</option></select>';
+        var txt='<input data-f="sec" value="'+esc(val||'')+'" placeholder="Название раздела" style="'+IST+';width:100%;margin-top:4px;'+((isNew||!known.length)?'':'display:none')+'">';
+        return '<div>'+sel+txt+'</div>';
+      }
+      function custRow(t,it,known){
+        it=it||{};
+        var r='<div class="scustrow" data-t="'+t+'" data-code="'+esc(it.code||'')+'" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+        r+=fld('Название', txtf('lbl', it.lbl, 'width:100%'), 'flex:1;min-width:170px');
+        r+=fld('Раздел', secPicker(it.sec, known), 'width:190px');
+        if(t==='mat'){
+          r+=fld('Цена, ₸', numf('u', it.u));
+          r+=fld('Отходы, %', numf('ost', prPct(it.ost,15), 'width:72px'));
+          r+=fld('Расходники, %', numf('rah', prPct(it.rah,4), 'width:100px'));
+        } else {
+          r+=fld('Цена, ₸', numf('u', it.u));
+          r+=fld('Расходники, %', numf('rah', prPct(it.rah,7), 'width:100px'));
+          r+=fld('Работа, ×', numf('m', (it.m!=null?it.m:1), 'width:72px'));
+        }
+        r+='<button class="sdelcust btn" data-t="'+t+'" data-code="'+esc(it.code||'')+'" type="button" style="padding:6px 10px" title="Удалить позицию">✕</button>';
+        r+='</div>';
+        return r;
+      }
+
+      h+='<h3 style="margin-top:18px">Свои материалы</h3>';
+      h+='<div class="small muted" style="margin-bottom:6px">Появился новый материал — добавьте его здесь, и он сразу станет доступен в калькуляторе. «Отходы %» — надбавка на обрезки (обычно 15, трубы/профиль 20), «Расходники %» — сопутствующие затраты (обычно 4).</div>';
+      PR.customMat.forEach(function(it){ h+=custRow('mat', it, matSections); });
+      h+='<button class="btn" data-sadd="mat" type="button" style="margin-top:4px">+ материал</button>';
+
+      h+='<h3 style="margin-top:16px">Свои компоненты</h3>';
+      PR.customCmp.forEach(function(it){ h+=custRow('cmp', it, cmpSections); });
+      h+='<button class="btn" data-sadd="cmp" type="button" style="margin-top:4px">+ компонент</button>';
+
+      h+='<div style="display:flex;gap:10px;align-items:center;margin:16px 0 30px"><button class="btn primary" id="sprSave" type="button">Сохранить цены</button><span class="small" id="sprMsg"></span></div>';
+      return h;
+    }
+
+    function collectPricesTab(){
+      var mat={}, cmp={};
+      [].forEach.call(document.querySelectorAll('.smp'), function(el){ if(el.value!=='') mat[el.getAttribute('data-code')]=+el.value; });
+      [].forEach.call(document.querySelectorAll('.scp'), function(el){ if(el.value!=='') cmp[el.getAttribute('data-code')]=+el.value; });
+      var customMat=[], customCmp=[];
+      function fv(row,f){ var el=row.querySelector('[data-f="'+f+'"]'); return el?el.value:''; }
+      [].forEach.call(document.querySelectorAll('.scustrow'), function(row){
+        var t=row.getAttribute('data-t'), code=row.getAttribute('data-code');
+        var lbl=fv(row,'lbl').trim(); if(!lbl) return;
+        var sec=fv(row,'sec').trim();
+        if(t==='mat') customMat.push({ code:code, lbl:lbl, sec:sec||'ДРУГИЕ МАТЕРИАЛЫ', u:+fv(row,'u')||0, ost:(+fv(row,'ost')||0)/100, rah:(+fv(row,'rah')||0)/100 });
+        else customCmp.push({ code:code, lbl:lbl, sec:sec||'ДРУГИЕ КОМПОНЕНТЫ', u:+fv(row,'u')||0, ost:0, rah:(+fv(row,'rah')||0)/100, m:(fv(row,'m')!==''?+fv(row,'m'):1) });
+      });
+      return { mat:mat, cmp:cmp, customMat:customMat, customCmp:customCmp };
+    }
+    function sNewCode(t){ return (t==='mat'?'CUSTM_':'CUSTC_')+Date.now().toString(36)+Math.floor(Math.random()*1000); }
+    function wirePricesTab(){
+      var save=document.getElementById('sprSave'); if(!save) return;
+      save.onclick=function(){
+        var body=collectPricesTab();
+        var msg=document.getElementById('sprMsg'); msg.textContent='Сохранение…'; msg.style.color='var(--muted)';
+        fetch(WORKER+'/pricing-save-materials',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+          .then(function(r){return r.json();}).then(function(j){
+            if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+            PR.mat=body.mat; PR.cmp=body.cmp; PR.customMat=body.customMat; PR.customCmp=body.customCmp;
+            msg.textContent='Сохранено ✓ Новые расчёты пойдут по этим ценам.'; msg.style.color='var(--green)';
+          }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
+      };
+      [].forEach.call(document.querySelectorAll('[data-sadd]'), function(b){
+        b.onclick=function(){
+          var t=this.getAttribute('data-sadd');
+          var cur=collectPricesTab();
+          PR.mat=cur.mat; PR.cmp=cur.cmp; PR.customMat=cur.customMat; PR.customCmp=cur.customCmp;
+          if(t==='mat') PR.customMat.push({code:sNewCode('mat'),lbl:'',sec:'',u:'',ost:0.15,rah:0.04});
+          else PR.customCmp.push({code:sNewCode('cmp'),lbl:'',sec:'',u:'',rah:0.07,m:1});
+          render();
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.sdelcust'), function(b){
+        b.onclick=function(){
+          if(!confirm('Удалить позицию из каталога? В старых сохранённых расчётах она останется как есть.')) return;
+          var t=this.getAttribute('data-t'), code=this.getAttribute('data-code');
+          var cur=collectPricesTab();
+          PR.mat=cur.mat; PR.cmp=cur.cmp;
+          if(t==='mat') PR.customMat=cur.customMat.filter(function(x){return x.code!==code;}); else PR.customMat=cur.customMat;
+          if(t==='cmp') PR.customCmp=cur.customCmp.filter(function(x){return x.code!==code;}); else PR.customCmp=cur.customCmp;
+          render();
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.ssecsel'), function(sel){
+        var txt=sel.parentElement.querySelector('[data-f="sec"]'); if(!txt) return;
+        sel.onchange=function(){
+          if(sel.value==='__new__'){ txt.style.display=''; txt.value=''; txt.focus(); }
+          else { txt.style.display='none'; txt.value=sel.value; }
+        };
+      });
+    }
+
     function render(){
       var app=document.getElementById('app');
       var h='<h2>Снабжение</h2><div class="tabs">';
       [['req','Заявки'+(OPEN?'<span class="cnt">'+OPEN+'</span>':'')],
        ['tools','Инструмент и сервис'+(DUE?'<span class="cnt">'+DUE+'</span>':'')],
-       ['cash','Наличные расходы']].forEach(function(x){
+       ['cash','Наличные расходы'],
+       ['prices','💲 Цены материалов']].forEach(function(x){
         h+='<div class="tab'+(TAB===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
       });
       h+='</div>';
-      h+= TAB==='req' ? renderReq() : TAB==='tools' ? renderTools() : renderCash();
+      h+= TAB==='req' ? renderReq() : TAB==='tools' ? renderTools() : TAB==='prices' ? renderPrices() : renderCash();
       app.innerHTML=h;
       [].forEach.call(document.querySelectorAll('.tab[data-tab]'), function(el){ el.onclick=function(){ TAB=this.getAttribute('data-tab'); TOOL_EDIT=null; render(); }; });
+      if(TAB==='prices'){ wirePricesTab(); return; }
 
       [].forEach.call(document.querySelectorAll('.rqfiles'), function(el){
         fetch(WORKER+'/receipts-list?kind=req&refId='+encodeURIComponent(el.getAttribute('data-id')))
