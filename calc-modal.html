@@ -320,6 +320,7 @@
       function r(label,val){ if(!val) return; var d=document.createElement('div'); d.className='r'; d.innerHTML='<span>'+label+'</span><b>'+fmt(val)+' ₸</b>'; brk.appendChild(d); }
       r('Работы', res.opsBase);
       r('Шлейф / сборка (' + Math.round((inp.shleifRate||0.5)*100) + '% от сварки, авто)', res.shleif);
+      r('Шлейфовка реза (авто, % от резки)', res.shleifCut);
       r('Материалы', res.materials);
       r('Компоненты (материал)', res.componentsMat);
       r('Компоненты (работа)', res.componentsLabor);
@@ -732,6 +733,7 @@
         bend:sk(['bend','bendTube','bendRod']),       // ⅓
         weld:sk(['weldSS','weldBlack']),              // ⅓
         shleif:(res.shleif||0),                       // ½
+        shleifCut:(res.shleifCut||0),                 // ⅓ — шлейфовка кромки после лазера
         paint:paintSum,                               // ⅓ (в цеху) / 0 (на стороне)
         paintInShop:!!inp.paintInShop,
         components:components                         // ½ каждая

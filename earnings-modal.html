@@ -67,7 +67,7 @@
     function unitGroup(key){
       if(!key) return key;
       if(key.indexOf('comp:')===0) return 'assembly';
-      if(key==='shleif'||key==='paint') return 'assembly';
+      if(key==='shleif'||key==='shleifCut'||key==='paint') return 'assembly';
       return key; // eng/cut/bend/weld
     }
     function workersFor(group){

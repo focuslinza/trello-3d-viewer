@@ -157,7 +157,7 @@
     inp=inp||{};
     var operations=inp.operations||[], materials=inp.materials||[], components=inp.components||[];
     var line=[];
-    var sumOps=0, weldSSsum=0, weldBlackSum=0;
+    var sumOps=0, weldSSsum=0, weldBlackSum=0, cutSum=0;
 
     operations.forEach(function(op){
       var k=KIND[op.kind]; if(!k)return;
@@ -168,7 +168,7 @@
       var opOst=opSecOst(k.sec,OP_OST), opRah=opSecRah(k.sec,OP_RAH);
       var r7=base*(1+opOst)*(1+opRah);
       sumOps+=r7;
-      if(k.t==='SS')weldSSsum+=r7; if(k.t==='BL')weldBlackSum+=r7;
+      if(k.t==='SS')weldSSsum+=r7; if(k.t==='BL')weldBlackSum+=r7; if(k.sec==='РЕЗКА')cutSum+=r7;
       line.push({group:'op',kind:op.kind,section:k.sec,name:k.lbl,thickness:(k.t==='FLAT'?0:th),qty:qty,unit:rate,base:base,ostatki:opOst,rashod:opRah,lineTotal:r7,worker:null});
     });
 
@@ -177,6 +177,13 @@
     var K4=weldSSsum*shleifRate, L4=weldBlackSum*shleifRate;
     if(K4)line.push({group:'shleif',section:'ШЛЕЙФ',name:'Шлейф нерж ('+(shleifRate*100)+'% сварки)',lineTotal:K4,worker:null});
     if(L4)line.push({group:'shleif',section:'ШЛЕЙФ',name:'Шлейф черн ('+(shleifRate*100)+'% сварки)',lineTotal:L4,worker:null});
+
+    // шлейфовка после лазерного реза: шлейфовщики зачищают кромку.
+    // Стоимость = shleifCutRate × стоимость резки (по умолчанию 20%),
+    // работнику начисляется доля цеха (⅓) с этого этапа.
+    var shleifCutRate=coef('shleifCutRate',0.2);
+    var SC4=cutSum*shleifCutRate;
+    if(SC4)line.push({group:'shleifCut',section:'ШЛЕЙФ',name:'Шлейфовка реза ('+Math.round(shleifCutRate*100)+'% резки)',lineTotal:SC4,worker:null});
 
     // materials M..AY : true area/length × price, +ост +рах
     var matSum=0;
@@ -211,26 +218,26 @@
     if(J4)line.push({group:'montazh',section:'МОНТАЖ',name:'Монтаж',lineTotal:J4,worker:null});
 
     // срочность C : base = everything except urgency; C7 = (base/days)×1.01×1.01
-    var C12=sumOps+matSum+compMat+compLabor+K4+L4+J4;
+    var C12=sumOps+matSum+compMat+compLabor+K4+L4+SC4+J4;
     var urgency=+inp.urgency||0;
     var C7=urgency>0 ? (C12/urgency)*1.01*1.01 : 0;
     if(C7)line.push({group:'urgency',section:'СРОЧНОСТЬ',name:(urgency===1?'Срочность 1 день':'Срочность 2 дня'),lineTotal:C7,worker:null});
 
     // инженерные = (C7 + ops + шлейф + compLabor + монтаж) × coef
     var engCoef=(inp.engCoef!=null?+inp.engCoef:0);
-    var G3=C7+sumOps+K4+L4+compLabor+J4;
+    var G3=C7+sumOps+K4+L4+SC4+compLabor+J4;
     var E3=G3*engCoef;
     if(E3)line.push({group:'engineering',section:'ИНЖЕНЕРНЫЕ',name:'Инженерные '+Math.round(engCoef*100)+'%',base:G3,lineTotal:E3,worker:null});
 
     // подытог (A4)
-    var subtotal=E3 + C7 + sumOps + matSum + compMat + K4 + L4 + J4 + compLabor;
+    var subtotal=E3 + C7 + sumOps + matSum + compMat + K4 + L4 + SC4 + J4 + compLabor;
 
     var taxRate=(inp.taxRate!=null?+inp.taxRate:coef('taxRate',0.16));
     var gross=taxGrossUp(taxRate);
     var taxAmount=subtotal*gross, total=subtotal+taxAmount;
 
     return {lineItems:line,opsBase:sumOps,materials:matSum,componentsMat:compMat,componentsLabor:compLabor,
-            shleif:K4+L4,montazh:J4,urgency:C7,engineering:E3,subtotal:subtotal,
+            shleif:K4+L4,shleifCut:SC4,montazh:J4,urgency:C7,engineering:E3,subtotal:subtotal,
             taxRate:taxRate,taxGrossUp:gross,taxAmount:taxAmount,total:total};
   }
 

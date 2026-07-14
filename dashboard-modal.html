@@ -283,6 +283,7 @@
     var h='<h3>Коэффициенты (общие)</h3><div class="prgrid">';
     h+=coefField('Налог','taxRate', c.taxRate!=null&&c.taxRate!==''? (+c.taxRate*100):16,'%');
     h+=coefField('Бонус агенту за оформленную заявку на ремонт','repairAgentBonus', c.repairAgentBonus!=null&&c.repairAgentBonus!==''?+c.repairAgentBonus:300,'₸');
+    h+=coefField('Шлейфовка реза (зачистка кромки после лазера)','shleifCutRate', c.shleifCutRate!=null&&c.shleifCutRate!==''? (+c.shleifCutRate*100):20,'% от резки');
     h+=coefField('Шлейф / сборка (% от сварки)','shleifRate', c.shleifRate!=null&&c.shleifRate!==''?(+c.shleifRate*100):50,'%');
     h+=coefField('Ставка резки (множитель)','rateCut', c.rateCut!=null&&c.rateCut!==''?+c.rateCut:1,'×');
     h+=coefField('Ставка гибки (множитель)','rateBend', c.rateBend!=null&&c.rateBend!==''?+c.rateBend:1,'×');
@@ -373,7 +374,7 @@
       var k=el.getAttribute('data-key'), v=el.value;
       if(v===''){ return; }
       v=+v;
-      if(k==='taxRate'||k==='shleifRate'||k==='opRah'||k==='shareShop'||k==='shareAssembly'||k==='shareMontazh') P.coef[k]=v/100;
+      if(k==='taxRate'||k==='shleifRate'||k==='shleifCutRate'||k==='opRah'||k==='shareShop'||k==='shareAssembly'||k==='shareMontazh') P.coef[k]=v/100;
       else P.coef[k]=v;
     });
     [].forEach.call(document.querySelectorAll('.mp'), function(el){ if(el.value!=='') P.mat[el.getAttribute('data-code')]=+el.value; });
