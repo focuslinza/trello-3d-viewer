@@ -424,7 +424,10 @@
              '</tr>';
           return;
         }
-        h+='<tr><td><b>№'+esc(r.number)+'</b></td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+'</td>'+
+        h+='<tr><td><b>№'+esc(r.number)+'</b>'+
+           (r.sentAt?('<div style="font-size:10.5px;color:var(--green);white-space:nowrap" title="Счёт отправлен клиенту'+(r.sentTo?(' на '+esc(r.sentTo)):'')+'">📤 выслан '+esc((r.sentAt||'').slice(0,10))+'</div>'):
+                     ('<div style="font-size:10.5px;color:var(--muted)">не выслан</div>'))+
+           '</td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+'</td>'+
            '<td class="num">'+(r.cards||0)+(r.repairs?' <span style="color:#c9a8ff" title="ремонтных заявок в счёте">+'+r.repairs+'Р</span>':'')+'</td>'+
            '<td class="num">'+money(r.total)+' ₸</td>'+
            '<td class="num">'+money(r.received)+' ₸</td>'+

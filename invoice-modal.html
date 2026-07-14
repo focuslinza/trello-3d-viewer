@@ -56,7 +56,7 @@
     <div class="tot" id="grand">—</div>
     <div style="display:flex;gap:10px">
       <button class="btn ghost" id="close" type="button">Закрыть</button>
-      <button class="btn green" id="gen" type="button" disabled>Скачать PDF</button>
+      <button class="btn green" id="gen" type="button" disabled>📤 Отправить счёт</button>
     </div>
   </div>
 
@@ -105,6 +105,7 @@
   var invNumber = null;
   var showOrphans = false;
   var showPaid = false;
+  var WA_PHONE = null; // введённый номер WhatsApp переживает перерисовки
   // произвольные дополнительные строки счёта (монтаж по оплаченному заказу,
   // доставка, упаковка и т.п.) — попадают в PDF и в журнал, к карточкам не привязаны
   var EXTRA_LINES = [];
@@ -281,6 +282,18 @@
               (ctx.buyer.bin?(isP?'ИИН ':'БИН/ИИН ')+esc(ctx.buyer.bin)+' · ':'')+
               (ctx.buyer.addr?esc(ctx.buyer.addr)+' · ':'')+
               (ctx.buyer.phone?'тел. '+esc(ctx.buyer.phone):'')+'</div>';
+      // WhatsApp контактного лица: выбор из контактов CRM или свой номер.
+      // после «Отправить счёт» на этот номер откроется чат с текстом счёта
+      var co0=companyById(selectedCompanyId);
+      var contacts=((co0&&co0.contacts)||[]).filter(function(p){return p&&p.phone;});
+      var defPhone = WA_PHONE!==null ? WA_PHONE : (contacts.length?contacts[0].phone:(ctx.buyer.phone||''));
+      html+='<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<span class="small muted">WhatsApp контактного лица:</span>'+
+        (contacts.length?('<select id="waPick" style="max-width:220px">'+contacts.map(function(p){
+            return '<option value="'+esc(p.phone)+'"'+(p.phone===defPhone?' selected':'')+'>'+esc((p.name||'контакт')+' · '+p.phone)+'</option>';
+          }).join('')+'<option value=""'+(contacts.some(function(p){return p.phone===defPhone;})?'':' selected')+'>другой номер…</option></select>'):'')+
+        '<input type="text" id="waPhone" value="'+esc(defPhone)+'" placeholder="+7 7xx xxx xx xx" style="width:170px">'+
+        '</div>';
       }
       if(!MODE_REPAIR && selectedCompanyId!==ctx.cardCompanyId){
         var warnTxt = ctx.linkProblem==='none'
@@ -420,6 +433,13 @@
     [].forEach.call(document.querySelectorAll('.rev'), function(s){ s.addEventListener('click', function(){ openCard(this.getAttribute('data-id')); }); });
     // доп. строки счёта: правки пишутся в состояние без перерисовки (не терять фокус),
     // сумма строки и общий итог обновляются на лету
+    var waP=document.getElementById('waPhone');
+    if(waP) waP.addEventListener('input', function(){ WA_PHONE=this.value; });
+    var waPick=document.getElementById('waPick');
+    if(waPick) waPick.addEventListener('change', function(){
+      if(this.value){ WA_PHONE=this.value; var i=document.getElementById('waPhone'); if(i) i.value=this.value; }
+      else { var i2=document.getElementById('waPhone'); if(i2){ i2.value=''; i2.focus(); } WA_PHONE=''; }
+    });
     var exAdd=document.getElementById('exAdd');
     if(exAdd) exAdd.addEventListener('click', function(){ EXTRA_LINES.push({ name:'', qty:1, price:'' }); render(); });
     function exSync(i){
@@ -510,8 +530,20 @@
     return true;
   }
 
+  function normPhone(p){
+    var d=String(p||'').replace(/\D/g,'');
+    if(!d) return '';
+    if(d.length===11 && d[0]==='8') d='7'+d.slice(1);
+    if(d.length===10) d='7'+d;
+    return d;
+  }
   function generate(){
     if(!setupFonts()){ alert('Не удалось загрузить генератор PDF (pdfMake). Проверьте интернет.'); return; }
+    var phoneRaw=(document.getElementById('waPhone')||{}).value||'';
+    var phone=normPhone(phoneRaw);
+    if(!phone && !confirm('Номер WhatsApp не указан.\n\nPDF скачается, счёт получит статус «выслан», карточки переедут в «Ждем оплату» — но чат WhatsApp не откроется. Продолжить?')) return;
+    // окно WhatsApp открываем СРАЗУ по клику (иначе браузер заблокирует всплывающее)
+    var waWin = phone ? window.open('', '_blank') : null;
     var gen=document.getElementById('gen'); gen.disabled=true; gen.textContent='Готовлю…';
     // commit the invoice number (locks it so the next one is +1)
     fetch(WORKER+'/invoice-commit').then(function(r){return r.json();}).then(function(j){
@@ -521,30 +553,52 @@
       }
       var dd=window.INVOICE.buildInvoiceDoc(data);
       var fname='Счет_'+data.number+'_'+(ctx.buyer&&ctx.buyer.name?ctx.buyer.name.replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30):'клиент')+'.pdf';
-      pdfMake.createPdf(dd).download(fname, function(){
-        gen.textContent='Скачать PDF'; gen.disabled=false;
+      pdfMake.createPdf(dd).download(fname);
+      // 1) журнал (дожидаемся — отметка «выслан» ищет счёт по номеру)
+      var dEl2=document.getElementById('idate');
+      gen.textContent='Сохраняю…';
+      return fetch(WORKER+'/invoice-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          number:String(data.number||''),
+          dateIso:(dEl2&&dEl2.value)||'',
+          dateText:data.date||'',
+          contract:data.contract||'',
+          supplier:data.supplier||null,
+          buyer:data.buyer||null,
+          items:data.items||[],
+          total:grandTotal(),
+          cardIds:selectedOrders().filter(function(o){ return !o.isRepair; }).map(function(o){ return o.cardId; }),
+          repairIds:selectedOrders().filter(function(o){ return o.isRepair; }).map(function(o){ return o.repairId; })
+        })
+      }).then(function(r){return r.json();}).catch(function(){return {};})
+      // 2) статус «выслан» + перенос карточек в «Ждем оплату»
+      .then(function(){
+        gen.textContent='Отмечаю «выслан»…';
+        return fetch(WORKER+'/invoice-mark-sent',{ method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ number:String(data.number||''), sentTo:phone||phoneRaw }) })
+          .then(function(r){return r.json();}).catch(function(){return {};});
+      })
+      // 3) чат WhatsApp с текстом счёта (PDF прикрепляется из загрузок одним движением)
+      .then(function(ms){
+        if(waWin && phone){
+          var msg='Здравствуйте! Направляем счёт на оплату №'+data.number+' от '+(data.date||'')+
+            ' на сумму '+money(grandTotal())+' ₸ ('+((data.supplier&&data.supplier.name)||'MetalShop')+').'+
+            ' PDF-файл счёта прикрепим следующим сообщением.';
+          waWin.location='https://wa.me/'+phone+'?text='+encodeURIComponent(msg);
+        }
+        gen.textContent='📤 Отправить счёт'; gen.disabled=false;
+        var parts=['Счёт №'+data.number+' помечен «выслан».'];
+        if(ms && ms.ok){
+          if(ms.moved) parts.push('Карточек перенесено в «'+(ms.listName||'Ждем оплату')+'»: '+ms.moved+'.');
+          if(ms.skipped) parts.push('Уже были там: '+ms.skipped+'.');
+          if(ms.warnings && ms.warnings.length) parts.push('⚠ '+ms.warnings.join('; '));
+        } else if(ms && ms.error) parts.push('⚠ '+ms.error);
+        parts.push(phone?'В WhatsApp открыт чат — прикрепите скачанный PDF.':'');
+        alert(parts.filter(Boolean).join('\n'));
       });
-      // сохранить счёт в журнал (D1) — чтобы он был виден внутри карточек заказов.
-      // не блокирует скачивание PDF; если Worker ещё без маршрута /invoice-save — просто молча пропустится.
-      try {
-        var dEl2=document.getElementById('idate');
-        fetch(WORKER+'/invoice-save',{ method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            number:String(data.number||''),
-            dateIso:(dEl2&&dEl2.value)||'',
-            dateText:data.date||'',
-            contract:data.contract||'',
-            supplier:data.supplier||null,
-            buyer:data.buyer||null,
-            items:data.items||[],
-            total:grandTotal(),
-            cardIds:selectedOrders().filter(function(o){ return !o.isRepair; }).map(function(o){ return o.cardId; }),
-            repairIds:selectedOrders().filter(function(o){ return o.isRepair; }).map(function(o){ return o.repairId; })
-          })
-        }).catch(function(){});
-      } catch(e){}
     }).catch(function(e){
-      gen.textContent='Скачать PDF'; gen.disabled=false;
+      if(waWin) try{ waWin.close(); }catch(_){}
+      gen.textContent='📤 Отправить счёт'; gen.disabled=false;
       alert('Ошибка: '+(e&&e.message||e));
     });
   }
