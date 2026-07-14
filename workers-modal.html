@@ -163,7 +163,8 @@
       {cls:'cancrm',    fld:'can_crm',       label:'CRM',                 hint:'клиенты, выручка, долги'},
       {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены в калькуляторе'},
       {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true},
-      {cls:'salaried',  fld:'is_salaried',   label:'Окладник',            hint:'оклад автоматически идёт в постоянные расходы (страница «Финансы»)', warn:true}
+      {cls:'salaried',  fld:'is_salaried',   label:'Окладник',            hint:'оклад автоматически идёт в постоянные расходы (страница «Финансы»)', warn:true},
+      {cls:'agent',     fld:'is_repair_agent', label:'Агент ремонта',      hint:'бонус за каждую полностью оформленную заявку на ремонт (описание, фирма, контактное лицо, фото) — виден агенту в «Моём заработке»'}
     ];
     function chipCb(cls, label, hint, on, extra){
       return '<label class="chipcb'+(on?' on':'')+(extra||'')+'" title="'+hint.replace(/"/g,'&quot;')+'">'+
@@ -259,6 +260,7 @@
       var canRepair=tr.querySelector('.canrepair')?tr.querySelector('.canrepair').checked:false;
       var hideStats=tr.querySelector('.hidestats')?tr.querySelector('.hidestats').checked:false;
       var isSalaried=tr.querySelector('.salaried')?tr.querySelector('.salaried').checked:false;
+      var isRepairAgent=tr.querySelector('.agent')?tr.querySelector('.agent').checked:false;
       if(!name){ setMsg('Введите имя.'); tr.querySelector('.nm').focus(); tr.querySelector('.nm').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.nm').style.borderColor='';},2000); return; }
       if(!salary){ setMsg('Введите оклад.'); tr.querySelector('.sal').focus(); tr.querySelector('.sal').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.sal').style.borderColor='';},2000); return; }
       var id=tr.getAttribute('data-id')||'';
@@ -269,7 +271,7 @@
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, canIssueInvoice:canIssueInvoice })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){

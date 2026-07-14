@@ -109,6 +109,23 @@
     }
     html+='</div>';
 
+    // бонус агента ремонта (если аккаунт помечен агентом)
+    var ab=j.agentBonus;
+    if(ab && (ab.count>0 || ab.perItem>0)){
+      html+='<div class="sec"><h3>Бонус за заявки на ремонт</h3>';
+      html+='<div class="small muted" style="margin-bottom:6px">Начисляется за каждую полностью оформленную заявку: описание поломки, фирма-заказчик, контактное лицо и фото. Итог уже включён в сумму месяца сверху.</div>';
+      if(!ab.count){ html+='<div class="muted">В этом месяце оформленных заявок пока нет. Бонус за заявку: '+money(ab.perItem)+' ₸.</div>'; }
+      else {
+        html+='<div style="margin-bottom:6px"><b>'+ab.count+'</b> заяв'+(ab.count===1?'ка':(ab.count<5?'ки':'ок'))+' × '+money(ab.perItem)+' ₸ = <b style="color:var(--green,#4bce97)">'+money(ab.total)+' ₸</b></div>';
+        html+='<table><thead><tr><th>№</th><th>Заявка</th><th style="width:110px">Дата</th></tr></thead><tbody>';
+        (ab.items||[]).forEach(function(x){
+          html+='<tr><td class="small">'+esc(x.number)+'</td><td>'+esc(x.title||'')+'</td><td class="small">'+esc(x.date||'')+'</td></tr>';
+        });
+        html+='</tbody></table>';
+      }
+      html+='</div>';
+    }
+
     // by order (my share only — no order cost)
     var orders=j.orders||[];
     html+='<div class="sec"><h3>По заказам (моя доля)</h3>';
