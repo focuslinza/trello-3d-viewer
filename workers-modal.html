@@ -181,7 +181,7 @@
       var h =
         '<div class="wtop">'+
           '<input class="nm" type="text" placeholder="Имя работника" value="'+(w.name?String(w.name).replace(/"/g,'&quot;'):'')+'">'+
-          '<input class="sal" type="number" min="0" step="1000" placeholder="оклад ₸/мес" value="'+(w.salary!=null?w.salary:'')+'" title="Оклад, ₸/мес">'+
+          '<input class="sal" type="number" min="0" step="1000" placeholder="оклад ₸/мес (можно пусто)" value="'+(w.salary!=null&&+w.salary>0?w.salary:'')+'" title="Оклад, ₸/мес — нужен только окладникам; сдельщики и агенты работают без него">'+
           '<span class="wage" title="Ставка в день = оклад ÷ рабочие дни">—</span>'+
           '<select class="mem" title="Trello-аккаунт">'+memberOptionsHtml(w.trello_member_id||'')+'</select>'+
           (inactive?'<span class="delbadge">удалён</span>':'')+
@@ -262,7 +262,8 @@
       var isSalaried=tr.querySelector('.salaried')?tr.querySelector('.salaried').checked:false;
       var isRepairAgent=tr.querySelector('.agent')?tr.querySelector('.agent').checked:false;
       if(!name){ setMsg('Введите имя.'); tr.querySelector('.nm').focus(); tr.querySelector('.nm').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.nm').style.borderColor='';},2000); return; }
-      if(!salary){ setMsg('Введите оклад.'); tr.querySelector('.sal').focus(); tr.querySelector('.sal').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.sal').style.borderColor='';},2000); return; }
+      // оклад обязателен только окладникам: сдельщики и агенты работают без фиксированной ЗП
+      if(isSalaried && !salary){ setMsg('У окладника должен быть оклад — либо снимите чип «Окладник».'); tr.querySelector('.sal').focus(); tr.querySelector('.sal').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.sal').style.borderColor='';},2000); return; }
       var id=tr.getAttribute('data-id')||'';
       var active=(tr.getAttribute('data-active')==='0')?0:1; // сохранение удалённого не возвращает его в активные
       var btn=tr.querySelector('.save');
