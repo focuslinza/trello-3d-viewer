@@ -88,16 +88,53 @@
             'title="Открыть карточку заказа в новой вкладке (закройте её, чтобы вернуться к счёту)">📋 '+lbl+' ↗</a>';
         }).join('')+'</div>';
       }
-      // сам счёт показываем настоящим PDF — как он уйдёт клиенту
-      // (банковская шапка, сумма прописью, подпись директора)
-      h+='<div id="pdfhost" style="margin-top:8px;background:#525659;border-radius:12px;overflow:hidden;height:calc(100vh - 210px);min-height:420px">'+
-         '<div class="muted" style="padding:14px">Собираю PDF…</div></div>';
+      // сам счёт показываем HTML-копией PDF (браузеры блокируют PDF во вложенном
+      // окне Trello); скачивание отдаёт настоящий PDF тем же генератором
+      h+=renderDocHtml(r);
       el.innerHTML=h;
       [].forEach.call(document.querySelectorAll('.tabbtn'), function(b){
         b.onclick=function(){ CUR=ROWS[+this.getAttribute('data-i')]; render(); };
       });
       document.getElementById('pdf').style.display='';
-      showPdf(r);
+    }
+
+    // HTML-копия макета PDF: предупреждение, банковская шапка, стороны, позиции,
+    // итоги, сумма прописью, подпись директора
+    function renderDocHtml(r){
+      var sup=parse(r.supplier_json,{})||{}, buy=parse(r.buyer_json,{})||{}, items=parse(r.items_json,[])||[];
+      var total=0; items.forEach(function(it){ total+=(+it.qty||0)*(+it.price||0); });
+      if(!total) total=+r.total||0;
+      var isPerson = buy.kind==='person';
+      var bt=(isPerson?'ИИН ':'БИН / ИИН ')+(buy.bin||'')+', '+(buy.name||'')+(buy.addr?', '+buy.addr:'')+(buy.phone?', тел. '+buy.phone:'');
+      var h='<div class="doc">';
+      h+='<div style="font-size:9.5px;color:#333;margin-bottom:8px">Внимание! Оплата данного счета означает согласие с условиями поставки товара. Уведомление об оплате обязательно, в противном случае не гарантируется наличие товара на складе. Товар отпускается по факту прихода денег на р/с Поставщика, самовывозом, при наличии доверенности и документов удостоверяющих личность.</div>';
+      h+='<table style="margin-bottom:10px"><tbody>'+
+         '<tr><td style="width:110px">Бенефициар:</td><td>'+esc(sup.name||'')+'<br>ИИН: '+esc(sup.bin||'')+'</td><td style="width:34px;text-align:center">ИИК</td><td style="width:170px;text-align:center">'+esc(sup.iban||'')+'</td><td style="width:34px;text-align:center">Кбе</td><td style="width:34px;text-align:center">'+esc(sup.kbe||'')+'</td></tr>'+
+         '<tr><td>Банк бенефициара:</td><td>'+esc(sup.bank||'')+'</td><td style="text-align:center">БИК</td><td style="text-align:center">'+esc(sup.bik||'')+'</td><td style="text-align:center;font-size:10px">Код назн. плат.</td><td style="text-align:center">'+esc(sup.paycode||'')+'</td></tr>'+
+         '</tbody></table>';
+      h+='<h3>Счет на оплату № '+esc(r.number)+' от '+esc(r.date_text||r.date_iso||'')+'</h3>';
+      h+='<div style="margin-top:6px"><b>Поставщик:</b> БИН / ИИН '+esc(sup.bin||'')+', '+esc(sup.name||'')+', '+esc(sup.addr||'')+'</div>';
+      h+='<div style="margin-top:3px"><b>Покупатель:</b> '+esc(bt)+'</div>';
+      h+='<div style="margin-top:3px"><b>Договор:</b> '+esc(r.contract||'Без договора')+'</div>';
+      h+='<table><thead><tr><th>№</th><th>Код</th><th>Наименование</th><th class="num">Кол-во</th><th>Ед.</th><th class="num">Цена</th><th class="num">Сумма</th></tr></thead><tbody>';
+      items.forEach(function(it,i){
+        var sm=(+it.qty||0)*(+it.price||0);
+        h+='<tr><td style="text-align:center">'+(i+1)+'</td><td>'+esc(it.code||'')+'</td><td>'+esc(it.name||'')+'</td><td class="num">'+money(it.qty)+'</td><td style="text-align:center">'+esc(it.unit||'Услуга')+'</td><td class="num">'+money(it.price)+'</td><td class="num">'+money(sm)+'</td></tr>';
+      });
+      h+='</tbody></table>';
+      h+='<div class="tot">Итого: '+money(total)+'</div>';
+      h+='<div style="text-align:right;font-size:12px;margin-top:2px">В том числе НДС: -</div>';
+      h+='<div style="margin-top:8px;font-size:12.5px">Всего наименований '+items.length+', на сумму '+money(total)+' KZT</div>';
+      h+='<div style="font-size:12.5px"><b>Всего к оплате: '+esc((window.INVOICE&&window.INVOICE.rubWords)?window.INVOICE.rubWords(total):'')+'</b></div>';
+      h+='<hr style="border:none;border-top:1px solid #b9c2cf;margin:16px 0 6px">';
+      h+='<div style="display:flex;align-items:flex-end;gap:12px">'+
+         '<span style="width:90px">Исполнитель</span>'+
+         '<span style="width:170px;position:relative;display:inline-block;border-bottom:1px solid #172b4d;height:34px">'+
+           ((window.INVOICE&&window.INVOICE.directorSign)?('<img src="'+window.INVOICE.directorSign+'" style="position:absolute;left:30px;bottom:-8px;width:96px">'):'')+
+         '</span>'+
+         '<span>/'+esc(sup.executor||'')+'/</span></div>';
+      h+='</div>';
+      return h;
     }
 
     function buildDoc(r){
@@ -107,20 +144,6 @@
         supplier:parse(r.supplier_json,null), buyer:parse(r.buyer_json,null),
         items:parse(r.items_json,[]), total:+r.total||0 });
     }
-    var PDF_URL=null;
-    function showPdf(r){
-      var host=document.getElementById('pdfhost');
-      if(!window.pdfMake || !window.INVOICE){ host.innerHTML='<div class="muted" style="padding:14px">Генератор PDF не загрузился — проверьте интернет. Скачивание может работать через кнопку ниже.</div>'; return; }
-      try {
-        pdfMake.createPdf(buildDoc(r)).getBlob(function(blob){
-          if(CUR!==r) return; // уже переключились на другой счёт
-          if(PDF_URL){ try{ URL.revokeObjectURL(PDF_URL); }catch(e){} }
-          PDF_URL=URL.createObjectURL(blob);
-          host.innerHTML='<iframe src="'+PDF_URL+'#toolbar=0&navpanes=0" style="width:100%;height:100%;border:0"></iframe>';
-        });
-      } catch(e){ host.innerHTML='<div class="muted" style="padding:14px">Не удалось собрать PDF: '+esc(e&&e.message||e)+'</div>'; }
-    }
-
     document.getElementById('pdf').onclick=function(){
       if(!CUR || !window.pdfMake){ alert('Генератор PDF не загрузился — проверьте интернет.'); return; }
       var r=CUR, buy=parse(r.buyer_json,{})||{};
