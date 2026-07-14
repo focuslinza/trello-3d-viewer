@@ -48,24 +48,52 @@
     .filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
     a{color:#8ab4ff;text-decoration:none} a:hover{text-decoration:underline}
     .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end;z-index:50}
+    /* канбан заявок */
+    .board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start}
+    @media (max-width:820px){ .board{grid-template-columns:1fr} }
+    .col{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:10px;min-height:120px}
+    .col.dragover{border-color:var(--blue);background:#232c3a}
+    .colhd{display:flex;justify-content:space-between;align-items:center;margin:2px 4px 10px}
+    .colhd .t{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700}
+    .colhd .n{background:var(--bg,#1d2125);border:1px solid var(--line);border-radius:10px;padding:1px 9px;font-size:11.5px;color:var(--muted)}
+    .kcard{background:var(--bg,#1d2125);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;cursor:pointer;user-select:none}
+    .kcard:hover{border-color:#4f5b68}
+    .kcard.dragging{opacity:.45}
+    .kcard .nm{font-weight:600;line-height:1.35}
+    .kcard .sub{font-size:11.5px;color:var(--muted);margin-top:3px}
+    .kcard .row2{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:6px}
+    .mv{background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:12px;padding:1px 7px;cursor:pointer}
+    .mv:hover{border-color:var(--blue);color:#cfe1ff}
+    .ovl{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 12px;z-index:60;overflow:auto}
+    .pop{background:var(--bg2);border:1px solid var(--line);border-radius:14px;max-width:680px;width:100%;padding:18px 20px 20px}
+    .pop h3{margin:0 0 2px;font-size:16px}
+    .pop .popbar{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
+    .fld{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+    .fld label{font-size:11.5px;color:var(--muted);text-transform:uppercase}
+    .fld input{width:100%;box-sizing:border-box}
+    label.fchk{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:12px;cursor:pointer}
+    .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+    .thumbs img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
   </style>
 </head>
 <body>
   <div id="app"><div class="empty" id="boot">Загрузка…</div></div>
   <div class="bar"><button class="btn" id="close" type="button">Закрыть</button></div>
+  <div id="supOvlHost"></div>
   <script>
     var t = window.TrelloPowerUp.iframe();
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     document.getElementById('close').onclick=function(){ t.closeModal(); };
 
     var TAB='req', REQS=[], OPEN=0, TOOLS=[], DUE=0, CASH=null, TOOL_EDIT=null;
+    var ME={id:'',name:''}, CAN_SUPPLY=false, THUMBS={};
     var now=new Date();
     function pad(n){ return n<10?'0'+n:''+n; }
     function fmtDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
     var CASH_RANGE={ from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now) };
     function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
-    var STATUS_LBL = { new:'новая', bought:'куплено', given:'выдано', rejected:'отклонена' };
+    var STATUS_LBL = { new:'новая', work:'в работе', bought:'куплено', given:'выдано', rejected:'отклонена' };
 
     function isDirector(){
       return Promise.all([ t.member('id'), t.board('memberships'), t.organization('memberships').catch(function(){return null;}) ])
@@ -88,76 +116,242 @@
     }
 
     function loadAll(){
+      var priv = (CAN_SUPPLY||IS_ADMIN);
       return Promise.all([
         fetch(WORKER+'/supply-list').then(function(r){return r.json();}).catch(function(){return {};}),
-        fetch(WORKER+'/tools-list').then(function(r){return r.json();}).catch(function(){return {};}),
-        fetch(WORKER+'/cash-list?from='+CASH_RANGE.from+'&to='+CASH_RANGE.to).then(function(r){return r.json();}).catch(function(){return {};})
+        priv ? fetch(WORKER+'/tools-list').then(function(r){return r.json();}).catch(function(){return {};}) : Promise.resolve({}),
+        priv ? fetch(WORKER+'/cash-list?from='+CASH_RANGE.from+'&to='+CASH_RANGE.to).then(function(r){return r.json();}).catch(function(){return {};}) : Promise.resolve({})
       ]).then(function(res){
         if(res[0]&&res[0].ok){ REQS=res[0].requests||[]; OPEN=res[0].openCount||0; }
         if(res[1]&&res[1].ok){ TOOLS=res[1].tools||[]; DUE=res[1].dueCount||0; }
         if(res[2]&&res[2].ok){ CASH=res[2]; }
         render();
+        var ids=REQS.map(function(r){return r.id;});
+        if(ids.length){
+          fetch(WORKER+'/receipt-thumbs?kind=req&ids='+ids.join(',')).then(function(r){return r.json();}).then(function(t2){
+            if(t2&&t2.ok){ THUMBS=t2.thumbs||{}; if(TAB==='req') render(); }
+          }).catch(function(){});
+        }
       });
     }
 
     // ---------- ЗАЯВКИ ----------
+    // ---------- ЗАЯВКИ: канбан ----------
+    var SUP_COLS=[ {key:'new',title:'Новая заявка'}, {key:'work',title:'В работе'}, {key:'bought',title:'Куплено'} ];
+    function reqCol(r){ return r.status==='given' ? 'bought' : r.status; } // «выдано» живёт в колонке «Куплено»
+
     function renderReq(){
-      if(!REQS.length) return '<div class="empty">Заявок нет.</div>';
-      var h='<table><thead><tr><th>Что</th><th>Кол-во</th><th>Кто просил</th><th>Дата</th><th>Статус</th><th>Действия</th></tr></thead><tbody>';
-      REQS.forEach(function(r){
-        h+='<tr><td>'+(r.urgent?'<span class="pill urgent">срочно</span> ':'')+esc(r.name)+
-           ' <button class="btn" data-reqedit="'+r.id+'" type="button" style="padding:2px 8px;font-size:11px">✎</button>'+
-           (r.comment?('<div class="muted">'+esc(r.comment)+'</div>'):'')+
-           (r.link?('<div><a href="'+esc(r.link)+'" target="_blank">ссылка от работника ↗</a></div>'):'')+
-           '<div class="rqfiles" data-id="'+r.id+'"></div>'+
-           (r.note?('<div class="muted">ответ: '+esc(r.note)+'</div>'):'')+'</td>'+
-           '<td>'+esc(r.qty)+'</td><td>'+esc(r.byName)+'</td><td class="muted">'+esc((r.createdAt||'').slice(0,10))+'</td>'+
-           '<td><span class="pill '+esc(r.status)+'">'+(STATUS_LBL[r.status]||r.status)+'</span></td>'+
-           '<td style="white-space:nowrap">';
-        if(r.status==='new') h+='<button class="btn rq" data-id="'+r.id+'" data-st="bought" type="button">Куплено</button> '+
-                                '<button class="btn danger rq" data-id="'+r.id+'" data-st="rejected" type="button">Отклонить</button>';
-        else if(r.status==='bought') h+='<button class="btn rq" data-id="'+r.id+'" data-st="given" type="button">Выдано</button>';
-        if(IS_ADMIN) h+=' <button class="btn sarch" data-id="'+r.id+'" type="button" title="В архив: скрыть из списка, данные останутся" style="padding:3px 8px;font-size:11px">🗄</button>'+
-                        ' <button class="btn danger sdel" data-id="'+r.id+'" type="button" title="Удалить безвозвратно (для тестовых заявок)" style="padding:3px 8px;font-size:11px">✕</button>';
-        h+='</td></tr>';
-        h+='<tr class="reqEditRow" id="reqEditRow_'+r.id+'" style="display:none"><td colspan="6"><div id="reqEditBox_'+r.id+'"></div></td></tr>';
+      var canMove = CAN_SUPPLY||IS_ADMIN;
+      var h='<div class="board">';
+      SUP_COLS.forEach(function(c,ci){
+        var cards=REQS.filter(function(r){ return reqCol(r)===c.key && r.status!=='rejected'; });
+        h+='<div class="col" data-col="'+c.key+'"><div class="colhd"><span class="t">'+c.title+'</span><span class="n">'+cards.length+'</span></div>';
+        if(c.key==='new') h+='<button class="btn" id="supNewBtn" type="button" style="width:100%;margin-bottom:8px">+ Заявка</button>';
+        if(!cards.length) h+='<div class="empty">Пусто</div>';
+        cards.forEach(function(r){
+          h+='<div class="kcard" '+(canMove?'draggable="true"':'')+' data-id="'+r.id+'">';
+          if(THUMBS[String(r.id)]){
+            h+='<div style="margin:-9px -11px 8px;overflow:hidden;border-radius:9px 9px 0 0;background:#151a1e">'+
+               '<img src="'+WORKER+'/receipt-get?id='+THUMBS[String(r.id)]+'" loading="lazy" alt="" '+
+               'style="display:block;width:100%;max-height:150px;object-fit:cover"></div>';
+          }
+          h+='<div class="nm">'+esc(r.name)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+(r.status==='given'?' <span class="pill given">выдано</span>':'')+'</div>';
+          var sub=[];
+          if(r.qty) sub.push(esc(r.qty));
+          if(r.byName) sub.push('заказал: '+esc(r.byName));
+          sub.push(esc((r.createdAt||'').slice(0,10)));
+          h+='<div class="sub">'+sub.join(' · ')+'</div>';
+          if(r.comment) h+='<div class="sub">'+esc(r.comment)+'</div>';
+          h+='<div class="row2"><span></span><span>';
+          if(canMove){
+            if(ci>0) h+='<button class="mv" data-mv="'+r.id+'" data-to="'+SUP_COLS[ci-1].key+'" title="В колонку «'+SUP_COLS[ci-1].title+'»">‹</button> ';
+            if(ci<SUP_COLS.length-1) h+='<button class="mv" data-mv="'+r.id+'" data-to="'+SUP_COLS[ci+1].key+'" title="В колонку «'+SUP_COLS[ci+1].title+'»">›</button>';
+          }
+          h+='</span></div></div>';
+        });
+        h+='</div>';
       });
-      return h+'</tbody></table>';
+      h+='</div>';
+      return h;
     }
-    function toggleReqEditRow(id){
-      var row=document.getElementById('reqEditRow_'+id);
-      if(row.style.display==='none'){ row.style.display=''; drawReqEditBox(id); } else row.style.display='none';
+
+    var supDragId=null;
+    function wireReqBoard(){
+      var nb=document.getElementById('supNewBtn'); if(nb) nb.onclick=openSupCreate;
+      var canMove = CAN_SUPPLY||IS_ADMIN;
+      [].forEach.call(document.querySelectorAll('.kcard'), function(c){
+        c.onclick=function(e){ if(e.target.classList.contains('mv'))return; openSupCard(+this.getAttribute('data-id')); };
+        if(canMove){
+          c.ondragstart=function(e){ supDragId=+this.getAttribute('data-id'); this.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; };
+          c.ondragend=function(){ this.classList.remove('dragging'); };
+        }
+      });
+      if(canMove){
+        [].forEach.call(document.querySelectorAll('.col'), function(col){
+          col.ondragover=function(e){ e.preventDefault(); this.classList.add('dragover'); };
+          col.ondragleave=function(){ this.classList.remove('dragover'); };
+          col.ondrop=function(e){ e.preventDefault(); this.classList.remove('dragover');
+            if(supDragId!=null) supMoveTo(supDragId, this.getAttribute('data-col')); supDragId=null; };
+        });
+      }
+      [].forEach.call(document.querySelectorAll('.mv'), function(b){
+        b.onclick=function(e){ e.stopPropagation(); supMoveTo(+this.getAttribute('data-mv'), this.getAttribute('data-to')); };
+      });
     }
-    function drawReqEditBox(id){
-      var r=REQS.filter(function(x){return x.id===id;})[0]; if(!r) return;
-      var box=document.getElementById('reqEditBox_'+id);
-      var h='';
-      if(r.status!=='new') h+='<div class="muted" style="color:var(--amber);margin-bottom:6px">⚠ Заявка уже не новая — правьте, только если это исправление ошибки.</div>';
-      h+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">';
-      h+='<label>Что<br><input type="text" class="rqName" value="'+esc(r.name)+'" style="width:200px"></label>';
-      h+='<label>Кол-во<br><input type="text" class="rqQty" value="'+esc(r.qty||'')+'" style="width:100px"></label>';
-      h+='<label>Ссылка<br><input type="text" class="rqLink" value="'+esc(r.link||'')+'" style="width:180px"></label>';
-      h+='<label style="display:inline-flex;align-items:center;gap:5px"><input type="checkbox" class="rqUrgent"'+(r.urgent?' checked':'')+'> срочно</label>';
-      h+='<button class="btn primary" data-savereqedit="'+id+'" type="button">Сохранить</button>';
-      h+='<span class="rqeMsg muted"></span></div>';
-      box.innerHTML=h;
-      box.querySelector('[data-savereqedit]').onclick=function(){ saveReqEditBox(id); };
-    }
-    function saveReqEditBox(id){
-      var box=document.getElementById('reqEditBox_'+id);
+
+    function supMoveTo(id, col){
       var r=REQS.filter(function(x){return x.id===id;})[0];
-      var name=box.querySelector('.rqName').value.trim();
-      if(!name){ alert('Укажите, что нужно.'); return; }
-      var msg=box.querySelector('.rqeMsg'); msg.textContent='Сохранение…';
-      fetch(WORKER+'/supply-request-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-        id:id, name:name, qty:box.querySelector('.rqQty').value.trim(), link:box.querySelector('.rqLink').value.trim(),
-        urgent:box.querySelector('.rqUrgent').checked
-      })}).then(function(rr){return rr.json();}).then(function(j){
-        if(!j||!j.ok) throw new Error((j&&j.error)||'не удалось сохранить');
-        Object.assign(r,{name:name, qty:box.querySelector('.rqQty').value.trim(), link:box.querySelector('.rqLink').value.trim(), urgent:box.querySelector('.rqUrgent').checked});
-        msg.textContent='Сохранено ✓'; msg.style.color='var(--green)';
-        setTimeout(function(){ render(); }, 700);
-      }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
+      if(!r || reqCol(r)===col) return;
+      var newStatus = col; // new|work|bought
+      var old=r.status; r.status=newStatus; render();
+      fetch(WORKER+'/supply-set',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:id,status:newStatus})})
+        .then(function(x){return x.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил'); })
+        .catch(function(e){ r.status=old; render(); alert('Не удалось перенести: '+(e&&e.message||e)); });
+    }
+
+    // файлы: фото жмём, PDF/документ как есть (лимит ~650 КБ)
+    function fileToB64(file){
+      return new Promise(function(res,rej){ var fr=new FileReader();
+        fr.onload=function(){ res(String(fr.result).split(',')[1]); }; fr.onerror=rej; fr.readAsDataURL(file); });
+    }
+    function compressImage(file){
+      return new Promise(function(resolve,reject){
+        var fr=new FileReader();
+        fr.onload=function(){ var img=new Image();
+          img.onload=function(){ var maxSide=1280,w=img.width,hgt=img.height,k=Math.min(1,maxSide/Math.max(w,hgt));
+            var cnv=document.createElement('canvas'); cnv.width=Math.round(w*k); cnv.height=Math.round(hgt*k);
+            cnv.getContext('2d').drawImage(img,0,0,cnv.width,cnv.height);
+            resolve(cnv.toDataURL('image/jpeg',0.72).split(',')[1]); };
+          img.onerror=reject; img.src=fr.result; };
+        fr.onerror=reject; fr.readAsDataURL(file);
+      });
+    }
+    function prepFile(file){
+      if(/^image\//.test(file.type||'')) return compressImage(file).then(function(b64){ return { b64:b64, mime:'image/jpeg', filename:file.name||'фото.jpg' }; });
+      if(file.size > 650000) return Promise.reject(new Error('Файл «'+file.name+'» слишком большой (макс ~650 КБ). Фото можно любое — оно сожмётся.'));
+      return fileToB64(file).then(function(b64){ return { b64:b64, mime:file.type||'application/octet-stream', filename:file.name||'файл' }; });
+    }
+    function uploadFiles(reqId, files, msgEl){
+      var chain=Promise.resolve();
+      [].forEach.call(files, function(f,i){
+        chain=chain.then(function(){
+          if(msgEl){ msgEl.textContent='Файл '+(i+1)+' из '+files.length+'…'; msgEl.style.color='var(--muted)'; }
+          return prepFile(f).then(function(p){
+            return fetch(WORKER+'/receipt-save',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({kind:'req',refId:String(reqId),filename:p.filename,mime:p.mime,dataB64:p.b64})})
+              .then(function(r){return r.json();})
+              .then(function(jr){ if(!jr||!jr.ok) throw new Error((jr&&jr.error)||'файл не сохранился'); });
+          });
+        });
+      });
+      return chain;
+    }
+    function closeSupOvl(){ var el=document.getElementById('supOvlHost'); if(el) el.innerHTML=''; }
+
+    function openSupCreate(){
+      var h='<div class="ovl" id="supOvl"><div class="pop">';
+      h+='<h3>Новая заявка на снабжение</h3><div class="muted">Что купить — опишите и приложите фото или документ. Заявка попадёт в колонку «Новая заявка».</div>';
+      h+='<div class="fld"><label>Что нужно</label><input type="text" id="sName" placeholder="например: диски отрезные 125мм"></div>';
+      h+='<div class="fld"><label>Количество</label><input type="text" id="sQty" placeholder="например: 20 шт"></div>';
+      h+='<div class="fld"><label>Комментарий</label><input type="text" id="sComment" placeholder="какие именно, для чего"></div>';
+      h+='<div class="fld"><label>Ссылка (если нашли в магазине)</label><input type="text" id="sLink" placeholder="https://…"></div>';
+      h+='<label class="fchk"><input type="checkbox" id="sUrgent"> 🔥 Срочно</label>';
+      h+='<label class="fchk">📎 Фото или документы <input type="file" id="sFiles" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" multiple></label>';
+      h+='<div class="muted" style="font-size:11.5px">Заказчик записывается автоматически: '+esc(ME.name||'вы')+'</div>';
+      h+='<div class="popbar"><span class="muted" id="sMsg"></span><button class="btn" id="sCancel" type="button">Отмена</button><button class="btn primary" id="sSend" type="button">Отправить заявку</button></div>';
+      h+='</div></div>';
+      document.getElementById('supOvlHost').innerHTML=h;
+      document.getElementById('sCancel').onclick=closeSupOvl;
+      document.getElementById('supOvl').onclick=function(e){ if(e.target===this) closeSupOvl(); };
+      document.getElementById('sSend').onclick=function(){
+        var name=document.getElementById('sName').value.trim();
+        if(!name){ alert('Опишите, что нужно купить.'); return; }
+        var btn=this, msg=document.getElementById('sMsg');
+        btn.disabled=true; msg.textContent='Отправка…';
+        fetch(WORKER+'/supply-request',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ name:name, qty:document.getElementById('sQty').value.trim(),
+            comment:document.getElementById('sComment').value.trim(), link:document.getElementById('sLink').value.trim(),
+            urgent:document.getElementById('sUrgent').checked?1:0, byMemberId:ME.id, byName:ME.name })})
+        .then(function(r){return r.json();}).then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+          var files=document.getElementById('sFiles').files;
+          return files.length ? uploadFiles(j.id, files, msg) : null;
+        }).then(function(){ closeSupOvl(); loadAll(); })
+        .catch(function(e){ btn.disabled=false; msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
+      };
+    }
+
+    function openSupCard(id){
+      var r=REQS.filter(function(x){return x.id===id;})[0]; if(!r) return;
+      var canMng=CAN_SUPPLY||IS_ADMIN;
+      var h='<div class="ovl" id="supOvl"><div class="pop">';
+      h+='<h3>'+esc(r.name)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'</h3>';
+      h+='<div class="muted">'+(STATUS_LBL[r.status]||r.status)+' · заказал: '+esc(r.byName||'—')+' · '+esc((r.createdAt||'').slice(0,10))+'</div>';
+      h+='<div style="margin-top:10px;font-size:13.5px;line-height:1.7">';
+      if(r.qty) h+='Количество: <b>'+esc(r.qty)+'</b><br>';
+      if(r.comment) h+='Комментарий: '+esc(r.comment)+'<br>';
+      if(r.link) h+='<a href="'+esc(r.link)+'" target="_blank">ссылка на товар ↗</a><br>';
+      if(r.note) h+='<span class="muted">Ответ снабжения: '+esc(r.note)+'</span>';
+      h+='</div><div class="thumbs" id="supThumbs"></div>';
+      h+='<label class="fchk">📎 Добавить фото или документ <input type="file" id="supAddFile" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" multiple></label>';
+      if(canMng){
+        h+='<div class="fld"><label>Заметка снабжения (где купили, цена / причина отказа)</label>'+
+           '<div style="display:flex;gap:8px"><input type="text" id="supNote" value="'+esc(r.note||'')+'" style="flex:1">'+
+           '<button class="btn" id="supNoteSave" type="button">Сохранить</button></div></div>';
+      }
+      h+='<div class="popbar">';
+      if(canMng && r.status!=='rejected') h+='<button class="btn danger" id="supRej" type="button" title="Заявка не будет исполнена; уйдёт с доски">Отклонить</button>';
+      if(IS_ADMIN) h+='<button class="btn" id="supArch" type="button" title="В архив: скрыть, данные останутся">🗄 Архив</button>'+
+                      '<button class="btn danger" id="supDel" type="button" title="Удалить безвозвратно">✕ Удалить</button>';
+      h+='<button class="btn" id="supClose" type="button">Закрыть</button></div>';
+      h+='</div></div>';
+      document.getElementById('supOvlHost').innerHTML=h;
+      document.getElementById('supClose').onclick=function(){ closeSupOvl(); loadAll(); };
+      document.getElementById('supOvl').onclick=function(e){ if(e.target===this){ closeSupOvl(); loadAll(); } };
+      // файлы заявки: картинки миниатюрами, документы значками
+      fetch(WORKER+'/receipts-list?kind=req&refId='+id).then(function(x){return x.json();}).then(function(j){
+        var el=document.getElementById('supThumbs'); if(!el) return;
+        var list=(j&&j.receipts)||[];
+        el.innerHTML=list.map(function(f){
+          var u=WORKER+'/receipt-get?id='+f.id;
+          var img=/\.(jpe?g|png|webp|gif)$/i.test(f.filename||'') || !/\./.test(f.filename||'');
+          return img ? '<a href="'+u+'" target="_blank"><img src="'+u+'" title="'+esc(f.filename||'')+'"></a>'
+                     : '<a href="'+u+'" target="_blank" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:8px 10px">📄 '+esc(f.filename||'файл')+'</a>';
+        }).join('');
+      }).catch(function(){});
+      document.getElementById('supAddFile').onchange=function(){
+        if(!this.files.length) return;
+        var inp=this;
+        uploadFiles(id, inp.files, null).then(function(){ openSupCard(id); loadAll(); })
+          .catch(function(e){ alert('Файл не добавился: '+(e&&e.message||e)); inp.value=''; });
+      };
+      var ns=document.getElementById('supNoteSave');
+      if(ns) ns.onclick=function(){
+        fetch(WORKER+'/supply-set',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({id:id,status:r.status,note:document.getElementById('supNote').value.trim()})})
+          .then(function(x){return x.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); r.note=document.getElementById('supNote').value.trim(); ns.textContent='✓'; setTimeout(function(){ns.textContent='Сохранить';},1200); })
+          .catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); });
+      };
+      var rej=document.getElementById('supRej');
+      if(rej) rej.onclick=function(){
+        var reason=prompt('Причина отказа (увидит заказавший):',''); if(reason==null) return;
+        fetch(WORKER+'/supply-set',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({id:id,status:'rejected',note:reason})})
+          .then(function(x){return x.json();}).then(function(){ closeSupOvl(); loadAll(); });
+      };
+      var ar=document.getElementById('supArch');
+      if(ar) ar.onclick=function(){
+        if(!confirm('Убрать заявку в архив? Она исчезнет с доски; данные останутся.')) return;
+        fetch(WORKER+'/supply-request-archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+          .then(function(x){return x.json();}).then(function(){ closeSupOvl(); loadAll(); });
+      };
+      var dl=document.getElementById('supDel');
+      if(dl) dl.onclick=function(){
+        if(!confirm('УДАЛИТЬ заявку безвозвратно вместе с файлами?')) return;
+        fetch(WORKER+'/supply-request-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+          .then(function(x){return x.json();}).then(function(){ closeSupOvl(); loadAll(); });
+      };
     }
 
     // ---------- ИНСТРУМЕНТ ----------
@@ -526,10 +720,13 @@
     function render(){
       var app=document.getElementById('app');
       var h='<h2>Снабжение</h2><div class="tabs">';
-      [['req','Заявки'+(OPEN?'<span class="cnt">'+OPEN+'</span>':'')],
-       ['tools','Инструмент и сервис'+(DUE?'<span class="cnt">'+DUE+'</span>':'')],
-       ['cash','Наличные расходы'],
-       ['prices','💲 Цены материалов']].forEach(function(x){
+      var tabs=[['req','Заявки'+(OPEN?'<span class="cnt">'+OPEN+'</span>':'')]];
+      if(CAN_SUPPLY||IS_ADMIN){
+        tabs.push(['tools','Инструмент и сервис'+(DUE?'<span class="cnt">'+DUE+'</span>':'')]);
+        tabs.push(['cash','Наличные расходы']);
+        tabs.push(['prices','💲 Цены материалов']);
+      }
+      tabs.forEach(function(x){
         h+='<div class="tab'+(TAB===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
       });
       h+='</div>';
@@ -538,44 +735,7 @@
       [].forEach.call(document.querySelectorAll('.tab[data-tab]'), function(el){ el.onclick=function(){ TAB=this.getAttribute('data-tab'); TOOL_EDIT=null; render(); }; });
       if(TAB==='prices'){ wirePricesTab(); return; }
 
-      [].forEach.call(document.querySelectorAll('.rqfiles'), function(el){
-        fetch(WORKER+'/receipts-list?kind=req&refId='+encodeURIComponent(el.getAttribute('data-id')))
-          .then(function(r){return r.json();}).then(function(j){
-            var list=(j&&j.receipts)||[];
-            if(!list.length){ el.style.display='none'; return; }
-            el.innerHTML=list.map(function(r){ var pdf=/\.pdf$/i.test(r.filename||''); return '<a href="'+WORKER+'/receipt-get?id='+r.id+'" target="_blank" title="'+(r.filename||'')+'">'+(pdf?'📄':'📷')+'</a>'; }).join(' ');
-          }).catch(function(){ el.style.display='none'; });
-      });
-      [].forEach.call(document.querySelectorAll('.rq'), function(b){
-        b.onclick=function(){
-          var id=+this.getAttribute('data-id'), st=this.getAttribute('data-st');
-          var note = st==='bought' ? (prompt('Заметка (где купили, цена) — можно пусто:','')||'') :
-                     st==='rejected' ? (prompt('Причина отказа:','')||'') : '';
-          fetch(WORKER+'/supply-set',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({id:id,status:st,note:note})})
-            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
-            .catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); });
-        };
-      });
-      [].forEach.call(document.querySelectorAll('.sarch'), function(b){
-        b.onclick=function(){ var id=+this.getAttribute('data-id');
-          if(!confirm('Убрать заявку в архив? Она исчезнет из списка; данные останутся в базе.')) return;
-          fetch(WORKER+'/supply-request-archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
-            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
-            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
-        };
-      });
-      [].forEach.call(document.querySelectorAll('.sdel'), function(b){
-        b.onclick=function(){ var id=+this.getAttribute('data-id');
-          if(!confirm('УДАЛИТЬ заявку безвозвратно вместе с чеками? Для рабочих заявок используйте архив.')) return;
-          fetch(WORKER+'/supply-request-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
-            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
-            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
-        };
-      });
-      [].forEach.call(document.querySelectorAll('[data-reqedit]'), function(b){
-        b.onclick=function(){ toggleReqEditRow(+this.getAttribute('data-reqedit')); };
-      });
+      if(TAB==='req'){ wireReqBoard(); return; }
 
       var ta=document.getElementById('taddBtn'); if(ta) ta.onclick=function(){ TOOL_EDIT={}; render(); };
       [].forEach.call(document.querySelectorAll('.tedit'), function(b){
@@ -656,13 +816,18 @@
       });
     }
 
-    canUse().then(function(allowed){
-      if(!allowed){
-        document.getElementById('boot').textContent='Раздел доступен руководителю и снабженцу (право включается в «Зарплата / Работники»).';
-        return;
-      }
-      return loadAll();
-    }).catch(function(e){ document.getElementById('boot').textContent='Ошибка: '+(e&&e.message||e); });
+    // раздел «Заявки» видят все работники; инструмент/наличные/цены — снабженец и руководство
+    t.member('id','fullName','username').then(function(m){
+      ME.id=(m&&m.id)||''; ME.name=(m&&(m.fullName||m.username))||'';
+      return isDirector();
+    }).then(function(admin){
+      IS_ADMIN=admin;
+      if(admin){ CAN_SUPPLY=true; return; }
+      return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(ME.id))
+        .then(function(r){return r.json();}).then(function(j){ CAN_SUPPLY=!!(j&&j.canSupply); })
+        .catch(function(){ CAN_SUPPLY=false; });
+    }).then(loadAll)
+      .catch(function(e){ document.getElementById('boot').textContent='Ошибка: '+(e&&e.message||e); });
   </script>
 </body>
 </html>
