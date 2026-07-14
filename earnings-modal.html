@@ -71,10 +71,14 @@
       return key; // eng/cut/bend/weld
     }
     function workersFor(group){
-      return WORKERS.filter(function(w){
+      var strict = (group==='cut'||group==='bend'||group==='weld');
+      var pool = WORKERS.filter(function(w){
         var st=w.stages||[];
-        return !st.length || st.indexOf(group)>=0; // no stages set -> show everywhere
+        if(strict) return st.indexOf(group)>=0;      // резка/гибка/сварка: только причастные
+        return !st.length || st.indexOf(group)>=0;   // остальные: без этапов -> показываем везде
       });
+      // у этапа никого не отмечено в «Работниках» — не блокируем назначение
+      return pool.length ? pool : WORKERS;
     }
 
     function fmt(n){ return (Math.round(n||0)).toLocaleString('ru-RU'); }
@@ -130,7 +134,15 @@
           var pool=workersFor(unitGroup(s.key));
           var ids = s.assigneeIds || (s.assigneeId ? [s.assigneeId] : []);
           function optsFor(sel){ return '<option value="">— выбрать —</option>'+pool.map(function(w){ return '<option value="'+w.id+'"'+(w.id===sel?' selected':'')+'>'+esc(w.name)+'</option>'; }).join(''); }
-          var opts=optsFor(ids[0]||null);
+          // несколько исполнителей на этап: селект на каждого + «+ ещё исполнитель»;
+          // заработок этапа делится между выбранными поровну
+          var selCount = Math.max(1, ids.length) + (EXTRA_SEL[s.key]||0);
+          var selects = '';
+          for(var si=0; si<selCount; si++){
+            selects += '<select class="asg" data-stage="'+s.key+'"'+(si?' style="margin-top:4px"':'')+'>'+optsFor(ids[si]||null)+'</select>';
+          }
+          selects += '<div><a href="#" class="addAsg" data-stage="'+s.key+'" style="font-size:11.5px">+ ещё исполнитель</a></div>';
+          var opts=null;
           var defChecked = (data.defaults && data.defaults[s.key] && data.defaults[s.key]===s.assigneeId) ? ' checked' : '';
           var shareLbl = Math.round((+s.share||0)*1000)/10 + '%';
           var timeCell = s.hours!=null ? (s.hours+' ч'+(s.assigneeId&&s.earned&&s.hours? ' / '+fmt(s.earned/s.hours)+' ₸/ч':'')) : '<span class="muted">—</span>';
@@ -138,17 +150,10 @@
           var paintToggle = s.paint ? ('<div class="stages">'+(data.paintInShop?('красили в цеху → '+shareLbl+' начисляется'):'красили на стороне → не начисляется')+' · меняется в калькуляторе</div>') : '';
           var earnCell = s.paintOutside ? '<span class="muted">на стороне</span>'
             : (ids.length ? (fmt(s.earned)+' ₸'+(ids.length>1?('<div class="stages">по '+fmt(s.earned/ids.length)+' ₸ каждому из '+ids.length+'</div>'):'')) : '<span class="muted">—</span>');
-          // у инженерного этапа можно выбрать ВТОРОГО инженера — большие проекты
-          // делаются вдвоём, вознаграждение делится поровну
-          var secondSel = (s.key==='eng')
-            ? ('<select class="asg" data-stage="'+s.key+'" style="margin-top:4px">'+
-               '<option value="">— второй инженер (не обяз.) —</option>'+
-               pool.map(function(w){ return '<option value="'+w.id+'"'+(w.id===(ids[1]||null)?' selected':'')+'>'+esc(w.name)+'</option>'; }).join('')+'</select>')
-            : '';
           html+='<tr>'+
             '<td>'+esc(s.label||s.key)+'<div class="stages">'+srcLbl+' · доля '+shareLbl+(s.autoName?(' · двигал: '+esc(s.autoName)):'')+'</div>'+paintToggle+'</td>'+
             '<td class="num">'+fmt(s.cost)+' ₸</td>'+
-            '<td><select class="asg" data-stage="'+s.key+'">'+opts+'</select>'+secondSel+
+            '<td>'+selects+
               '<label class="chk" style="margin-top:4px"><input type="checkbox" class="def" data-stage="'+s.key+'"'+defChecked+'> по умолчанию</label></td>'+
             '<td class="num earn">'+earnCell+'</td>'+
             '<td class="num eff">'+timeCell+'</td>'+
@@ -189,6 +194,14 @@
 
       // wire assignee dropdowns + default checkboxes
       [].forEach.call(document.querySelectorAll('.asg'), function(sel){ sel.addEventListener('change', saveAssignees); });
+      [].forEach.call(document.querySelectorAll('.addAsg'), function(link){
+        link.addEventListener('click', function(e){
+          e.preventDefault();
+          var k=this.getAttribute('data-stage');
+          EXTRA_SEL[k]=(EXTRA_SEL[k]||0)+1;
+          if(LASTDATA) render(LASTDATA);
+        });
+      });
       [].forEach.call(document.querySelectorAll('.def'), function(cb){ cb.addEventListener('change', saveDefaults); });
 
       // fill montazh editor from raw
@@ -343,6 +356,7 @@
         .catch(function(e){ mm.textContent='Ошибка сети: '+(e&&e.message||e); });
     }
 
+    var LASTDATA=null, EXTRA_SEL={}; // данные отчёта и добавленные «+ ещё исполнитель»
     function load(){
       setMeta('v2 · загрузка отчёта…');
       return fetch(WORKER+'/order-earnings?cardId='+encodeURIComponent(ctx.cardId)+'&cb='+Date.now())
@@ -351,6 +365,7 @@
           if(d.error){ document.getElementById('body').innerHTML='<div class="sec"><div class="muted">Ошибка: '+esc(d.error)+'</div></div>'; return; }
           if(d.cardName) document.getElementById('title').textContent='Заработок: '+d.cardName;
           setMeta('v2 · card …'+String(ctx.cardId||'?').slice(-6));
+          LASTDATA=d; EXTRA_SEL={};
           render(d);
         })
         .catch(function(e){ document.getElementById('body').innerHTML='<div class="sec"><div class="muted">Сеть недоступна: '+esc(e&&e.message||e)+'</div></div>'; });
