@@ -40,6 +40,7 @@
 </head>
 <body>
   <div id="app"><div class="empty" id="boot">Загрузка…</div></div>
+  <div id="invOvlHost"></div>
   <div class="bar"><button class="btn" id="close" type="button">Закрыть</button></div>
   <script>
     var t = window.TrelloPowerUp.iframe();
@@ -52,6 +53,19 @@
     var RANGE={ from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now), preset:'month' };
     var ROWS=[], TOTALS={}, FILTER='', ONLY_OPEN=false;
     var VIEW='orders'; // orders | invoices | payroll | repairs
+    // просмотр счёта в поп-апе (iframe поверх бухгалтерии)
+    function openInvView(qs){
+      var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:70;display:flex;flex-direction:column">'+
+        '<div style="background:var(--bg2,#22272b);border-bottom:1px solid var(--line,#3a414a);padding:8px 14px;display:flex;justify-content:space-between;align-items:center">'+
+        '<b style="font-size:13px">Счёт на оплату</b><button class="btn" id="invOvlClose" type="button" style="padding:4px 12px">✕ Закрыть</button></div>'+
+        '<iframe src="./invoice-view.html?'+qs+'&t='+Date.now()+'" style="flex:1;border:0;background:var(--bg,#1d2125)"></iframe></div>';
+      document.getElementById('invOvlHost').innerHTML=h;
+      document.getElementById('invOvlClose').onclick=closeInvView;
+    }
+    function closeInvView(){ document.getElementById('invOvlHost').innerHTML=''; }
+    window.addEventListener('message', function(e){
+      if(e && e.data && e.data.metalshopEmbedClose) closeInvView();
+    });
     var INV_ROWS=[], INV_TOTALS={}, INV_SHARE=0.5;
     var REP_ROWS=[], REP_TOTALS={};
     var PAY=null, PAY_OPEN={};
@@ -209,7 +223,7 @@
         h+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
         rows.forEach(function(r){
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
-          h+='<tr'+(closed?' class="rowclosed"':'')+'><td>'+esc(r.number)+'</td>'+
+          h+='<tr'+(closed?' class="rowclosed"':'')+'><td><a href="#" class="onum" data-card="'+esc(r.cardId)+'" title="Показать счёт по этому заказу" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a></td>'+
              '<td>'+esc(r.name)+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+'</td>'+
              '<td>'+esc(r.client)+'</td><td class="num">'+money(r.total)+' ₸</td>'+
              '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
@@ -226,6 +240,9 @@
       bindCommon();
     }
     function _bindChipsBody(){
+      [].forEach.call(document.querySelectorAll('.onum'), function(el){
+        el.addEventListener('click', function(e){ e.preventDefault(); openInvView('cardId='+encodeURIComponent(this.getAttribute('data-card'))); });
+      });
       [].forEach.call(document.querySelectorAll('.chip'), function(c){
         c.onclick=function(){
           var cardId=this.getAttribute('data-card'), field=this.getAttribute('data-f');
@@ -424,7 +441,7 @@
              '</tr>';
           return;
         }
-        h+='<tr><td><b>№'+esc(r.number)+'</b>'+
+        h+='<tr><td><a href="#" class="invnum" data-num="'+esc(r.number)+'" title="Показать счёт" style="color:#579dff;text-decoration:none"><b>№'+esc(r.number)+'</b></a>'+
            (r.sentAt?('<div style="font-size:10.5px;color:var(--green);white-space:nowrap" title="Счёт отправлен клиенту'+(r.sentTo?(' на '+esc(r.sentTo)):'')+'">📤 выслан '+esc((r.sentAt||'').slice(0,10))+'</div>'):
                      ('<div style="font-size:10.5px;color:var(--muted)">не выслан</div>'))+
            '</td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+'</td>'+
@@ -503,6 +520,9 @@
             .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error||'?'); load(); })
             .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
         };
+      });
+      [].forEach.call(document.querySelectorAll('.invnum'), function(el){
+        el.addEventListener('click', function(e){ e.preventDefault(); openInvView('number='+encodeURIComponent(this.getAttribute('data-num'))); });
       });
       [].forEach.call(document.querySelectorAll('.idel'), function(b){
         b.onclick=function(){ var id=+this.getAttribute('data-id'); var num=this.getAttribute('data-num');

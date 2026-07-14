@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Счёт на оплату</title>
+  <script src="./config.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
+  <script src="./dejavu-vfs.js"></script>
+  <script src="./invoice-doc.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:13.5px}
+    #app{max-width:760px;margin:0 auto;padding:16px 16px 80px}
+    h2{margin:0;font-size:17px}
+    .muted{color:var(--muted);font-size:12.5px}
+    .pillrow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+    .pill{border-radius:10px;padding:3px 10px;font-size:11.5px;font-weight:600;background:var(--bg2);border:1px solid var(--line)}
+    .pill.g{background:#1c3329;color:var(--green);border-color:#2e5c44}
+    .pill.a{background:#3a2f1a;color:var(--amber);border-color:#5c4a2e}
+    .pill.r{background:#42221f;color:var(--red);border-color:#5a3a3a}
+    .doc{background:#fff;color:#172b4d;border-radius:12px;padding:22px 24px;margin-top:8px;font-size:13px}
+    .doc h3{margin:4px 0 10px;font-size:16px;border-bottom:2px solid #172b4d;padding-bottom:6px}
+    .doc table{width:100%;border-collapse:collapse;margin-top:8px}
+    .doc th,.doc td{border:1px solid #b9c2cf;padding:5px 7px;font-size:12px}
+    .doc th{background:#eef1f5}
+    .doc .num{text-align:right}
+    .doc .tot{ text-align:right;font-weight:700;font-size:14px;margin-top:8px }
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+    .tabbtn{border:1px solid var(--line);background:var(--bg2);color:var(--txt);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12.5px}
+    .tabbtn.active{border-color:var(--blue);color:#cfe1ff}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end;gap:10px}
+    .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:9px 16px;font-size:13px;cursor:pointer}
+    .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+  </style>
+</head>
+<body>
+  <div id="app"><div class="muted">Загрузка счёта…</div></div>
+  <div class="bar">
+    <button class="btn" id="close" type="button">Закрыть</button>
+    <button class="btn primary" id="pdf" type="button" style="display:none">⬇ Скачать PDF</button>
+  </div>
+  <script>
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    var Q = new URLSearchParams(location.search);
+    var ROWS = [], CUR = null, PAYINFO = {};
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function money(v){ return (window.INVOICE&&window.INVOICE.money)?window.INVOICE.money(v):(Math.round(+v||0)).toLocaleString('ru-RU'); }
+    function parse(s,d){ try{ var v=JSON.parse(s); return v==null?d:v; }catch(e){ return d; } }
+
+    document.getElementById('close').onclick=function(){
+      try{ parent.postMessage({metalshopEmbedClose:1},'*'); }catch(e){}
+    };
+
+    function statusPill(p){
+      if(!p) return '';
+      var st=p.status, cls=st==='full'?'g':(st==='launched'||st==='partial')?'a':'r';
+      var lbl=st==='full'?'оплачен полностью':st==='launched'?'аванс — в производстве':st==='partial'?'частично оплачен':'не оплачен';
+      return '<span class="pill '+cls+'">'+lbl+' · поступило '+money(p.received)+' ₸'+(p.pct!=null?(' ('+p.pct+'%)'):'')+'</span>';
+    }
+
+    function render(){
+      var el=document.getElementById('app');
+      if(!ROWS.length){
+        el.innerHTML='<h2>Счёт не найден</h2><div class="muted" style="margin-top:8px">'+
+          (Q.get('cardId')?'По этому заказу счёт ещё не выставлялся — его можно сформировать кнопкой «Счёт на оплату» на карточке.':'Счёт с таким номером не найден в журнале.')+'</div>';
+        return;
+      }
+      var h='';
+      if(ROWS.length>1){
+        h+='<div class="muted">По этому заказу выставлено счетов: '+ROWS.length+'</div><div class="tabs">';
+        ROWS.forEach(function(r,i){ h+='<button class="tabbtn'+(r===CUR?' active':'')+'" data-i="'+i+'" type="button">№'+esc(r.number)+' · '+money(r.total)+' ₸</button>'; });
+        h+='</div>';
+      }
+      var r=CUR;
+      var sup=parse(r.supplier_json,{})||{}, buy=parse(r.buyer_json,{})||{}, items=parse(r.items_json,[])||[];
+      var p=PAYINFO[r.number];
+      h+='<h2>Счёт на оплату №'+esc(r.number)+' от '+esc(r.date_text||r.date_iso||'')+'</h2>';
+      h+='<div class="pillrow">'+
+         (r.sent_at?('<span class="pill g">📤 выслан '+esc(String(r.sent_at).slice(0,16).replace('T',' '))+(r.sent_to?(' → '+esc(r.sent_to)):'')+'</span>'):'<span class="pill">не выслан</span>')+
+         statusPill(p)+'</div>';
+      h+='<div class="doc"><h3>Счёт на оплату № '+esc(r.number)+' от '+esc(r.date_text||'')+'</h3>';
+      h+='<div><b>Поставщик:</b> '+esc([sup.bin?('БИН/ИИН '+sup.bin):'', sup.name||'', sup.addr||''].filter(Boolean).join(', '))+'</div>';
+      h+='<div style="margin-top:4px"><b>Покупатель:</b> '+esc([buy.bin?('БИН/ИИН '+buy.bin):'', buy.name||'', buy.addr||''].filter(Boolean).join(', '))+'</div>';
+      h+='<div style="margin-top:4px"><b>Договор:</b> '+esc(r.contract||'Без договора')+'</div>';
+      h+='<table><thead><tr><th>№</th><th>Код</th><th>Наименование</th><th class="num">Кол-во</th><th>Ед.</th><th class="num">Цена</th><th class="num">Сумма</th></tr></thead><tbody>';
+      items.forEach(function(it,i){
+        var s=(+it.qty||0)*(+it.price||0);
+        h+='<tr><td>'+(i+1)+'</td><td>'+esc(it.code||'')+'</td><td>'+esc(it.name||'')+'</td><td class="num">'+money(it.qty)+'</td><td>'+esc(it.unit||'Услуга')+'</td><td class="num">'+money(it.price)+'</td><td class="num">'+money(s)+'</td></tr>';
+      });
+      h+='</tbody></table><div class="tot">Итого: '+money(r.total)+' ₸</div></div>';
+      el.innerHTML=h;
+      [].forEach.call(document.querySelectorAll('.tabbtn'), function(b){
+        b.onclick=function(){ CUR=ROWS[+this.getAttribute('data-i')]; render(); };
+      });
+      document.getElementById('pdf').style.display='';
+    }
+
+    document.getElementById('pdf').onclick=function(){
+      if(!CUR || !window.pdfMake){ alert('Генератор PDF не загрузился — проверьте интернет.'); return; }
+      pdfMake.vfs = window.DEJAVU_VFS;
+      pdfMake.fonts = { DejaVu:{ normal:'DejaVuSans.ttf', bold:'DejaVuSans-Bold.ttf', italics:'DejaVuSans.ttf', bolditalics:'DejaVuSans-Bold.ttf' } };
+      var r=CUR;
+      var data={ number:r.number, date:r.date_text||'', contract:r.contract||'',
+        supplier:parse(r.supplier_json,null), buyer:parse(r.buyer_json,null),
+        items:parse(r.items_json,[]), total:+r.total||0 };
+      var dd=window.INVOICE.buildInvoiceDoc(data);
+      var buy=data.buyer||{};
+      pdfMake.createPdf(dd).download('Счет_'+data.number+'_'+String(buy.name||'клиент').replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30)+'.pdf');
+    };
+
+    var qs = Q.get('number') ? ('number='+encodeURIComponent(Q.get('number'))) : ('cardId='+encodeURIComponent(Q.get('cardId')||''));
+    Promise.all([
+      fetch(WORKER+'/invoice-list?'+qs).then(function(r){return r.json();}).catch(function(){return {};}),
+      fetch(WORKER+'/invoice-payments-list').then(function(r){return r.json();}).catch(function(){return {};})
+    ]).then(function(res){
+      ROWS=(res[0]&&res[0].rows)||[];
+      ((res[1]&&res[1].rows)||[]).forEach(function(p){ PAYINFO[p.number]=p; });
+      CUR=ROWS[0]||null;
+      render();
+    });
+  </script>
+</body>
+</html>

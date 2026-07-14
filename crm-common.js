@@ -107,6 +107,18 @@ window.CRM = (function () {
   // калькулятор и нажать "Сохранить" ещё раз, что легко забыть; теперь связь
   // клиента с расчётом обновляется в момент смены клиента, автоматически.
   function setCardCompanyId(t, id, name) {
+    // тихая синхронизация с бухгалтерией: заказ на вкладке «Заказы» сразу
+    // показывает нового клиента (если расчёта ещё нет — сервер молча пропустит)
+    try {
+      t.card('id').then(function (c) {
+        var W = (typeof window !== 'undefined' && ((window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL)) || '';
+        if (!W || !c || !c.id) return;
+        fetch(W + '/calc-relink', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(id ? { cardId: c.id, companyId: id, companyName: name || '' }
+                                  : { cardId: c.id, companyId: null, companyName: '', clear: 1 }) })
+          .catch(function(){});
+      }).catch(function(){});
+    } catch (e) {}
     return t.set('card', 'shared', 'companyId', id || null).then(function (res) {
       if (id) {
         t.card('id').then(function (c) {

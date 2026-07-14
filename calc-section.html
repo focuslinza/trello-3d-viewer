@@ -74,6 +74,12 @@
       return t.card('id','name').then(function(card){
         CARD.id = card && card.id || null;
         CARD.name = card && card.name || '';
+        // тихая синхронизация: карточку переименовали — обновить название заказа
+        // в бухгалтерии/аналитике (сервер меняет только при реальном отличии)
+        if (CARD.id && CARD.name) {
+          try { fetch(WORKER+'/calc-meta-update', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ cardId: CARD.id, cardName: CARD.name }) }).catch(function(){}); } catch(e){}
+        }
       }).catch(function(){}).then(function(){
         return t.board('id').then(function(b){ CARD.board=(b&&b.id)||''; }).catch(function(){});
       }).then(function(){
