@@ -268,7 +268,7 @@
           var open=!!PAY_OPEN[p.id];
           h+='<tr class="prow" data-w="'+esc(p.id)+'" style="cursor:pointer">'+
              '<td style="width:24px;color:#579dff">'+(p.ordersCount?(open?'▾':'▸'):'')+'</td>'+
-             '<td>'+esc(p.name)+'</td>'+
+             '<td>'+esc(p.name)+(p.agentBonus?' <span style="display:inline-block;background:#1c3329;color:var(--green);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700" title="Бонус агента за оформленные заявки на ремонт: '+p.agentBonus.count+' шт × '+p.agentBonus.perItem+' ₸">агент +'+money(p.agentBonus.total)+' ₸</span>':'')+'</td>'+
              '<td class="num"><b>'+money(p.earned)+' ₸</b></td>'+
              '<td class="num">'+p.ordersCount+'</td></tr>';
           if(open && p.orders && p.orders.length){
