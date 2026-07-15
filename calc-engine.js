@@ -5,6 +5,8 @@
   var TH=[0.5,0.8,1,1.5,2,3,4,5,8,10,12,16];
   var CUTBEND_TIERS=[1,20,100,500];
   var CUTBEND={0.5:[800,350,240,200],0.8:[900,375,245,205],1:[1000,400,250,210],1.5:[1200,600,480,395],2:[1220,610,500,400],3:[1300,650,550,450],4:[1400,700,600,500],5:[1600,800,650,550],8:[1900,950,850,780],10:[1800,900,950,870],12:[1800,900,950,870],16:[1800,900,950,870]};
+  // гибка выделена в отдельную таблицу (исходно совпадает с резкой; директор правит независимо)
+  var BEND={0.5:[800,350,240,200],0.8:[900,375,245,205],1:[1000,400,250,210],1.5:[1200,600,480,395],2:[1220,610,500,400],3:[1300,650,550,450],4:[1400,700,600,500],5:[1600,800,650,550],8:[1900,950,850,780],10:[1800,900,950,870],12:[1800,900,950,870],16:[1800,900,950,870]};
   var WELD_TIERS=[1,6,11,16,21,51,101,301];
   var WELD_SS={0.5:[6000,4000,3000,2000,1400,1000,750,350],0.8:[5000,3000,2000,1300,1100,800,600,230],1:[3000,2000,1000,700,500,350,300,150],1.5:[3000,2000,1000,700,500,350,300,150],2:[3000,2000,1000,700,500,350,300,150],3:[3300,2200,1100,800,600,400,320,160],4:[3600,2400,1200,900,700,450,340,170],5:[3900,2600,1300,1000,800,500,360,180],8:[4200,2800,1400,1100,900,550,380,190],10:[4500,3000,1500,1200,1000,600,400,200],12:[4800,3200,1600,1300,1100,650,420,210],16:[5100,3400,1700,1400,1200,700,440,220]};
   var WELD_BLACK={1:[2000,1500,1000,700,500,300,150,100],1.5:[2000,1500,1000,700,500,300,150,100],2:[2000,1500,1000,700,500,300,150,135],3:[2000,1500,1100,800,600,300,180,170],4:[2000,1500,1100,800,600,300,210,205],5:[2300,1820,1430,800,600,300,240,240],8:[2600,2140,1760,1140,720,344,280,275],10:[2900,2460,2090,1480,840,388,320,310],12:[3200,2780,2420,1820,960,432,360,345],16:[3500,3100,2750,2160,1080,476,400,380]};
@@ -72,13 +74,13 @@
 
   // operations D..L : table + price multiplier; ост 0, рах 0.07 ; weld шлейф mult 0.5
   var OPS={
-    D:{t:'CB',mult:1,sec:'РЕЗКА',lbl:'Лист выбор 1 (м)'},
-    E:{t:'CB',mult:1,sec:'РЕЗКА',lbl:'Лист выбор 2 (м)'},
-    F:{t:'CB',mult:1,sec:'РЕЗКА',lbl:'Лист выбор 3 (м)'},
-    G:{t:'CB',mult:3,sec:'РЕЗКА',lbl:'Труба рез (м)'},
-    H:{t:'CB',mult:1,sec:'ГИБКА',lbl:'Лист гиб (кол)'},
-    I:{t:'CB',mult:3,sec:'ГИБКА',lbl:'Труба гиб (кол)'},
-    J:{t:'CB',mult:1,sec:'ГИБКА',lbl:'Прут гиб (кол)'},
+    D:{t:'CUT',mult:1,sec:'РЕЗКА',lbl:'Лист выбор 1 (м)'},
+    E:{t:'CUT',mult:1,sec:'РЕЗКА',lbl:'Лист выбор 2 (м)'},
+    F:{t:'CUT',mult:1,sec:'РЕЗКА',lbl:'Лист выбор 3 (м)'},
+    G:{t:'CUT',mult:3,sec:'РЕЗКА',lbl:'Труба рез (м)'},
+    H:{t:'BEND',mult:1,sec:'ГИБКА',lbl:'Лист гиб (кол)'},
+    I:{t:'BEND',mult:3,sec:'ГИБКА',lbl:'Труба гиб (кол)'},
+    J:{t:'BEND',mult:1,sec:'ГИБКА',lbl:'Прут гиб (кол)'},
     K:{t:'SS',mult:1,sec:'СВАРКА',lbl:'Нерж (см)',shleif:0.5},
     L:{t:'BL',mult:1,sec:'СВАРКА',lbl:'Черн (см)',shleif:0.5}
   };
@@ -94,10 +96,22 @@
     if(rrow && rrow[idx]!=null && rrow[idx]!==''){ var v=+rrow[idx]; if(!isNaN(v)) return v; }
     var row=table[th]; if(!row)return 0; return row[idx]||0;
   }
+  // резка и гибка — отдельные таблицы; если директор правил старую общую «CB»,
+  // её значения продолжают действовать для обеих, пока не заданы новые
+  function lookupOv2(primary,fallback,table,tiers,th,qty){
+    var idx=approxTier(qty,tiers);
+    var R=(root.PRICING&&root.PRICING.rates)||{};
+    var r1=(R[primary]||{})[th];
+    if(r1 && r1[idx]!=null && r1[idx]!==''){ var v1=+r1[idx]; if(!isNaN(v1)) return v1; }
+    var r2=(R[fallback]||{})[th];
+    if(r2 && r2[idx]!=null && r2[idx]!==''){ var v2=+r2[idx]; if(!isNaN(v2)) return v2; }
+    var row=table[th]; if(!row)return 0; return row[idx]||0;
+  }
   function opRate(code,th,qty){
     if(code==='SS')return lookupOv('SS',WELD_SS,WELD_TIERS,th,qty);
     if(code==='BL')return lookupOv('BL',WELD_BLACK,WELD_TIERS,th,qty);
-    return lookupOv('CB',CUTBEND,CUTBEND_TIERS,th,qty);
+    if(code==='BEND')return lookupOv2('BEND','CB',BEND,CUTBEND_TIERS,th,qty);
+    return lookupOv2('CUT','CB',CUTBEND,CUTBEND_TIERS,th,qty);
   }
   function taxGrossUp(rate){return rate/(1-rate);}
 
@@ -139,11 +153,11 @@
   //           urgency:0|1|2, engCoef:0.03|0.09|0.18|1, montazh:0|1, taxRate:0.16 }
   // OP kinds -> table + price multiplier (×3 for tube/profile cut & bend)
   var KIND={
-    cut:      {t:'CB',mult:1,sec:'РЕЗКА', lbl:'Резка листа (м)'},
-    cutTube:  {t:'CB',mult:3,sec:'РЕЗКА', lbl:'Резка трубы/профиля (м)'},
-    bend:     {t:'CB',mult:1,sec:'ГИБКА', lbl:'Гибка листа (кол.)'},
-    bendTube: {t:'CB',mult:3,sec:'ГИБКА', lbl:'Гибка трубы (кол.)'},
-    bendRod:  {t:'CB',mult:1,sec:'ГИБКА', lbl:'Гибка прута (кол.)'},
+    cut:      {t:'CUT',mult:1,sec:'РЕЗКА', lbl:'Резка листа (м)'},
+    cutTube:  {t:'CUT',mult:3,sec:'РЕЗКА', lbl:'Резка трубы/профиля (м)'},
+    bend:     {t:'BEND',mult:1,sec:'ГИБКА', lbl:'Гибка листа (кол.)'},
+    bendTube: {t:'BEND',mult:3,sec:'ГИБКА', lbl:'Гибка трубы (кол.)'},
+    bendRod:  {t:'BEND',mult:1,sec:'ГИБКА', lbl:'Гибка прута (кол.)'},
     weldSS:   {t:'SS',mult:1,sec:'СВАРКА',lbl:'Сварка нерж (см)'},
     weldBlack:{t:'BL',mult:1,sec:'СВАРКА',lbl:'Сварка черн (см)'}
   };
@@ -242,5 +256,5 @@
   }
 
   root.CALC={compute:compute,MAT:MAT,CMP:CMP,OPS:OPS,KIND:KIND,opRate:opRate,taxGrossUp:taxGrossUp,TH:TH,applyCustom:applyCustom,
-             CUTBEND:CUTBEND,WELD_SS:WELD_SS,WELD_BLACK:WELD_BLACK,CUTBEND_TIERS:CUTBEND_TIERS,WELD_TIERS:WELD_TIERS};
+             CUTBEND:CUTBEND,BEND:BEND,WELD_SS:WELD_SS,WELD_BLACK:WELD_BLACK,CUTBEND_TIERS:CUTBEND_TIERS,WELD_TIERS:WELD_TIERS};
 })(typeof window!=='undefined'?window:globalThis);

@@ -314,9 +314,12 @@
     sectionsOf(CMP).forEach(function(s){ h+=secOstRahRow('cmpOstBySec','cmpRahBySec',s, P.cmpOstBySec, P.cmpRahBySec, {}); });
 
     // --- таблицы ставок (Excel-подобные) ---
-    h+='<h3 style="margin-top:20px">Таблицы ставок — резка / гибка листа (₸ за м / шт, по толщине и объёму заказа)</h3>';
-    h+='<div class="rtlegend"><span><span class="sw" style="background:#2b3a1f;border:1px solid #4a6b2c"></span>изменённая ячейка</span><span>Труба/профиль считаются той же таблицей ×3 (см. множитель выше)</span></div>';
-    h+=renderRateTable('CB', CALC.CUTBEND, CALC.CUTBEND_TIERS, TIER_LABELS_CB, (P.rates&&P.rates.CB)||{});
+    h+='<h3 style="margin-top:20px">Таблица ставок — РЕЗКА листа (₸ за м, по толщине и объёму заказа)</h3>';
+    h+='<div class="rtlegend"><span><span class="sw" style="background:#2b3a1f;border:1px solid #4a6b2c"></span>изменённая ячейка</span><span>Резка трубы/профиля — эта же таблица ×3</span></div>';
+    h+=renderRateTable('CUT', CALC.CUTBEND, CALC.CUTBEND_TIERS, TIER_LABELS_CB, (P.rates&&(P.rates.CUT||P.rates.CB))||{});
+    h+='<h3 style="margin-top:18px">Таблица ставок — ГИБКА листа (₸ за шт, по толщине и объёму заказа)</h3>';
+    h+='<div class="rtlegend"><span><span class="sw" style="background:#2b3a1f;border:1px solid #4a6b2c"></span>изменённая ячейка</span><span>Гибка трубы — эта же таблица ×3; прут — ×1</span></div>';
+    h+=renderRateTable('BEND', CALC.BEND, CALC.CUTBEND_TIERS, TIER_LABELS_CB, (P.rates&&(P.rates.BEND||P.rates.CB))||{});
 
     h+='<h3 style="margin-top:18px">Таблица ставок — сварка нержавейка (₸ за см шва, по толщине и объёму)</h3>';
     h+=renderRateTable('SS', CALC.WELD_SS, CALC.WELD_TIERS, TIER_LABELS_W, (P.rates&&P.rates.SS)||{});
