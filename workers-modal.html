@@ -159,6 +159,7 @@
       });
     }
 
+    function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     var STAGE_GROUPS = [
       {key:'eng',label:'Инж'},{key:'cut',label:'Резка'},{key:'bend',label:'Гибка'},
       {key:'weld',label:'Сварка'},{key:'assembly',label:'Сборка'},{key:'montazh',label:'Монтаж'}
