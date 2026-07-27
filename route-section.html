@@ -158,6 +158,8 @@
         b.onclick=function(){
           var o=ROUTE.ops[+this.getAttribute('data-i')];
           o.status=STATUS_NEXT[o.status]||'queued';
+          // дата «готово» — по ней начисление ложится в месяц сдачи работы
+          if(o.status==='done') o.doneAt=Date.now(); else delete o.doneAt;
           save().then(renderRoute);
         };
       });
