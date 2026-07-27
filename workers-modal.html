@@ -31,7 +31,9 @@
     /* карточка работника */
     .wcard{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--bg)}
     .wtop{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .wtop .nm{flex:1;min-width:160px}
+    .wtop .nm{flex:1 1 200px;min-width:140px}
+    .wtop .ptype{width:170px;flex:0 0 auto}
+    .savebar{position:sticky;bottom:0;background:var(--bg,#1d2125);border-top:1px solid var(--line,#3a414a);padding:10px 4px;display:flex;gap:12px;align-items:center;z-index:5;margin-top:14px}
     .wtop .sal{width:130px;text-align:right}
     .wtop .mem{width:190px}
     .wrowlbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 5px}
@@ -91,6 +93,10 @@
       <div class="empty" id="emptyHint" style="display:none">Пока нет работников. Добавьте первого.</div>
       <div style="margin-top:12px"><button class="btn add" id="addBtn" type="button">+ добавить работника</button></div>
       <label class="hint" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer"><input type="checkbox" id="showDeleted" style="width:auto"> показать удалённых работников</label>
+      <div class="savebar">
+        <button class="btn" id="saveAll" type="button" style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff;font-weight:700;padding:10px 22px">💾 Сохранить всё</button>
+        <span id="saveAllMsg" style="font-size:13px"></span>
+      </div>
       <div class="msg" id="msg"></div>
     </div>
   </div>
@@ -206,6 +212,18 @@
           var on = (w[p.fld]==1||w[p.fld]===true);
           return chipCb(p.cls, p.label, p.hint, on, p.warn?' warn':'');
         }).join('')+'</div>';
+      // мотивация: премия от чистой прибыли (одна на компанию) и инженерный % (общий)
+      var isBonusHolder = FIN.bonusName && w.name && FIN.bonusName===w.name;
+      var isEng = stagesSel.indexOf('eng')>=0;
+      h+='<div class="wrowlbl">Мотивация</div><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px">'+
+        '<label title="Премия от чистой прибыли компании — может быть только у одного работника (обычно зам/начальник цеха). Считается в водопаде «Финансы» после налогов.">Премия от чистой прибыли, % '+
+          '<input class="bonusPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(isBonusHolder?FIN.bonusPercent:'')+'" placeholder="0">'+
+        '</label>'+
+        (FIN.bonusName?('<span class="muted" style="font-size:11.5px">сейчас премия: '+esc(FIN.bonusName)+' ('+FIN.bonusPercent+'%)</span>'):'')+
+        (isEng?('<label title="Процент от прибыли заказа для инженера-исполнителя. Общий для всех инженеров. 0 = старая схема (⅓ от этапа «Инженер»)">Инженер: % от прибыли заказа '+
+          '<input class="engPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(FIN.engPercent||'')+'" placeholder="0">'+
+        '</label><span class="muted" style="font-size:11.5px">общий для всех инженеров; 0 = ⅓ от этапа</span>'):'')+
+      '</div>';
       card.innerHTML=h;
       // чип переключается визуально вместе с чекбоксом
       [].forEach.call(card.querySelectorAll('.chipcb input'), function(cb){
@@ -252,10 +270,15 @@
 
     function setMsg(s){ msgEl.textContent = s||''; }
 
+    var FIN = { bonusPercent:0, bonusName:'', engPercent:0 }; // премия и инженерный % (settings 'fin')
     function loadWorkers(){
       if(!WORKER){ setMsg('Не задан адрес сервера (config.js).'); return; }
       setMsg('Загрузка…');
       var showDel = document.getElementById('showDeleted') && document.getElementById('showDeleted').checked;
+      return fetch(WORKER+'/fin-get').then(function(r){return r.json();}).then(function(j){
+        var f=(j&&j.fin)||j||{};
+        FIN={ bonusPercent:+f.bonusPercent||0, bonusName:f.bonusName||'', engPercent:+f.engPercent||0 };
+      }).catch(function(){}).then(function(){
       return fetch(WORKER+'/workers-list?'+(showDel?'all=1&':'')+'cb='+Date.now())
         .then(function(r){ return r.json(); })
         .then(function(d){
@@ -267,6 +290,7 @@
           updateCount();
         })
         .catch(function(e){ setMsg('Ошибка загрузки: '+(e&&e.message||e)); });
+      });
     }
 
     function saveRow(tr){
@@ -286,16 +310,16 @@
       var payType=tr.querySelector('.ptype')?tr.querySelector('.ptype').value:'piece';
       var isSalaried = payType!=='piece';
       var isRepairAgent=tr.querySelector('.agent')?tr.querySelector('.agent').checked:false;
-      if(!name){ setMsg('Введите имя.'); tr.querySelector('.nm').focus(); tr.querySelector('.nm').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.nm').style.borderColor='';},2000); return; }
+      if(!name){ setMsg('Введите имя.'); tr.querySelector('.nm').focus(); tr.querySelector('.nm').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.nm').style.borderColor='';},2000); return Promise.reject(new Error('нет имени')); }
       // оклад обязателен только окладникам: сдельщики и агенты работают без фиксированной ЗП
-      if(isSalaried && !salary){ setMsg('Для типа «'+(payType==='salary'?'Оклад':'Оклад + сдельная')+'» укажите оклад ₸/мес.'); tr.querySelector('.sal').style.display=''; tr.querySelector('.sal').focus(); tr.querySelector('.sal').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.sal').style.borderColor='';},2000); return; }
+      if(isSalaried && !salary){ setMsg('Для типа «'+(payType==='salary'?'Оклад':'Оклад + сдельная')+'» укажите оклад ₸/мес.'); tr.querySelector('.sal').style.display=''; tr.querySelector('.sal').focus(); tr.querySelector('.sal').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.sal').style.borderColor='';},2000); return Promise.reject(new Error('нет оклада: '+name)); }
       var id=tr.getAttribute('data-id')||'';
       var active=(tr.getAttribute('data-active')==='0')?0:1; // сохранение удалённого не возвращает его в активные
       var btn=tr.querySelector('.save');
       var btn0=btn.textContent;
       btn.disabled=true; btn.textContent='Сохраняю…';
       setMsg('Сохранение…');
-      fetch(WORKER+'/workers-save', {
+      return fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent })
       }).then(function(r){ return r.json(); })
@@ -364,6 +388,53 @@
     })();
 
     document.getElementById('showDeleted').addEventListener('change', function(){ loadWorkers(); });
+    document.getElementById('saveAll').addEventListener('click', function(){
+      var btn=this, msg=document.getElementById('saveAllMsg');
+      var cards=[].slice.call(rowsEl.querySelectorAll('.wcard'));
+      // премия: не больше одного работника с процентом > 0
+      var bonusHolders=[];
+      cards.forEach(function(c){
+        var el=c.querySelector('.bonusPct');
+        var v=el?parseFloat(el.value)||0:0;
+        if(v>0) bonusHolders.push({ name:(c.querySelector('.nm').value||'').trim(), pct:v });
+      });
+      if(bonusHolders.length>1){
+        msg.textContent='⚠ Премия от чистой прибыли может быть только у одного работника — сейчас указана у: '+bonusHolders.map(function(b){return b.name;}).join(', ')+'. Оставьте процент одному.';
+        msg.style.color='#e8c07d';
+        return;
+      }
+      // инженерный %: берём первое заполненное поле
+      var engVal=null;
+      cards.some(function(c){ var el=c.querySelector('.engPct'); if(el && el.value!==''){ engVal=parseFloat(el.value)||0; return true; } return false; });
+
+      btn.disabled=true; var t0=btn.textContent; btn.textContent='Сохраняю…';
+      msg.textContent=''; msg.style.color='';
+      var okCount=0, errs=[];
+      var chain=Promise.resolve();
+      cards.forEach(function(c){
+        chain=chain.then(function(){
+          return saveRow(c).then(function(){ okCount++; }, function(e){ errs.push((c.querySelector('.nm').value||'работник')+': '+(e&&e.message||e)); });
+        });
+      });
+      chain.then(function(){
+        var fin={};
+        if(bonusHolders.length===1){ fin.bonusPercent=bonusHolders[0].pct; fin.bonusName=bonusHolders[0].name; }
+        else { fin.bonusPercent=0; fin.bonusName=''; }
+        if(engVal!==null) fin.engPercent=engVal;
+        return fetch(WORKER+'/fin-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fin:fin})})
+          .then(function(r){return r.json();})
+          .then(function(j){ if(!j||!j.ok) errs.push('настройки мотивации: '+((j&&j.error)||'не сохранились')); });
+      }).then(function(){
+        btn.disabled=false; btn.textContent=t0;
+        if(errs.length){
+          msg.textContent='Сохранено: '+okCount+' ✓ · Ошибки: '+errs.join('; ');
+          msg.style.color='#f28b82';
+        } else {
+          msg.textContent='✅ Всё сохранено: работников — '+okCount+', настройки мотивации — да ('+new Date().toLocaleTimeString().slice(0,5)+')';
+          msg.style.color='#4bce97';
+        }
+      });
+    });
     document.getElementById('addBtn').addEventListener('click', function(){
       var card=makeRow(); rowsEl.appendChild(card); document.getElementById('emptyHint').style.display='none';
       card.querySelector('.nm').focus();
