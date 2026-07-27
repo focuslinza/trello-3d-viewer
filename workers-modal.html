@@ -223,18 +223,25 @@
           var on = (w[p.fld]==1||w[p.fld]===true);
           return chipCb(p.cls, p.label, p.hint, on, p.warn?' warn':'');
         }).join('')+'</div>';
-      // мотивация: премия от чистой прибыли (одна на компанию) и инженерный % (общий)
+      // мотивация: премия — ТОЛЬКО у её держателя (обычно начальник цеха);
+      // у остальных лишь незаметная ссылка «назначить», чтобы можно было передать
       var isBonusHolder = FIN.bonusName && w.name && FIN.bonusName===w.name;
       var isEng = stagesSel.indexOf('eng')>=0;
-      h+='<div class="wrowlbl">Мотивация</div><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px">'+
-        '<label title="Премия от чистой прибыли компании — может быть только у одного работника (обычно зам/начальник цеха). Считается в водопаде «Финансы» после налогов.">Премия от чистой прибыли, % '+
-          '<input class="bonusPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(isBonusHolder?FIN.bonusPercent:'')+'" placeholder="0">'+
-        '</label>'+
-        (FIN.bonusName?('<span class="muted" style="font-size:11.5px">сейчас премия: '+esc(FIN.bonusName)+' ('+FIN.bonusPercent+'%)</span>'):'')+
-        (isEng?('<label title="Процент от прибыли заказа для инженера-исполнителя. Общий для всех инженеров. 0 = старая схема (⅓ от этапа «Инженер»)">Инженер: % от прибыли заказа '+
+      var mot = '';
+      if (isBonusHolder) {
+        mot += '<label title="Премия от чистой прибыли компании — одна на компанию (обычно у начальника цеха/зама). Считается в водопаде «Финансы» после налогов.">Премия от чистой прибыли, % '+
+          '<input class="bonusPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+FIN.bonusPercent+'">'+
+        '</label>';
+      } else if (w.id) {
+        mot += '<a href="#" class="mkBonus" style="font-size:11px;color:var(--muted);text-decoration:none" title="Премия одна на компанию'+(FIN.bonusName?(' — сейчас у: '+esc(FIN.bonusName)+' ('+FIN.bonusPercent+'%)'):'')+'. Нажмите, чтобы назначить этому работнику.">⋯ назначить премию от прибыли</a>'+
+          '<span class="bonusWrap" style="display:none"><label>Премия от чистой прибыли, % <input class="bonusPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="0" disabled></label></span>';
+      }
+      if (isEng) {
+        mot += '<label title="Процент от прибыли заказа для инженера-исполнителя. Общий для всех инженеров. 0 = старая схема (⅓ от этапа «Инженер»)">Инженер: % от прибыли заказа '+
           '<input class="engPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(FIN.engPercent||'')+'" placeholder="0">'+
-        '</label><span class="muted" style="font-size:11.5px">общий для всех инженеров; 0 = ⅓ от этапа</span>'):'')+
-      '</div>';
+        '</label><span class="muted" style="font-size:11.5px">общий для всех инженеров; 0 = ⅓ от этапа</span>';
+      }
+      if (mot) h+='<div class="wrowlbl">Мотивация</div><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px">'+mot+'</div>';
       card.innerHTML=h;
       // чип переключается визуально вместе с чекбоксом
       [].forEach.call(card.querySelectorAll('.chipcb input'), function(cb){
@@ -249,6 +256,15 @@
         ['cantabel','candash','canrepair','cansup'].forEach(function(cls){
           var cb=card.querySelector('.'+cls); if(cb){ cb.checked=true; cb.parentNode.classList.add('on'); }
         });
+      });
+      var mkB=card.querySelector('.mkBonus');
+      if(mkB) mkB.addEventListener('click', function(e){
+        e.preventDefault();
+        this.style.display='none';
+        var wrap=card.querySelector('.bonusWrap');
+        wrap.style.display='';
+        var inp=wrap.querySelector('.bonusPct');
+        inp.disabled=false; inp.focus();
       });
       var pt=card.querySelector('.ptype');
       if(pt) pt.addEventListener('change', function(){
@@ -415,7 +431,8 @@
       var bonusHolders=[];
       cards.forEach(function(c){
         var el=c.querySelector('.bonusPct');
-        var v=el?parseFloat(el.value)||0:0;
+        if(!el || el.disabled) return;
+        var v=parseFloat(el.value)||0;
         if(v>0) bonusHolders.push({ name:(c.querySelector('.nm').value||'').trim(), pct:v });
       });
       if(bonusHolders.length>1){
