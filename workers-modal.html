@@ -163,7 +163,6 @@
       {cls:'cancrm',    fld:'can_crm',       label:'CRM',                 hint:'клиенты, выручка, долги'},
       {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены в калькуляторе'},
       {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true},
-      {cls:'salaried',  fld:'is_salaried',   label:'Окладник',            hint:'оклад автоматически идёт в постоянные расходы (страница «Финансы»)', warn:true},
       {cls:'agent',     fld:'is_repair_agent', label:'Агент ремонта',      hint:'бонус за каждую полностью оформленную заявку на ремонт (описание, фирма, контактное лицо, фото) — виден агенту в «Моём заработке»'}
     ];
     function chipCb(cls, label, hint, on, extra){
@@ -181,12 +180,18 @@
       var h =
         '<div class="wtop">'+
           '<input class="nm" type="text" placeholder="Имя работника" value="'+(w.name?String(w.name).replace(/"/g,'&quot;'):'')+'">'+
-          '<input class="sal" type="number" min="0" step="1000" placeholder="оклад ₸/мес (можно пусто)" value="'+(w.salary!=null&&+w.salary>0?w.salary:'')+'" title="Оклад, ₸/мес — нужен только окладникам; сдельщики и агенты работают без него">'+
+          '<select class="ptype" title="Тип оплаты: сдельная — только за этапы заказов; оклад — фикс по табелю; оклад + сдельная — и то, и другое">'+
+            '<option value="piece"'+(((w.pay_type||(w.is_salaried==1?'both':'piece'))==='piece')?' selected':'')+'>Сдельная</option>'+
+            '<option value="salary"'+((w.pay_type||(w.is_salaried==1?'both':'piece'))==='salary'?' selected':'')+'>Оклад</option>'+
+            '<option value="both"'+((w.pay_type||(w.is_salaried==1?'both':'piece'))==='both'?' selected':'')+'>Оклад + сдельная</option>'+
+          '</select>'+
+          '<input class="sal" type="number" min="0" step="1000" placeholder="оклад ₸/мес" value="'+(w.salary!=null&&+w.salary>0?w.salary:'')+'" title="Оклад, ₸/мес — действует при типе «Оклад» и «Оклад + сдельная»; при «Сдельной» игнорируется"'+(((w.pay_type||(w.is_salaried==1?'both':'piece'))==='piece')?' style="display:none"':'')+'>'+
           '<span class="wage" title="Ставка в день = оклад ÷ рабочие дни">—</span>'+
           '<select class="mem" title="Trello-аккаунт">'+memberOptionsHtml(w.trello_member_id||'')+'</select>'+
           (inactive?'<span class="delbadge">удалён</span>':'')+
           '<span class="actions">'+
             '<button class="btn save" type="button">Сохранить</button>'+
+            (w.id?'<button class="btn mob" type="button" title="Персональная ссылка на мобильный портал (Мой заработок, Ремонт, Снабжение) — скопировать и отправить работнику">📱</button>':'')+
             (inactive?'<button class="btn restore" type="button" style="color:#a8d5b5;border-color:#2e5c44">Вернуть</button>'
                      :'<button class="btn del" type="button">Удалить</button>')+
           '</span>'+
@@ -215,6 +220,25 @@
         ['cantabel','candash','canrepair','cansup'].forEach(function(cls){
           var cb=card.querySelector('.'+cls); if(cb){ cb.checked=true; cb.parentNode.classList.add('on'); }
         });
+      });
+      var pt=card.querySelector('.ptype');
+      if(pt) pt.addEventListener('change', function(){
+        var sal=card.querySelector('.sal');
+        if(sal) sal.style.display = this.value==='piece' ? 'none' : '';
+      });
+      var mob=card.querySelector('.mob');
+      if(mob) mob.addEventListener('click', function(){
+        var btn=this; btn.disabled=true;
+        fetch(WORKER+'/worker-token-ensure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workerId:w.id})})
+          .then(function(r){return r.json();})
+          .then(function(j){
+            btn.disabled=false;
+            if(!j||!j.ok){ alert('Не получилось: '+((j&&j.error)||'?')); return; }
+            var url = window.location.href.replace(/[^/]*(\?.*)?$/,'') + 'mobile.html#mt=' + j.token;
+            function done(){ prompt('Ссылка для '+(w.name||'работника')+' — отправьте её в WhatsApp/Telegram. Она персональная, работает в любом браузере телефона:', url); }
+            if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(done, done); } else done();
+          })
+          .catch(function(e){ btn.disabled=false; alert('Сеть: '+(e&&e.message||e)); });
       });
       var delBtn=card.querySelector('.del');
       if(delBtn) delBtn.addEventListener('click', function(){ delRow(card); });
@@ -259,11 +283,12 @@
       var canDashboard=tr.querySelector('.candash')?tr.querySelector('.candash').checked:false;
       var canRepair=tr.querySelector('.canrepair')?tr.querySelector('.canrepair').checked:false;
       var hideStats=tr.querySelector('.hidestats')?tr.querySelector('.hidestats').checked:false;
-      var isSalaried=tr.querySelector('.salaried')?tr.querySelector('.salaried').checked:false;
+      var payType=tr.querySelector('.ptype')?tr.querySelector('.ptype').value:'piece';
+      var isSalaried = payType!=='piece';
       var isRepairAgent=tr.querySelector('.agent')?tr.querySelector('.agent').checked:false;
       if(!name){ setMsg('Введите имя.'); tr.querySelector('.nm').focus(); tr.querySelector('.nm').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.nm').style.borderColor='';},2000); return; }
       // оклад обязателен только окладникам: сдельщики и агенты работают без фиксированной ЗП
-      if(isSalaried && !salary){ setMsg('У окладника должен быть оклад — либо снимите чип «Окладник».'); tr.querySelector('.sal').focus(); tr.querySelector('.sal').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.sal').style.borderColor='';},2000); return; }
+      if(isSalaried && !salary){ setMsg('Для типа «'+(payType==='salary'?'Оклад':'Оклад + сдельная')+'» укажите оклад ₸/мес.'); tr.querySelector('.sal').style.display=''; tr.querySelector('.sal').focus(); tr.querySelector('.sal').style.borderColor='#5a3a3a'; setTimeout(function(){tr.querySelector('.sal').style.borderColor='';},2000); return; }
       var id=tr.getAttribute('data-id')||'';
       var active=(tr.getAttribute('data-active')==='0')?0:1; // сохранение удалённого не возвращает его в активные
       var btn=tr.querySelector('.save');
@@ -272,7 +297,7 @@
       setMsg('Сохранение…');
       fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){
