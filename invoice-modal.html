@@ -255,7 +255,8 @@
   }); }
   function hiddenOrders(){ return ALL_ORDERS.filter(function(o){ return o.hidden; }); }
   function selectedOrders(){ return clientOrders().filter(function(o){return o.checked;}); }
-  function grandTotal(){ return selectedOrders().reduce(function(s,o){return s+o.total;},0) + extrasTotal(); }
+  function grandTotal(){ return selectedOrders().reduce(function(s,o){return s+Math.ceil(o.total-1e-9);},0) + extrasCeilTotal(); }
+  function extrasCeilTotal(){ return validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)-1e-9); },0); }
 
   function render(){
     var sup = SUPPLIERS[supplierKey];
@@ -505,16 +506,25 @@
     document.getElementById('gen').disabled=!ok;
   }
 
+  // суммы в счёте округляются ВВЕРХ до целого тенге (150 456,12 → 150 457):
+  // тиынов в оплате не бывает, а вниз округлять — терять свои же деньги
+  function ceilLine(qty, price){
+    var sum = Math.ceil(qty * price - 1e-9);      // сумма строки — целые тенге, вверх
+    return { sum: sum, price: sum / qty };        // цена подгоняется, чтобы qty×цена = сумма
+  }
   function buildData(){
     var sup=SUPPLIERS[supplierKey];
     var numEl=document.getElementById('inum'), dEl=document.getElementById('idate'), cEl=document.getElementById('icontract');
     var items = selectedOrders().map(function(o){
       var qty=Math.max(1,o.qty||1);
       var nm = o.name + (o.personName ? ' ('+o.personName+')' : '');
-      return { code:o.number||'', name:nm, qty:qty, unit:'Услуга', price:(o.total/qty), cardId:o.cardId };
+      var c = ceilLine(qty, o.total/qty);
+      return { code:o.number||'', name:nm, qty:qty, unit:'Услуга', price:c.price, cardId:o.cardId };
     });
     validExtras().forEach(function(x){
-      items.push({ code:'', name:String(x.name).trim(), qty:Math.max(1,+x.qty||1), unit:'Услуга', price:+x.price||0 });
+      var q=Math.max(1,+x.qty||1);
+      var c=ceilLine(q, +x.price||0);
+      items.push({ code:'', name:String(x.name).trim(), qty:q, unit:'Услуга', price:c.price });
     });
     return {
       supplier:sup, buyer:ctx.buyer,
