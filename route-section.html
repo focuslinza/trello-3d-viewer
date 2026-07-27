@@ -49,6 +49,7 @@
     var STATUS_NEXT = { queued:'active', active:'done', done:'queued' };
     var STATUS_LBL  = { queued:'○ в очереди', active:'▶ в работе', done:'✓ готово' };
     var ROUTE=null, WORKERS=[], CARD_ID=null, CARD_META={name:'',url:'',num:''}, editing=false;
+    var HAS_CALC=false, NOENG_CONFIRM=false; // есть расчёт → инженер работал; подтверждение маршрута без инженера
 
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -79,6 +80,9 @@
       var h='<div class="muted" style="margin-bottom:6px">Отметьте операции, нужные для этого заказа (порядок — как в списке):</div>';
       OPS.forEach(function(op){
         var on = ROUTE ? !!existing[op.key] : !!DEFAULT_CHECKED[op.key];
+        // расчёт на карточке уже есть → инженер точно работал: в новом маршруте
+        // отмечаем его этап заранее, чтобы начисление не потерялось
+        if (op.key==='eng' && !ROUTE && HAS_CALC) on = true;
         h+='<label class="chk"><input type="checkbox" data-k="'+op.key+'"'+(on?' checked':'')+'> '+esc(op.label)+'</label>';
       });
       h+='<div style="margin-top:8px"><button class="btn" id="mk" type="button">'+(ROUTE?'Обновить состав':'Создать маршрут')+'</button>'+(ROUTE?' <button class="lnk" id="cancel" type="button">Отмена</button>':'')+'<span id="msg"></span></div>';
@@ -91,7 +95,34 @@
           var meta=OPS.filter(function(o){return o.key===k;})[0];
           ops.push(existing[k] || { key:k, label:meta.label, status:'queued', workerId:null, workerName:'', block:null });
         });
-        if(!ops.length){ alert('Выберите хотя бы одну операцию.'); return; }
+        if(!ops.length){ var m0=document.getElementById('msg'); if(m0){ m0.textContent=' Выберите хотя бы одну операцию.'; m0.style.color='var(--blk)'; } return; }
+        var hasEng = ops.some(function(o){ return o.key==='eng'; });
+        if (HAS_CALC && !hasEng && !NOENG_CONFIRM) {
+          // расчёт есть, а этап «Инженер» сняли — просим осознанного подтверждения
+          var warn=document.getElementById('noengWarn');
+          if(!warn){
+            var d=document.createElement('div');
+            d.id='noengWarn';
+            d.style.cssText='margin-top:8px;padding:8px 10px;border:1px solid #8a5a2c;border-radius:8px;font-size:12px;line-height:1.5;background:rgba(138,90,44,.12)';
+            d.innerHTML='⚠ В заказе есть расчёт — значит, инженер работал, но этап «Инженер» не отмечен: исполнитель не получит начисление.'+
+              '<div style="margin-top:6px;display:flex;gap:8px">'+
+              '<button class="btn" id="noengAdd" type="button">Добавить инженера</button>'+
+              '<button class="lnk" id="noengGo" type="button">Создать без инженера</button></div>';
+            document.getElementById('mk').parentNode.appendChild(d);
+            document.getElementById('noengAdd').onclick=function(){
+              var cb=document.querySelector('input[data-k="eng"]'); if(cb) cb.checked=true;
+              d.remove(); NOENG_CONFIRM=false;
+              document.getElementById('mk').click();
+            };
+            document.getElementById('noengGo').onclick=function(){
+              NOENG_CONFIRM=true; d.remove();
+              document.getElementById('mk').click();
+            };
+            t.sizeTo('#wrap').catch(function(){});
+          }
+          return;
+        }
+        NOENG_CONFIRM=false;
         ROUTE = ROUTE || { createdAt: Date.now() };
         ROUTE.ops = ops;
         editing=false;
@@ -171,6 +202,12 @@
       return t.card('id','name','url','idShort').then(function(c){
         CARD_ID=c.id;
         CARD_META={ name:(c&&c.name)||'', url:(c&&c.url)||'', num:(c&&c.idShort)!=null?String(c.idShort):'' };
+        if (CARD_ID) {
+          fetch(WORKER+'/calc-get?cardId='+encodeURIComponent(CARD_ID))
+            .then(function(r){return r.json();})
+            .then(function(j){ HAS_CALC=!!(j&&j.ok&&j.row); })
+            .catch(function(){});
+        }
         return Promise.all([
           fetch(WORKER+'/route-get?cardId='+encodeURIComponent(CARD_ID)).then(function(r){return r.json();}).catch(function(){return {};}),
           fetch(WORKER+'/workers-names').then(function(r){return r.json();}).catch(function(){return {};})

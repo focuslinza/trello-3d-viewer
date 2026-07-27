@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Мой заработок</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./trello-shim.js"></script>
   <script src="./config.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; }
@@ -87,6 +88,18 @@
 
     html+='<div class="total">'+money(j.total)+' ₸</div>';
     html+='<div class="small muted" style="margin-top:4px">за '+MONTHS[cur.m].toLowerCase()+' '+cur.y+'</div>';
+    // выплата подтверждается сдачей заказа: показываем работнику честную разбивку
+    if(j.totalDelivered!=null){
+      html+='<div style="display:flex;gap:10px;justify-content:center;margin-top:12px;flex-wrap:wrap">'+
+        '<div style="background:#1c3329;border:1px solid #2e5c44;border-radius:12px;padding:8px 16px;min-width:150px">'+
+          '<div class="small" style="color:#7ee2b8;text-transform:uppercase;font-size:10.5px">✅ К выплате — заказ сдан</div>'+
+          '<div style="font-size:17px;font-weight:700;color:#4bce97">'+money(j.totalDelivered)+' ₸</div></div>'+
+        '<div style="background:#3a2f1a;border:1px solid #5c4a2e;border-radius:12px;padding:8px 16px;min-width:150px">'+
+          '<div class="small" style="color:#e8c07d;text-transform:uppercase;font-size:10.5px">⏳ Заказ ещё в работе</div>'+
+          '<div style="font-size:17px;font-weight:700;color:#e8c07d">'+money(j.totalPending)+' ₸</div></div>'+
+      '</div>';
+      html+='<div class="small muted" style="margin-top:8px;max-width:420px;margin-left:auto;margin-right:auto">Деньги выплачиваются, когда заказ <b>сдан клиенту и претензий нет</b> — ваш этап может быть готов, но заказ ещё идёт по цеху. Помогайте двигать заказ до сдачи: чем быстрее сдан весь заказ, тем быстрее выплата у всех.</div>';
+    }
     html+='</div>';
 
     // by day
@@ -132,9 +145,12 @@
     if(!orders.length){ html+='<div class="muted">Нет заказов с вашим участием в этом месяце.</div>'; }
     else {
       html+='<div class="small muted" style="margin-bottom:6px">Показана только ваша доля по каждому заказу. Стоимость самих заказов здесь не отображается.</div>';
-      html+='<table><thead><tr><th>№ карт.</th><th>Заказ</th><th class="num">Моя доля</th></tr></thead><tbody>';
+      html+='<table><thead><tr><th>№ карт.</th><th>Заказ</th><th style="width:96px">Статус</th><th class="num">Моя доля</th></tr></thead><tbody>';
       orders.forEach(function(o){
-        html+='<tr><td class="small">'+esc(o.number||'—')+'</td><td>'+esc(o.name||'(без названия)')+'</td><td class="num">'+money(o.amount)+' ₸</td></tr>';
+        var st = o.delivered
+          ? '<span style="color:#4bce97;font-size:11.5px">✅ сдан</span>'
+          : '<span style="color:#e8c07d;font-size:11.5px">⏳ в работе</span>';
+        html+='<tr><td class="small">'+esc(o.number||'—')+'</td><td>'+esc(o.name||'(без названия)')+'</td><td>'+st+'</td><td class="num">'+money(o.amount)+' ₸</td></tr>';
       });
       html+='</tbody></table>';
     }
