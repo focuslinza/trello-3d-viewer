@@ -290,12 +290,7 @@
     h+=coefField('Ставка сварки (множитель)','rateWeld', c.rateWeld!=null&&c.rateWeld!==''?+c.rateWeld:1,'×');
     h+='</div>';
     h+='<h3 style="margin-top:18px">Доля работника от стоимости работ</h3>';
-    h+='<div class="small muted" style="margin-bottom:8px">Раньше было зашито в коде как дроби (⅓ и ½) без возможности менять. Теперь — проценты, можно настраивать. Пример: при доле «Цех» = 33% и стоимости резки по заказу 10 000 ₸ работник получит 3 300 ₸.</div>';
-    h+='<div class="prgrid">';
-    h+=coefField('Цех (инженер / резка / гибка / сварка / краска)','shareShop', c.shareShop!=null&&c.shareShop!==''?+c.shareShop*100:(100/3),'%');
-    h+=coefField('Сборка (шлейфовка, установка компонентов)','shareAssembly', c.shareAssembly!=null&&c.shareAssembly!==''?+c.shareAssembly*100:50,'%');
-    h+=coefField('Монтажная бригада (от стоимости работ по заказу)','shareMontazh', c.shareMontazh!=null&&c.shareMontazh!==''?+c.shareMontazh*100:50,'%');
-    h+='</div>';
+    h+='<div class="small muted" style="margin-bottom:8px">Доли (цех / сборка / монтаж, %) настраиваются в <b>«Зарплата / Работники»</b> — вместе с типами оплаты, премией и инженерным процентом.</div>';
     h+='<div class="small muted" style="margin-top:6px">Множитель ставок поднимает или опускает сразу всю таблицу ставок ниже (резка/гибка используют одну таблицу с разным множителем, сварка — свою). Отдельные ячейки таблицы можно поправить точечно — см. «Таблицы ставок» ниже.</div>';
 
     // --- остатки / расходники: теперь по каждому разделу отдельно, а не одной цифрой на всё ---
@@ -379,6 +374,11 @@
       v=+v;
       if(k==='taxRate'||k==='shleifRate'||k==='shleifCutRate'||k==='opRah'||k==='shareShop'||k==='shareAssembly'||k==='shareMontazh') P.coef[k]=v/100;
       else P.coef[k]=v;
+    });
+    // доли работников редактируются в «Зарплата / Работники» — при сохранении цен
+    // переносим сохранённые значения, чтобы не затереть их
+    ['shareShop','shareAssembly','shareMontazh'].forEach(function(k){
+      if (P.coef[k]===undefined && PRICING_EDIT.coef && PRICING_EDIT.coef[k]!==undefined && PRICING_EDIT.coef[k]!=='') P.coef[k]=+PRICING_EDIT.coef[k];
     });
     [].forEach.call(document.querySelectorAll('.mp'), function(el){ if(el.value!=='') P.mat[el.getAttribute('data-code')]=+el.value; });
     [].forEach.call(document.querySelectorAll('.cp'), function(el){ if(el.value!=='') P.cmp[el.getAttribute('data-code')]=+el.value; });

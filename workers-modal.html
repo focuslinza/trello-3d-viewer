@@ -88,6 +88,16 @@
     </div>
 
     <div class="sec">
+      <h3>Доли работников от стоимости этапа</h3>
+      <div class="hint" style="margin-bottom:8px">Какой процент от стоимости работы (из расчёта заказа) получает исполнитель. Пример: доля «Цех» 33% и резка на 10 000 ₸ → работнику 3 300 ₸. Применяется ко всем; сохраняется кнопкой «Сохранить всё».</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+        <label style="font-size:12.5px">Цех (инженер/резка/гибка/сварка/краска), % <input id="shareShop" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
+        <label style="font-size:12.5px">Сборка (шлейфовка, компоненты), % <input id="shareAssembly" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
+        <label style="font-size:12.5px">Монтажная бригада, % <input id="shareMontazh" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
+      </div>
+    </div>
+
+    <div class="sec">
       <h3>Работники</h3>
       <div id="rows"></div>
       <div class="empty" id="emptyHint" style="display:none">Пока нет работников. Добавьте первого.</div>
@@ -279,6 +289,15 @@
         var f=(j&&j.fin)||j||{};
         FIN={ bonusPercent:+f.bonusPercent||0, bonusName:f.bonusName||'', engPercent:+f.engPercent||0 };
       }).catch(function(){}).then(function(){
+        // доли работников (цех/сборка/монтаж) из настроек цен
+        return fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
+          var c=(j&&j.pricing&&j.pricing.coef)||{};
+          function put(id, v, def){ var el=document.getElementById(id); if(el) el.value = (v!=null&&v!=='') ? Math.round(v*1000)/10 : def; }
+          put('shareShop', c.shareShop, Math.round(1000/3)/10);
+          put('shareAssembly', c.shareAssembly, 50);
+          put('shareMontazh', c.shareMontazh, 50);
+        }).catch(function(){});
+      }).then(function(){
       return fetch(WORKER+'/workers-list?'+(showDel?'all=1&':'')+'cb='+Date.now())
         .then(function(r){ return r.json(); })
         .then(function(d){
@@ -423,7 +442,15 @@
         if(engVal!==null) fin.engPercent=engVal;
         return fetch(WORKER+'/fin-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fin:fin})})
           .then(function(r){return r.json();})
-          .then(function(j){ if(!j||!j.ok) errs.push('настройки мотивации: '+((j&&j.error)||'не сохранились')); });
+          .then(function(j){ if(!j||!j.ok) errs.push('настройки мотивации: '+((j&&j.error)||'не сохранились')); })
+          .then(function(){
+            var sh={ shareShop:+document.getElementById('shareShop').value||0,
+                     shareAssembly:+document.getElementById('shareAssembly').value||0,
+                     shareMontazh:+document.getElementById('shareMontazh').value||0 };
+            return fetch(WORKER+'/shares-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sh)})
+              .then(function(r){return r.json();})
+              .then(function(j){ if(!j||!j.ok) errs.push('доли работников: '+((j&&j.error)||'не сохранились')); });
+          });
       }).then(function(){
         btn.disabled=false; btn.textContent=t0;
         if(errs.length){
