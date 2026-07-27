@@ -148,10 +148,19 @@
           var timeCell = s.hours!=null ? (s.hours+' ч'+(s.assigneeId&&s.earned&&s.hours? ' / '+fmt(s.earned/s.hours)+' ₸/ч':'')) : '<span class="muted">—</span>';
           // paint row shows the mode (set in the calculator), read-only here
           var paintToggle = s.paint ? ('<div class="stages">'+(data.paintInShop?('красили в цеху → '+shareLbl+' начисляется'):'красили на стороне → не начисляется')+' · меняется в калькуляторе</div>') : '';
+          // инженер на % от прибыли: показываем базу процента, иначе 0 выглядит загадкой
+          var engInfo = '';
+          if (s.profitParts) {
+            var pp = s.profitParts, pb = +s.profitBase||0;
+            engInfo = '<div class="stages" style="margin-top:3px">прибыль заказа: <b style="color:'+(pb>0?'#4bce97':'#f28b82')+'">'+fmt(pb)+' ₸</b>'+
+              ' = выручка '+fmt(pp.total)+' − сдельная '+fmt(pp.piece)+' − материалы '+fmt(pp.materials)+
+              ' − накладные '+pp.overheadRate+'% ('+fmt(pp.overhead)+')'+
+              (pb<=0?' · прибыль ≤ 0 → инженеру 0 ₸':'')+'</div>';
+          }
           var earnCell = s.paintOutside ? '<span class="muted">на стороне</span>'
             : (ids.length ? (fmt(s.earned)+' ₸'+(ids.length>1?('<div class="stages">по '+fmt(s.earned/ids.length)+' ₸ каждому из '+ids.length+'</div>'):'')) : '<span class="muted">—</span>');
           html+='<tr>'+
-            '<td>'+esc(s.label||s.key)+'<div class="stages">'+srcLbl+' · доля '+shareLbl+(s.autoName?(' · двигал: '+esc(s.autoName)):'')+'</div>'+paintToggle+'</td>'+
+            '<td>'+esc(s.label||s.key)+'<div class="stages">'+srcLbl+' · доля '+shareLbl+(s.autoName?(' · двигал: '+esc(s.autoName)):'')+'</div>'+paintToggle+engInfo+'</td>'+
             '<td class="num">'+fmt(s.cost)+' ₸</td>'+
             '<td>'+selects+
               '<label class="chk" style="margin-top:4px"><input type="checkbox" class="def" data-stage="'+s.key+'"'+defChecked+'> по умолчанию</label></td>'+
