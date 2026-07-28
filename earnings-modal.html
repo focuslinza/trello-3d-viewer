@@ -156,6 +156,9 @@
               ' = выручка '+fmt(pp.total)+' − сдельная '+fmt(pp.piece)+' − материалы '+fmt(pp.materials)+
               ' − накладные '+pp.overheadRate+'% ('+fmt(pp.overhead)+')'+
               (pb<=0?' · прибыль ≤ 0 → инженеру 0 ₸':'')+'</div>';
+            if (pb>0 && pp.qty>1) {
+              engInfo += '<div class="stages">изделий: '+pp.qty+' · '+pp.engPct+'% с первого экземпляра ('+fmt(pp.perUnit)+' ₸) + '+pp.tiragePct+'% с тиража ('+fmt(pb-pp.perUnit)+' ₸)</div>';
+            }
           }
           var earnCell = s.paintOutside ? '<span class="muted">на стороне</span>'
             : (ids.length ? (fmt(s.earned)+' ₸'+(ids.length>1?('<div class="stages">по '+fmt(s.earned/ids.length)+' ₸ каждому из '+ids.length+'</div>'):'')) : '<span class="muted">—</span>');

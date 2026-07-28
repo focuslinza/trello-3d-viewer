@@ -123,6 +123,10 @@
           </select>
         </div>
         <div class="fld">
+          <label>Изделий в заказе, шт</label>
+          <input type="number" id="unitsQty" value="1" min="1" step="1" style="width:110px" title="Сколько одинаковых изделий в заказе. Влияет на инженерный процент: полный % с прибыли первого экземпляра + тиражный % с остального." />
+        </div>
+        <div class="fld">
           <label>Срочность</label>
           <select id="urg">
             <option value="0" selected>нет</option>
@@ -304,7 +308,8 @@
         engCoef:+document.getElementById('eng').value||0,
         shleifRate:(+document.getElementById('shleif').value||0)/100,
         taxRate:(+document.getElementById('tax').value||0)/100,
-        paintInShop:document.getElementById('paintMode').value==='shop'
+        paintInShop:document.getElementById('paintMode').value==='shop',
+        unitsQty:Math.max(1,Math.round(+document.getElementById('unitsQty').value||1))
       };
     }
 
@@ -704,6 +709,7 @@
         if(i.paintInShop!=null) document.getElementById('paintMode').value = i.paintInShop ? 'shop' : 'outside';
         if(i.shleifRate!=null) document.getElementById('shleif').value=Math.round(i.shleifRate*100);
         if(i.taxRate!=null) document.getElementById('tax').value=Math.round(i.taxRate*100);
+        if(i.unitsQty!=null) document.getElementById('unitsQty').value=Math.max(1,Math.round(+i.unitsQty||1));
       }).catch(function(){});
     }
 
@@ -767,7 +773,7 @@
           cardId:ctx.cardId, cardName:ctx.cardName, cardNumber:ctx.cardNumber, boardId:ctx.boardId,
           companyId:ctx.companyId, companyName:ctx.companyName, objectName:ctx.objectName, status:ctx.status,
           subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total, currency:'KZT',
-          lineItems:res.lineItems, inputs:inp, stageCosts:stageCosts
+          lineItems:res.lineItems, inputs:inp, stageCosts:stageCosts, unitsQty:inp.unitsQty
         };
         return fetch(WORKER+'/calc-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
           .then(function(r){ return r.json(); });
