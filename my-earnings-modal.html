@@ -99,13 +99,6 @@
           '<div style="font-size:17px;font-weight:700;color:#e8c07d">'+money(j.totalPending)+' ₸</div></div>'+
       '</div>';
       html+='<div class="small muted" style="margin-top:8px;max-width:420px;margin-left:auto;margin-right:auto">Деньги выплачиваются, когда заказ <b>сдан клиенту и претензий нет</b> — ваш этап может быть готов, но заказ ещё идёт по цеху. Помогайте двигать заказ до сдачи: чем быстрее сдан весь заказ, тем быстрее выплата у всех.</div>';
-      if (j.bank && (j.bank.balance>0 || j.bank.topup>0)) {
-        html+='<div style="margin-top:10px;background:#1f2a3f;border:1px solid #2e4a7f;border-radius:12px;padding:8px 16px;display:inline-block">'+
-          '<div class="small" style="color:#9db8e8;text-transform:uppercase;font-size:10.5px">🏦 Банк выработки</div>'+
-          '<div style="font-size:14px">'+(j.bank.topup>0?('доплата в этом месяце: <b style="color:#4bce97">'+money(j.bank.topup)+' ₸</b> · '):'')+
-          'остаток: <b>'+money(j.bank.balance)+' ₸</b></div>'+
-          '<div class="small muted" style="font-size:10.5px;max-width:360px">излишки с больших заказов копятся здесь и доплачиваются в месяцы с малой выработкой</div></div>';
-      }
     }
     html+='</div>';
 

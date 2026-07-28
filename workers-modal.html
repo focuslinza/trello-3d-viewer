@@ -98,9 +98,8 @@
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:10px">
         <label style="font-size:12.5px" title="Защита от «пира и голода»: на гигантском заказе один человек не заработает ×8 оклада. До порога — полная доля, сверх — пониженный процент. Пусто = порога нет.">Порог сдельной с одного заказа, ₸ <input id="capPerOrder" type="number" min="0" step="10000" style="width:110px" placeholder="нет"></label>
         <label style="font-size:12.5px" title="Сколько платится от обычной ставки за часть, превышающую порог. Например 50%: всё сверх порога — вполцены.">Сверх порога, % от обычного <input id="capOverPct" type="number" min="0" max="100" step="5" style="width:70px" placeholder="50"></label>
-        <label style="font-size:12.5px" title="Банк выработки: срезанный сверх порога излишек НЕ сгорает, а копится у работника и доплачивается в тощие месяцы до этого уровня. Пусто = банк выключен (излишек остаётся компании).">Доплата из банка до, ₸/мес <input id="bankTarget" type="number" min="0" step="10000" style="width:110px" placeholder="выкл"></label>
       </div>
-      <div class="hint" style="margin-top:6px">Как работает банк: большой заказ → сверх порога платится указанный %, остальное — в личный банк работника; в месяц, где сдельная ниже уровня «Доплата до», банк автоматически добирает разницу. Работник видит доплату и остаток банка в «Моём заработке».</div>
+      <div class="hint" style="margin-top:6px">Сверх порога платится указанный %, срезанный остаток фиксируется по каждому работнику — сумма видна только руководству во вкладке «Зарплаты». Работнику порог, процент и удержания не показываются.</div>
     </div>
 
     <div class="sec">
@@ -324,7 +323,7 @@
           put('shareMontazh', c.shareMontazh, 50);
           var cap=document.getElementById('capPerOrder'); if(cap) cap.value = (c.pieceCapPerOrder>0) ? c.pieceCapPerOrder : '';
           var cov=document.getElementById('capOverPct'); if(cov) cov.value = (c.pieceCapOver!=null&&c.pieceCapOver!=='') ? Math.round(c.pieceCapOver*100) : '';
-          var bt=document.getElementById('bankTarget'); if(bt) bt.value = (c.pieceBankTarget>0) ? c.pieceBankTarget : '';
+
         }).catch(function(){});
       }).then(function(){
       return fetch(WORKER+'/workers-list?'+(showDel?'all=1&':'')+'cb='+Date.now())
@@ -480,8 +479,7 @@
                      shareAssembly:+document.getElementById('shareAssembly').value||0,
                      shareMontazh:+document.getElementById('shareMontazh').value||0,
                      capPerOrder:+document.getElementById('capPerOrder').value||0,
-                     capOverPct:(document.getElementById('capOverPct').value==='')?50:(+document.getElementById('capOverPct').value||0),
-                     bankTarget:+document.getElementById('bankTarget').value||0 };
+                     capOverPct:(document.getElementById('capOverPct').value==='')?50:(+document.getElementById('capOverPct').value||0) };
             return fetch(WORKER+'/shares-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sh)})
               .then(function(r){return r.json();})
               .then(function(j){ if(!j||!j.ok) errs.push('доли работников: '+((j&&j.error)||'не сохранились')); });

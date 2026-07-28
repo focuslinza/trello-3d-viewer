@@ -185,10 +185,8 @@
       if(data.perWorker && data.perWorker.length){
         html+='<div class="sec"><h3>Итого по работникам</h3><table><thead><tr><th>Работник</th><th class="num">Заработал</th><th class="num">Время</th><th class="num">Выработка</th></tr></thead><tbody>';
         data.perWorker.forEach(function(r){
-          var capNote = r.cappedFrom
-            ? '<div class="stages">порог с заказа: начислено из '+fmt(r.cappedFrom)+' ₸ (до '+fmt(r.capInfo.threshold)+' — полностью, сверх — '+r.capInfo.overPct+'%)</div>'
-            : '';
-          html+='<tr><td>'+esc(r.name)+capNote+'</td><td class="num earn">'+fmt(r.earned)+' ₸</td>'+
+          // механика порога работнику не показывается — только итоговая сумма
+          html+='<tr><td>'+esc(r.name)+'</td><td class="num earn">'+fmt(r.earned)+' ₸</td>'+
                 '<td class="num">'+(r.hours? r.hours+' ч':'—')+'</td>'+
                 '<td class="num eff">'+(r.efficiency!=null? fmt(r.efficiency)+' ₸/ч':'—')+'</td></tr>';
         });
