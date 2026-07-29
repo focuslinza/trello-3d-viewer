@@ -58,10 +58,12 @@
     return { from:from, to:to, last:last, isCurrent:isCurrent };
   }
 
+  var VIEW_AS=''; // руководитель: смотреть заработок выбранного сотрудника (его глазами)
+  var TEAM=null;  // список работников для селектора (только если есть право)
   function load(){
     boot('Загрузка…');
     var r=monthRange();
-    var u=WORKER+'/my-earnings?memberId='+encodeURIComponent(memberId)+'&from='+r.from+'&to='+r.to;
+    var u=WORKER+'/my-earnings?memberId='+encodeURIComponent(memberId)+'&from='+r.from+'&to='+r.to+(VIEW_AS?('&asWorkerId='+encodeURIComponent(VIEW_AS)):'');
     fetch(u).then(function(x){return x.json();}).then(function(j){
       if(!j || j.error){ render(null, 'Ошибка: '+((j&&j.error)||'?')); return; }
       if(!j.linked){ render(null, 'linked_false'); return; }
@@ -78,7 +80,18 @@
   }
 
   function render(j, err){
+    // панель руководителя: выбор сотрудника
+    var teamSel = '';
+    if (TEAM && TEAM.length) {
+      teamSel = '<div style="margin:0 0 12px"><label class="small muted">Смотреть заработок: </label>'+
+        '<select id="viewAs" style="padding:6px 10px;border-radius:8px;background:var(--bg2,#22272b);color:inherit;border:1px solid var(--line,#3a414a)">'+
+        '<option value="">Мой ('+(memberName||'я')+')</option>'+
+        TEAM.map(function(w){ return '<option value="'+w.id+'"'+(VIEW_AS===w.id?' selected':'')+'>'+String(w.name).replace(/</g,'&lt;')+'</option>'; }).join('')+
+        '</select></div>';
+    }
+
     var html='';
+    html=teamSel+html;
     html+='<div class="sec" style="text-align:center"><h3>Мой заработок'+(memberName?(' · '+esc(memberName)):'')+'</h3>'+periodBar();
     if(err==='linked_false'){
       html+='<div class="muted">Ваш аккаунт Trello не привязан к работнику. Обратитесь к руководителю, чтобы он привязал ваш аккаунт в «Зарплата / Работники».</div></div>';
@@ -157,6 +170,8 @@
     html+='</div>';
 
     document.getElementById('app').innerHTML=html;
+    var vs=document.getElementById('viewAs');
+    if(vs) vs.onchange=function(){ VIEW_AS=this.value||''; load(); };
     wirePeriod();
   }
 
@@ -173,7 +188,18 @@
   t.member('id','fullName').then(function(m){
     memberId=(m&&m.id)||null; memberName=(m&&m.fullName)||'';
     if(!memberId){ boot('Не удалось определить ваш аккаунт.'); return; }
-    load();
+    // руководителю (Панель руководителя / Бухгалтерия) — селектор сотрудников
+    fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(memberId))
+      .then(function(r){return r.json();})
+      .then(function(p){
+        if(p && (p.canDashboard || p.canInvoice)){
+          return fetch(WORKER+'/workers-list').then(function(r){return r.json();}).then(function(j){
+            TEAM=(j&&j.workers||[]).filter(function(w){return w.active!==0;}).map(function(w){return {id:w.id, name:w.name};});
+          });
+        }
+      })
+      .catch(function(){})
+      .then(load);
   }).catch(function(){ boot('Не удалось определить ваш аккаунт.'); });
 </script>
 </body>
