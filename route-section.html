@@ -138,7 +138,8 @@
       var s=summaryOf(ROUTE);
       var h='<div class="hdr"><span class="pill'+(s.d===s.t?' done':'')+'">готово '+s.d+' из '+s.t+'</span>';
       if(s.b) h+='<span class="pill blk">⛔ '+esc(s.r)+'</span>';
-      h+='<span style="flex:1"></span><button class="lnk" id="edit" type="button">✎ состав</button><span id="msg"></span></div>';
+      h+='<span style="flex:1"></span><button class="lnk" id="rework" type="button" style="color:#e8987d" title="Переделка/рекламация: переоткрыть этапы, зафиксировать причину и виновника">↩ Переделка</button> <button class="lnk" id="edit" type="button">✎ состав</button><span id="msg"></span></div>';
+      h+='<div id="rwHost"></div>';
       ROUTE.ops.forEach(function(o,i){
         var wsel='<select data-i="'+i+'" class="wsel"><option value="">— исполнитель —</option>';
         WORKERS.forEach(function(w){
@@ -147,13 +148,15 @@
         wsel+='</select>';
         h+='<div class="oprow">'+
            '<button class="st '+esc(o.status)+'" data-i="'+i+'" type="button">'+STATUS_LBL[o.status]+'</button>'+
-           '<div class="nm">'+esc(o.label)+(o.block&&o.block.reason?('<div class="blkline">⛔ '+esc(o.block.reason)+'</div>'):'')+'</div>'+
+           '<div class="nm">'+esc(o.label)+(o.rework?(' <span style="font-size:10.5px;color:#e8987d" title="Этап переоткрыт на переделку">↩ переделка'+(o.rework>1?(' ×'+o.rework):'')+'</span>'):'')+(o.block&&o.block.reason?('<div class="blkline">⛔ '+esc(o.block.reason)+'</div>'):'')+'</div>'+
            wsel+
            '<button class="blkbtn'+(o.block?' on':'')+'" data-i="'+i+'" type="button" title="Блокировка: нет материала и т.п.">⛔</button>'+
            '</div>';
       });
       el.innerHTML=h;
       document.getElementById('edit').onclick=function(){ editing=true; renderEditor(); };
+      document.getElementById('rework').onclick=function(){ renderReworkForm(); };
+      loadReworkHistory();
       [].forEach.call(document.querySelectorAll('.st'), function(b){
         b.onclick=function(){
           var o=ROUTE.ops[+this.getAttribute('data-i')];
@@ -195,6 +198,70 @@
         };
       });
       t.sizeTo('#wrap');
+    }
+
+    function renderReworkForm(){
+      var host=document.getElementById('rwHost');
+      if(!host) return;
+      var stgs=ROUTE.ops.map(function(o,i){
+        return '<label style="display:inline-flex;align-items:center;gap:5px;margin-right:10px;font-size:12px"><input type="checkbox" class="rwst" value="'+esc(o.key)+'"'+(o.status==='done'?' checked':'')+'> '+esc(o.label)+'</label>';
+      }).join('');
+      var wopts='<option value="">— кто виноват —</option>';
+      WORKERS.forEach(function(w){ wopts+='<option value="'+w.id+'">'+esc(w.name)+'</option>'; });
+      host.innerHTML='<div style="margin:8px 0;padding:10px;border:1px solid #7a4a3a;border-radius:8px;background:rgba(122,74,58,.10);font-size:12.5px">'+
+        '<div style="font-weight:700;margin-bottom:6px">↩ Переделка / рекламация</div>'+
+        '<div style="margin-bottom:6px"><input id="rwReason" placeholder="причина (трещина по шву, клиент сменил размер…)" style="width:100%;box-sizing:border-box"></div>'+
+        '<div style="margin-bottom:6px">Виновник: <select id="rwFault">'+
+          '<option value="client">Клиент (доп. работы — в счёт)</option>'+
+          '<option value="worker">Работник (переделка бесплатно; материал: 50% из ЗП / 50% предприятие)</option>'+
+          '<option value="mixed">Цех + клиент (материал: 50% клиенту / 25% из ЗП / 25% предприятие)</option>'+
+        '</select> <select id="rwWorker" style="display:none">'+wopts+'</select></div>'+
+        '<div style="margin-bottom:6px">Переоткрыть этапы: '+stgs+'</div>'+
+        '<div style="margin-bottom:8px">Испорченный материал, ₸: <input id="rwMat" type="number" min="0" step="500" style="width:110px" placeholder="0"></div>'+
+        '<button class="btn" id="rwGo" type="button">Создать переделку</button> '+
+        '<button class="lnk" id="rwCancel" type="button">Отмена</button> <span id="rwMsg"></span></div>';
+      var faultSel=document.getElementById('rwFault');
+      faultSel.onchange=function(){ document.getElementById('rwWorker').style.display=(this.value==='client')?'none':''; };
+      document.getElementById('rwCancel').onclick=function(){ host.innerHTML=''; t.sizeTo('#wrap').catch(function(){}); loadReworkHistory(); };
+      document.getElementById('rwGo').onclick=function(){
+        var fault=faultSel.value;
+        var culprit=document.getElementById('rwWorker').value||null;
+        var msg=document.getElementById('rwMsg');
+        if((fault==='worker'||fault==='mixed') && !culprit){ msg.textContent=' Выберите виновного работника.'; msg.style.color='#e8987d'; return; }
+        var stages=[].map.call(document.querySelectorAll('.rwst:checked'), function(c){ return c.value; });
+        if(!stages.length){ msg.textContent=' Отметьте хотя бы один этап.'; msg.style.color='#e8987d'; return; }
+        var mat=+document.getElementById('rwMat').value||0;
+        this.disabled=true; msg.textContent=' Создаю…'; msg.style.color='';
+        fetch(WORKER+'/rework-create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+          cardId:CARD_ID, reason:document.getElementById('rwReason').value.trim(), fault:fault,
+          culpritWorkerId:culprit, stages:stages, materialCost:mat, createdBy:(typeof MEMBER_NAME!=='undefined'&&MEMBER_NAME)||''
+        })}).then(function(r){return r.json();}).then(function(j){
+          if(!j||!j.ok){ msg.textContent=' Ошибка: '+((j&&j.error)||'не создано'); msg.style.color='#e8987d'; document.getElementById('rwGo').disabled=false; return; }
+          host.innerHTML='<div style="margin:8px 0;padding:8px 10px;border:1px solid #2e5c44;border-radius:8px;font-size:12.5px;color:#7ee2b8">✅ Переделка создана: этапов переоткрыто — '+j.reopened+'. Флажок «Сдали» снят — деньги участников вернулись в «в работе» до пересдачи.'+
+            (fault==='client'?' Откройте калькулятор и добавьте доп. работы/материалы — сумма пойдёт в счёт клиенту.':'')+
+            (fault==='mixed'&&mat>0?(' Добавьте клиенту в калькуляцию 50% материала: '+Math.round(mat*0.5).toLocaleString('ru-RU')+' ₸.'):'')+
+            ' Не забудьте вернуть карточку в «В производстве».</div>';
+          load(); // перезагрузить маршрут с переоткрытыми этапами
+        }).catch(function(e){ msg.textContent=' Ошибка сети'; msg.style.color='#e8987d'; document.getElementById('rwGo').disabled=false; });
+      };
+      t.sizeTo('#wrap').catch(function(){});
+    }
+
+    function loadReworkHistory(){
+      var host=document.getElementById('rwHost');
+      if(!host || host.innerHTML) return;
+      fetch(WORKER+'/rework-list?cardId='+encodeURIComponent(CARD_ID)).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok||!j.reworks||!j.reworks.length) return;
+        var FLBL={client:'клиент', worker:'работник', mixed:'цех + клиент'};
+        var h='<div style="margin-top:6px;font-size:11.5px;color:#7a8794">История переделок:</div>';
+        j.reworks.forEach(function(r){
+          var wname=''; WORKERS.forEach(function(w){ if(String(w.id)===String(r.culpritWorkerId)) wname=w.name; });
+          h+='<div style="font-size:11.5px;color:#9aa7b4;margin-top:2px">↩ '+r.createdAt.slice(0,10)+' · '+esc(r.reason||'без причины')+' · вина: '+(FLBL[r.fault]||r.fault)+(wname?(' ('+esc(wname)+')'):'')+
+             (r.materialCost?(' · материал '+Math.round(r.materialCost).toLocaleString('ru-RU')+' ₸'+(r.deduction.worker?(' → вычет '+Math.round(r.deduction.worker).toLocaleString('ru-RU')+' ₸'):'')):'')+'</div>';
+        });
+        host.innerHTML=h;
+        t.sizeTo('#wrap').catch(function(){});
+      }).catch(function(){});
     }
 
     var loading=false;
