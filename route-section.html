@@ -62,6 +62,7 @@
 
     function save(){
       if(!ROUTE || !CARD_ID) return Promise.resolve();
+      SAVING=true; LAST_EDIT=Date.now();
       ROUTE.updatedAt=Date.now();
       var msg=document.getElementById('msg'); if(msg) msg.textContent='…';
       return fetch(WORKER+'/route-save',{ method:'POST', headers:{'Content-Type':'application/json'},
@@ -71,7 +72,7 @@
         // мини-сводка на карточке — из неё строится бейдж на лицевой стороне
         return t.set('card','shared','routeSummary', summaryOf(ROUTE)).catch(function(){});
       }).then(function(){ if(msg){ msg.textContent='Сохранено ✓'; setTimeout(function(){ if(msg) msg.textContent=''; },2500); } })
-      .catch(function(e){ if(msg){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--blk)'; } });
+      .catch(function(e){ if(msg){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--blk)'; } }).then(function(x){ SAVING=false; return x; }, function(e){ SAVING=false; throw e; });
     }
 
     function renderEditor(){
@@ -159,6 +160,7 @@
       loadReworkHistory();
       [].forEach.call(document.querySelectorAll('.st'), function(b){
         b.onclick=function(){
+          LAST_EDIT=Date.now();
           var o=ROUTE.ops[+this.getAttribute('data-i')];
           o.status=STATUS_NEXT[o.status]||'queued';
           // дата «готово» — по ней начисление ложится в месяц сдачи работы
@@ -168,6 +170,7 @@
       });
       [].forEach.call(document.querySelectorAll('.wsel'), function(sel){
         sel.onchange=function(){
+          LAST_EDIT=Date.now();
           var o=ROUTE.ops[+this.getAttribute('data-i')];
           o.workerId=this.value||null;
           var w=WORKERS.filter(function(x){return String(x.id)===String(sel.value);})[0];
@@ -265,8 +268,11 @@
     }
 
     var loading=false;
+    var SAVING=false;        // запрос сохранения в полёте — перечитку не пускаем
+    var LAST_EDIT=0;         // недавняя локальная правка — отставший re-render Trello
+                             // не должен затирать её старыми данными с сервера
     function loadAll(){
-      if(loading || editing) return Promise.resolve();
+      if(loading || editing || SAVING || (Date.now()-LAST_EDIT < 4000)) return Promise.resolve();
       loading=true;
       return t.card('id','name','url','idShort').then(function(c){
         CARD_ID=c.id;
