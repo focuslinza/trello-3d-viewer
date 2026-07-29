@@ -254,7 +254,33 @@
           p.then(function(x){return x.json();}).then(function(j){
             if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
             r[field]=newVal;
-            if(field==='paid'){ r.paidAt=newVal?new Date().toISOString():null; }
+            if(field==='paid'){
+              r.paidAt=newVal?new Date().toISOString():null;
+              // диагностика автоперемещения: показываем, что сделал сервер с карточкой
+              if(newVal){
+                var MRS={ ok:'↪ карточка перемещена в колонку очереди',
+                  'no-target-list':'⚠ карточка НЕ перемещена: на доске нет колонки со словом «очеред» или «оплачен» в названии',
+                  'not-in-waiting':'карточка не перемещена: она не в колонке «Ждём оплату» (из других колонок не трогаем)',
+                  'already-there':'карточка уже в колонке очереди',
+                  'already-paid':'заказ уже был оплачен ранее — карточку не трогаем (снимите и поставьте галочку, чтобы повторить)',
+                  'put-failed':'⚠ Trello отказал в перемещении — похоже, у токена Power-Up нет права записи (write)',
+                  'card-fetch':'⚠ не удалось прочитать карточку в Trello (проверьте ключ/токен)',
+                  'lists-fetch':'⚠ не удалось прочитать колонки доски',
+                  'no-auth':'⚠ на сервере не настроены TRELLO_KEY/TRELLO_TOKEN',
+                  'error':'⚠ ошибка при обращении к Trello' };
+                var mtxt = MRS[j.moveReason] || (j.moved?MRS.ok:'');
+                if(mtxt){
+                  var tEl=document.getElementById('mvToast');
+                  if(!tEl){ tEl=document.createElement('div'); tEl.id='mvToast';
+                    tEl.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#22272b;border:1px solid #3a414a;border-radius:10px;padding:10px 16px;font-size:13px;z-index:99;box-shadow:0 4px 16px rgba(0,0,0,.4)';
+                    document.body.appendChild(tEl); }
+                  tEl.textContent=mtxt;
+                  tEl.style.color = mtxt.indexOf('⚠')>=0 ? '#e8c07d' : '#7ee2b8';
+                  tEl.style.display='';
+                  clearTimeout(tEl._t); tEl._t=setTimeout(function(){ tEl.style.display='none'; }, 9000);
+                }
+              }
+            }
             // пересчитать итоги локально
             var T={orders:0,revenue:0,paidRev:0,unpaidRev:0,closed:0};
             ROWS.forEach(function(x){ T.orders++; T.revenue+=x.total; if(x.paid)T.paidRev+=x.total; else T.unpaidRev+=x.total;
