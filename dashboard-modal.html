@@ -449,6 +449,14 @@
       h+=kpi('Оплачено', money(T.paidRev)+' ₸ · '+T.paidCount+' зак.', 'green');
       h+=kpi('Не оплачено', money(T.unpaidRev)+' ₸ · '+T.unpaidCount+' зак.', 'red');
       h+='</div>';
+      // РЕАЛЬНЫЕ цифры по сданным заказам (дата сдачи в периоде): что фактически
+      // должно быть выплачено и заработано, а не просто начислено по этапам
+      var DL = DATA.delivered || { count:0, revenue:0, piece:0, profit:0 };
+      h+='<div class="kpis" style="margin-top:12px">';
+      h+=kpi('Сдано за период', DL.count + ' зак. · ' + money(DL.revenue) + ' ₸');
+      h+=kpi('ЗП (сдельная) по сданным — к выплате', money(DL.piece)+' ₸', 'amber');
+      h+=kpi('Прибыль по сданным (ориентир)', money(DL.profit)+' ₸', DL.profit>=0?'green':'red');
+      h+='</div>';
       if(PROFIT){
         var P=PROFIT;
         var expenses=(P.cash||0)+(P.fixed||0)+(P.tax||0)+(P.taxProfit||0);
