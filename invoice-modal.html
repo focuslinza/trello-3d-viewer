@@ -88,7 +88,13 @@
       name:'Товарищество с ограниченной ответственностью "TTMS"', bin:'230940037731',
       addr:'Республика Казахстан, г. Астана, ул. Конаева 14',
       bank:'АО "Банк ЦентрКредит"', iban:'KZ318562203133118240', bik:'KCJBKZKX', kbe:'17', paycode:'859',
-      executor:'Жанбосинов А.Ж.' }
+      executor:'Жанбосинов А.Ж.' },
+    firdaus:{ key:'firdaus', label:'ИП «FIRDAUS» (+3% упрощ.)',
+      name:'Индивидуальный предприниматель "FIRDAUS"', bin:'590502401351',
+      addr:'Республика Казахстан, г. Астана, улица Ахмет Байтұрсынұлы, дом 23/2, кв/офис 145',
+      bank:'АО "Kaspi Bank"', iban:'KZ57722S000005896028', bik:'CASPKZKA', kbe:'19', paycode:'859',
+      executor:'Акпарова Ж.',
+      taxUp:1.03 } // упрощённый режим: +3% налога закладывается в цены строк; подпись — общая директорская
   };
 
   var MONTHS=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
@@ -514,16 +520,17 @@
   }
   function buildData(){
     var sup=SUPPLIERS[supplierKey];
+    var K = sup.taxUp || 1; // ИП FIRDAUS (упрощёнка): +3% закладывается в цены строк
     var numEl=document.getElementById('inum'), dEl=document.getElementById('idate'), cEl=document.getElementById('icontract');
     var items = selectedOrders().map(function(o){
       var qty=Math.max(1,o.qty||1);
       var nm = o.name + (o.personName ? ' ('+o.personName+')' : '');
-      var c = ceilLine(qty, o.total/qty);
+      var c = ceilLine(qty, (o.total/qty) * K);
       return { code:o.number||'', name:nm, qty:qty, unit:'Услуга', price:c.price, cardId:o.cardId };
     });
     validExtras().forEach(function(x){
       var q=Math.max(1,+x.qty||1);
-      var c=ceilLine(q, +x.price||0);
+      var c=ceilLine(q, (+x.price||0) * K);
       items.push({ code:'', name:String(x.name).trim(), qty:q, unit:'Услуга', price:c.price });
     });
     return {
