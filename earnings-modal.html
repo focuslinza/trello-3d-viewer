@@ -154,8 +154,8 @@
             var wp = s.worksParts;
             if (wp) {
               engInfo = '<div class="stages" style="margin-top:3px">работы заказа: <b>'+fmt(wp.worksBase)+' ₸</b>'+
-                ' · '+wp.engPct+'% с первого изделия ('+fmt(Math.round(wp.perUnit*wp.engPct/100))+' ₸)'+
-                (wp.qty>1?(' + '+wp.tiragePct+'% с тиража '+(wp.qty-1)+' шт ('+fmt(Math.round((wp.worksBase-wp.perUnit)*wp.tiragePct/100))+' ₸)'):'')+
+                ' · копий (авто по DXF): '+wp.qty+' · '+wp.engPct+'% с первой копии ('+fmt(Math.round(wp.perUnit*wp.engPct/100))+' ₸)'+
+                (wp.qty>1?(' + '+wp.tiragePct+'% с остальных '+(wp.qty-1)+' копий ('+fmt(Math.round((wp.worksBase-wp.perUnit)*wp.tiragePct/100))+' ₸)'):'')+
                 (wp.invStage>0?(' + '+wp.invSharePct+'% от «Степени изобретения» '+fmt(wp.invStage)+' ₸ ('+fmt(wp.invEarn)+' ₸)'):'')+'</div>';
             }
           }
