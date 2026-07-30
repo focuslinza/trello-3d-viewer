@@ -89,9 +89,9 @@
 
     <div class="sec">
       <h3>Доли работников от стоимости этапа</h3>
-      <div class="hint" style="margin-bottom:8px">Какой процент от стоимости работы (из расчёта заказа) получает исполнитель. Пример: доля «Цех» 33% и резка на 10 000 ₸ → работнику 3 300 ₸. Применяется ко всем; сохраняется кнопкой «Сохранить всё».</div>
+      <div class="hint" style="margin-bottom:8px">Какой процент от стоимости работы (из расчёта заказа) получает исполнитель. Пример: доля «Цех» 33% и резка на 10 000 ₸ → работнику 3 300 ₸. К инженеру НЕ применяется — у него своя схема (% от работ + доля от «Степени изобретения», настраивается в его карточке ниже). Сохраняется кнопкой «Сохранить всё».</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
-        <label style="font-size:12.5px">Цех (инженер/резка/гибка/сварка/краска), % <input id="shareShop" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
+        <label style="font-size:12.5px">Цех (резка/гибка/сварка/краска), % <input id="shareShop" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
         <label style="font-size:12.5px">Сборка (шлейфовка, компоненты), % <input id="shareAssembly" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
         <label style="font-size:12.5px">Монтажная бригада, % <input id="shareMontazh" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
       </div>
