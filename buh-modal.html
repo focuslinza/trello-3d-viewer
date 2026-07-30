@@ -44,6 +44,42 @@
   <div class="bar"><button class="btn" id="close" type="button">Закрыть</button></div>
   <script>
     var t = window.TrelloPowerUp.iframe();
+    // Имена заказчиков: на карточке в CRM отмечены контакты (cardContacts);
+    // их имена лежат в справочнике компаний доски. Грузим лениво, кэшируем,
+    // вписываем в ячейку «Клиент» второй строкой — таблица не ждёт.
+    var PERSONS = {};          // cardId -> имя (или '' если нет)
+    var CONTACT_NAMES = null;  // contactId -> имя (по всем компаниям доски)
+    function loadPersonNames(){
+      var need = (ROWS||[]).filter(function(r){ return r.cardId && PERSONS[r.cardId]===undefined; });
+      if(!need.length) return;
+      var prep = CONTACT_NAMES!==null ? Promise.resolve() :
+        t.board('id').then(function(b){
+          return fetch(WORKER+'/plugindata?boardId='+encodeURIComponent(b.id)).then(function(r){return r.json();});
+        }).then(function(j){
+          CONTACT_NAMES = {};
+          (((j&&j.boardData)||{}).companies||[]).forEach(function(co){
+            ((co&&co.contacts)||[]).forEach(function(c){ if(c&&c.id) CONTACT_NAMES[c.id]=c.name||''; });
+          });
+        }).catch(function(){ CONTACT_NAMES = {}; });
+      prep.then(function(){
+        var i=0;
+        function next(){
+          var batch = need.slice(i, i+6); i+=6;
+          if(!batch.length) return;
+          Promise.all(batch.map(function(r){
+            return fetch(WORKER+'/plugindata?cardId='+encodeURIComponent(r.cardId))
+              .then(function(x){return x.json();})
+              .then(function(j){
+                var ids = (j && j.cardData && j.cardData.cardContacts) || [];
+                var nm = ids.map(function(id){ return CONTACT_NAMES[id]; }).filter(Boolean)[0] || '';
+                PERSONS[r.cardId]=nm;
+                if(nm){ var el=document.querySelector('.prsn[data-cid="'+r.cardId+'"]'); if(el) el.textContent=nm; }
+              }).catch(function(){ PERSONS[r.cardId]=''; });
+          })).then(next);
+        }
+        next();
+      });
+    }
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     document.getElementById('close').onclick=function(){ t.closeModal(); };
 
@@ -115,6 +151,7 @@
           if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
           ROWS=j.rows||[]; TOTALS=j.totals||{};
           render();
+          loadPersonNames(); // имена заказчиков (контакты CRM) — подтянутся по мере загрузки
         })
         .catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
     }
@@ -225,7 +262,7 @@
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
           h+='<tr'+(closed?' class="rowclosed"':'')+'><td><a href="#" class="onum" data-card="'+esc(r.cardId)+'" title="Показать счёт по этому заказу" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a></td>'+
              '<td>'+esc(r.name)+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+'</td>'+
-             '<td>'+esc(r.client)+'</td><td class="num">'+money(r.total)+' ₸</td>'+
+             '<td>'+esc(r.client)+'<div class="prsn" data-cid="'+esc(r.cardId)+'" style="font-size:11.5px;color:var(--muted)">'+esc(PERSONS[r.cardId]||'')+'</div></td><td class="num">'+money(r.total)+' ₸</td>'+
              '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
              '<td>'+chip(r,'paid','оплачен')+'</td>'+
              '<td>'+chip(r,'delivered','сдали')+'</td>'+
