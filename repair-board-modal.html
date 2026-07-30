@@ -385,36 +385,33 @@
       h+='<div class="thumbs" id="thumbs"></div>';
       h+='<div style="margin-top:8px"><label class="btn" style="cursor:pointer">➕ фото / PDF<input type="file" id="attachInp" accept="image/*,application/pdf" style="display:none"></label></div></div>';
 
-      // отметить сделанным
-      if(r.status==='new'){
-        h+='<div class="sec"><div class="sh">Работа</div>';
-        h+='<button class="btn green" id="doneBtn" type="button">✓ Отметить сделанным</button>';
-        h+='<div class="muted" style="margin-top:6px">Откроется калькулятор — внесите, что сделали (работы и материалы). После сохранения останется выбрать исполнителя. <a href="#" id="doneNoCalc">Внести без калькулятора</a></div>';
-        h+='<div id="doneForm" style="display:none"></div><div id="earnResult"></div></div>';
-      }
 
       // блок руководителя: цена (из калькулятора), статусы, счёт
+      // калькулятор — единый раздел для всех: работник/инженер считает («Посчитать»
+      // автоматически делает заявку «сделанной»), руководство видит цену и счёт
+      h+='<div class="sec"><div class="sh">🧮 Калькулятор стоимости</div>';
+      h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
       if(PRICED){
-        h+='<div class="sec"><div class="sh">🧮 Калькулятор стоимости</div>';
-        h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
-        h+='<div>Итого: <b class="price" style="font-size:16px">'+(r.clientTotal>0?money(r.clientTotal)+' ₸':'—')+'</b><div class="muted" style="font-size:12px">'+(r.hasCalc?'из расчёта калькулятора':'расчёта ещё нет — цена образуется при «Отметить сделанным»')+'</div></div>';
-        h+='<button class="btn" id="calcBtn" type="button">'+(r.hasCalc?'Открыть расчёт':'Посчитать')+'</button></div>';
-        h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
-        h+='<span class="muted">Заработок и эффективность по этому заказу</span></div>';
+        h+='<div>Итого: <b class="price" style="font-size:16px">'+(r.clientTotal>0?money(r.clientTotal)+' ₸':'—')+'</b><div class="muted" style="font-size:12px">'+(r.hasCalc?'из расчёта калькулятора':'расчёта ещё нет — заполните «Посчитать», заявка станет «сделана» автоматически')+'</div></div>';
+      } else {
+        h+='<div class="muted">'+(r.hasCalc?'Расчёт заполнен — заявка сделана.':'Внесите, что сделали (работы и материалы) — заявка автоматически станет «сделана».')+'</div>';
+      }
+      h+='<button class="btn'+(r.hasCalc?'':' green')+'" id="calcBtn" type="button">'+(r.hasCalc?'Открыть расчёт':'Посчитать')+'</button></div>';
+      // «Кто сделал» — выпадающий список работников, допущенных к ремонту
+      h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
+      h+='<span class="muted">Кто сделал:</span> <select id="perfSel" style="background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:180px"><option value="">— выбрать —</option></select>';
+      h+='<select id="perfSel2" style="display:none;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:180px"><option value="">— без второго —</option></select>';
+      h+='<a href="#" id="perfAdd" class="muted" style="font-size:12px;text-decoration:none">+ второй исполнитель</a></div>';
+      if(PRICED){
+        h+='<div class="muted" style="margin-bottom:4px">Заработок и эффективность по этому заказу</div>';
         h+='<div id="earnBlock" class="muted" style="margin-bottom:12px">Загрузка…</div>';
         h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
-        h+='<span class="muted">Счёт на оплату</span>';
+        h+='<span class="muted">Счёт на оплату (только руководство)</span>';
         h+='<button class="btn primary" id="invBtn" type="button">Счёт на оплату</button></div>';
-        h+='<div id="invList" class="muted" style="margin-top:8px">Загрузка…</div></div>';
-
-        h+='<div class="sec"><div class="sh">Статусы</div><div id="chips">';
-        [['invoiceSent','счёт выслан'],['paid','оплачен'],['delivered','сдали'],['actSigned','акт подписан']].forEach(function(p){
-          h+='<span class="chip'+(r[p[0]]?' on':'')+'" data-f="'+p[0]+'">'+(r[p[0]]?'✓ ':'')+p[1]+'</span>';
-        });
-        h+='</div><div class="muted">«Оплачен» проставляется и автоматически из выписки банка по номеру счёта.</div></div>';
-
-
-      } else if(r.status!=='new' && r.doneOperations && r.doneOperations.length){
+        h+='<div id="invList" class="muted" style="margin-top:8px">Загрузка…</div>';
+      }
+      h+='</div>';
+      if(!PRICED && r.status!=='new' && r.doneOperations && r.doneOperations.length){
         // работник-исполнитель видит свой заработок
         h+='<div class="sec" id="myEarnSec" style="display:none"><div class="sh">Мой заработок за эту работу</div><div id="earnBlock"></div></div>';
       }
@@ -489,30 +486,48 @@
       loadThumbs(r.id);
       // вернулись из калькулятора по кнопке «Отметить сделанным» — операции уже в расчёте,
       // спрашиваем только исполнителей/комментарий/фото
-      if(PENDING_DONE===r.id && r.status==='new'){
-        PENDING_DONE=null;
-        opRows=[{}]; OPS_FROM_CALC=false; perfRows=[''];
-        toggleDoneForm(true);
-      }
 
-      if(r.status==='new'){
-        // Основной путь: «Отметить сделанным» открывает калькулятор — исполнитель вносит,
-        // что сделал (работник видит его без цен). После «Сохранить» возврат сюда,
-        // форма «сделано» подставит операции из расчёта — останется выбрать исполнителя.
-        document.getElementById('doneBtn').onclick=function(){
-          PENDING_DONE=r.id;
-          openCalcEmbed(r);
-        };
-        document.getElementById('doneNoCalc').onclick=function(e){
-          e.preventDefault();
-          toggleDoneForm();
-        };
-      }
-
+      // «Посчитать» доступно всем допущенным (работник/инженер); сохранение расчёта
+      // автоматически делает заявку «сделанной» (статусами дальше управляет бухгалтер)
+      document.getElementById('calcBtn').onclick=function(){ openCalcEmbed(r); };
+      // «Кто сделал» — работники с правом «Ремонт»
+      loadRepairWorkers().then(function(list){
+        var sel=document.getElementById('perfSel'), sel2=document.getElementById('perfSel2'), addL=document.getElementById('perfAdd');
+        if(!sel) return;
+        function fill(el){
+          list.forEach(function(w){
+            var o=document.createElement('option'); o.value=w.trello_member_id||w.id; o.textContent=w.name;
+            o.dataset.name=w.name; el.appendChild(o);
+          });
+        }
+        fill(sel); fill(sel2);
+        // восстановление: до двух сохранённых исполнителей (парные ремонты)
+        var perfs = (r.performers||[]).slice(0,2);
+        function restoreTo(el, p){
+          if(!p) return;
+          var id=p.memberId||'';
+          if(id && el.querySelector('option[value="'+id+'"]')) el.value=id;
+          else if(p.name){ var op=document.createElement('option'); op.value='__cur'+el.id; op.textContent=p.name; op.dataset.name=p.name; el.appendChild(op); el.value=op.value; }
+        }
+        restoreTo(sel, perfs[0]);
+        if(perfs[1]){ sel2.style.display=''; addL.style.display='none'; restoreTo(sel2, perfs[1]); }
+        addL.onclick=function(e){ e.preventDefault(); sel2.style.display=''; addL.style.display='none'; };
+        function save(){
+          var performers=[];
+          [sel, sel2].forEach(function(el){
+            if(!el || el.style.display==='none' || !el.value) return;
+            var opt=el.options[el.selectedIndex];
+            performers.push({ memberId: (String(el.value).indexOf('__cur')===0?'':el.value), name: opt.dataset.name||opt.textContent });
+          });
+          // один человек дважды не считается
+          var seen={}; performers=performers.filter(function(p){ var k=p.memberId||p.name; if(seen[k])return false; seen[k]=1; return true; });
+          post('/repair-performers-set',{ id:r.id, performers:performers, byName:ME.name })
+            .then(function(){ CUR.doneByName=performers.map(function(p){return p.name;}).join(', '); loadFeed(r.id); if(PRICED) loadEarnings(r.id); })
+            .catch(function(e){ alert('Не удалось сохранить исполнителя: '+(e&&e.message||e)); });
+        }
+        sel.onchange=save; sel2.onchange=save;
+      });
       if(PRICED){
-        document.getElementById('calcBtn').onclick=function(){
-          openCalcEmbed(r);
-        };
         document.getElementById('invBtn').onclick=function(){
           if(!(+r.clientTotal>0)){
             alert('У заявки '+r.number+' не задана цена клиенту — сначала посчитайте в калькуляторе или введите сумму. Без цены строка счёта была бы нулевой.');
@@ -524,18 +539,6 @@
             '&memberId='+encodeURIComponent(ME.id)+
             '&t='+Date.now());
         };
-        [].forEach.call(document.querySelectorAll('#chips .chip'), function(c){
-          c.onclick=function(){
-            var f=this.getAttribute('data-f'), nv=!r[f], el=this; el.classList.add('busy');
-            if(f==='invoiceSent' && nv && !(+r.clientTotal>0)){
-              if(!confirm('Цена клиенту ещё не задана. Отметить счёт высланным всё равно?')){ el.classList.remove('busy'); return; }
-            }
-            post('/repair-flags',{id:r.id, field:f, value:nv?1:0}).then(function(j){
-              if(!j||!j.ok) throw new Error((j&&j.error)||'?');
-              r[f]=nv; drawCard();
-            }).catch(function(e){ el.classList.remove('busy'); alert('Не удалось: '+(e&&e.message||e)); });
-          };
-        });
         loadEarnings(r.id);
         loadInvoices(r.id);
       } else {
@@ -557,6 +560,15 @@
           post('/repair-delete',{id:r.id}).then(function(){ closeOvl(); loadAll(); });
         };
       }
+    }
+
+    var REPAIR_WORKERS=null;
+    function loadRepairWorkers(){
+      if(REPAIR_WORKERS) return Promise.resolve(REPAIR_WORKERS);
+      return fetch(WORKER+'/workers-list').then(function(r){return r.json();}).then(function(j){
+        REPAIR_WORKERS=((j&&j.workers)||[]).filter(function(w){ return +w.can_repair===1; });
+        return REPAIR_WORKERS;
+      }).catch(function(){ return []; });
     }
 
     function loadFeed(id){
