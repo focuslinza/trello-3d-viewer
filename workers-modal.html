@@ -242,12 +242,22 @@
           '<span class="bonusWrap" style="display:none"><label>Премия от чистой прибыли, % <input class="bonusPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="0" disabled></label></span>';
       }
       if (isEng) {
-        mot += '<label title="Полный процент — с прибыли ПЕРВОГО экземпляра (дизайн делается один раз). Общий для всех инженеров. 0 = старая схема (⅓ от этапа «Инженер»)">Инженер: % с первого экземпляра '+
+        mot += '<label title="Базовый процент инженера от СТОИМОСТИ РАБОТ заказа (не от прибыли). Гибрид тиража: полный % с работ первого изделия. Общий для всех инженеров; ставку определяет директор.">Инженер: % от работ (первое изделие) '+
           '<input class="engPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(FIN.engPercent||'')+'" placeholder="0">'+
         '</label>'+
-        '<label title="Роялти с прибыли остального тиража — оплачивает ответственность за чертёж на больших партиях, не съедая прибыль. Пусто = как основной % (вся прибыль).">% с тиража (2-й и далее) '+
+        '<label title="Роялти от работ остального тиража. Пусто = как основной %.">% с тиража (2-й и далее) '+
           '<input class="engTirPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(FIN.engTiragePercent!=null?FIN.engTiragePercent:'')+'" placeholder="= осн.">'+
-        '</label><span class="muted" style="font-size:11.5px">кол-во изделий задаётся в калькуляторе заказа</span>';
+        '</label>'+
+        '<label title="Сколько процентов от этапа «Степень изобретения» (начисляется клиенту в смете) получает инженер как сдельную. По умолчанию 40%.">от «Степени изобретения», % '+
+          '<input class="engInvPct" type="number" min="0" max="100" step="1" style="width:70px" value="'+(FIN.engInventionShare!=null?FIN.engInventionShare:40)+'">'+
+        '</label><span class="muted" style="font-size:11.5px">кол-во изделий — в калькуляторе заказа; все ставки меняются руководством в любой момент</span>';
+      }
+      // личный % от работ СДАННЫХ заказов — для офисных (бухгалтер/снабженец/директор);
+      // производственникам оставлять 0 (они получают долей от своих этапов)
+      if (w.id) {
+        mot += '<label title="Личный процент от стоимости работ КАЖДОГО сданного заказа. Для офисных: бухгалтер, снабженец, директор. Начисляется в месяц сдачи. Агенту ремонта не назначать — у него свой бонус.">% от работ сданных заказов '+
+          '<input class="wrkPct" type="number" min="0" max="100" step="0.1" style="width:70px" value="'+(w.works_percent>0?w.works_percent:'')+'" placeholder="0">'+
+        '</label>';
       }
       if (mot) h+='<div class="wrowlbl">Мотивация</div><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px">'+mot+'</div>';
       card.innerHTML=h;
@@ -312,7 +322,7 @@
       var showDel = document.getElementById('showDeleted') && document.getElementById('showDeleted').checked;
       return fetch(WORKER+'/fin-get').then(function(r){return r.json();}).then(function(j){
         var f=(j&&j.fin)||j||{};
-        FIN={ bonusPercent:+f.bonusPercent||0, bonusName:f.bonusName||'', engPercent:+f.engPercent||0, engTiragePercent:(f.engTiragePercent!==undefined&&f.engTiragePercent!==null&&f.engTiragePercent!=='')?+f.engTiragePercent:null };
+        FIN={ bonusPercent:+f.bonusPercent||0, bonusName:f.bonusName||'', engPercent:+f.engPercent||0, engTiragePercent:(f.engTiragePercent!==undefined&&f.engTiragePercent!==null&&f.engTiragePercent!=='')?+f.engTiragePercent:null, engInventionShare:(f.engInventionShare!==undefined&&f.engInventionShare!==null&&f.engInventionShare!=='')?+f.engInventionShare:40 };
       }).catch(function(){}).then(function(){
         // доли работников (цех/сборка/монтаж) из настроек цен
         return fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
@@ -368,7 +378,7 @@
       setMsg('Сохранение…');
       return fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){
@@ -452,9 +462,10 @@
         return;
       }
       // инженерный %: берём первое заполненное поле
-      var engVal=null, engTirVal;
+      var engVal=null, engTirVal, engInvVal;
       cards.some(function(c){ var el=c.querySelector('.engPct'); if(el && el.value!==''){ engVal=parseFloat(el.value)||0; return true; } return false; });
       cards.some(function(c){ var el=c.querySelector('.engTirPct'); if(el){ engTirVal = (el.value==='') ? null : (parseFloat(el.value)||0); return true; } return false; });
+      cards.some(function(c){ var el=c.querySelector('.engInvPct'); if(el && el.value!==''){ engInvVal=parseFloat(el.value)||0; return true; } return false; });
 
       btn.disabled=true; var t0=btn.textContent; btn.textContent='Сохраняю…';
       msg.textContent=''; msg.style.color='';
@@ -471,6 +482,7 @@
         else { fin.bonusPercent=0; fin.bonusName=''; }
         if(engVal!==null) fin.engPercent=engVal;
         if(engTirVal!==undefined) fin.engTiragePercent=engTirVal;
+        if(engInvVal!==undefined) fin.engInventionShare=engInvVal;
         return fetch(WORKER+'/fin-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fin:fin})})
           .then(function(r){return r.json();})
           .then(function(j){ if(!j||!j.ok) errs.push('настройки мотивации: '+((j&&j.error)||'не сохранились')); })

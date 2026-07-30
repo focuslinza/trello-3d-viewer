@@ -150,14 +150,13 @@
           var paintToggle = s.paint ? ('<div class="stages">'+(data.paintInShop?('красили в цеху → '+shareLbl+' начисляется'):'красили на стороне → не начисляется')+' · меняется в калькуляторе</div>') : '';
           // инженер на % от прибыли: показываем базу процента, иначе 0 выглядит загадкой
           var engInfo = '';
-          if (s.profitParts) {
-            var pp = s.profitParts, pb = +s.profitBase||0;
-            engInfo = '<div class="stages" style="margin-top:3px">прибыль заказа: <b style="color:'+(pb>0?'#4bce97':'#f28b82')+'">'+fmt(pb)+' ₸</b>'+
-              ' = выручка '+fmt(pp.total)+' − сдельная '+fmt(pp.piece)+' − материалы '+fmt(pp.materials)+
-              ' − накладные '+pp.overheadRate+'% ('+fmt(pp.overhead)+')'+
-              (pb<=0?' · прибыль ≤ 0 → инженеру 0 ₸':'')+'</div>';
-            if (pb>0 && pp.qty>1) {
-              engInfo += '<div class="stages">изделий: '+pp.qty+' · '+pp.engPct+'% с первого экземпляра ('+fmt(pp.perUnit)+' ₸) + '+pp.tiragePct+'% с тиража ('+fmt(pb-pp.perUnit)+' ₸)</div>';
+          if (s.worksParts) {
+            var wp = s.worksParts;
+            if (wp) {
+              engInfo = '<div class="stages" style="margin-top:3px">работы заказа: <b>'+fmt(wp.worksBase)+' ₸</b>'+
+                ' · '+wp.engPct+'% с первого изделия ('+fmt(Math.round(wp.perUnit*wp.engPct/100))+' ₸)'+
+                (wp.qty>1?(' + '+wp.tiragePct+'% с тиража '+(wp.qty-1)+' шт ('+fmt(Math.round((wp.worksBase-wp.perUnit)*wp.tiragePct/100))+' ₸)'):'')+
+                (wp.invStage>0?(' + '+wp.invSharePct+'% от «Степени изобретения» '+fmt(wp.invStage)+' ₸ ('+fmt(wp.invEarn)+' ₸)'):'')+'</div>';
             }
           }
           var earnCell = s.paintOutside ? '<span class="muted">на стороне</span>'

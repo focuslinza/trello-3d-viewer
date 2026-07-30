@@ -5,7 +5,7 @@
   <title>Калькулятор стоимости</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./calc-engine.js?v=15"></script>
+  <script src="./calc-engine.js?v=16"></script>
   <style>
     html[data-color-mode="light"] { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
     html[data-color-mode="dark"]  { --bg:#1d2125; --txt:#c7d1db; --muted:#9fadbc; --chip:#22272b; --line:#3c4149; --card:#22272b; }
@@ -113,14 +113,16 @@
       <h3>Параметры заказа</h3>
       <div class="params">
         <div class="fld">
-          <label>Инженерные</label>
+          <label>Степень изобретения</label>
           <select id="eng">
             <option value="0">нет (0%)</option>
             <option value="0.03">всё готово (3%)</option>
             <option value="0.09">есть чертёж (9%)</option>
             <option value="0.18" selected>инж. работы (18%)</option>
             <option value="1">новый продукт (100%)</option>
+            <option value="custom">свой %…</option>
           </select>
+          <input type="number" id="engCustom" min="0" max="300" step="1" placeholder="%" style="width:70px;display:none;margin-top:4px" title="Произвольный процент степени изобретения — назначается руководством по сложности разработки" />
         </div>
         <div class="fld">
           <label>Изделий в заказе, шт</label>
@@ -297,7 +299,10 @@
     document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м')); recompute(); };
     document.getElementById('addCmp').onclick=function(){ cmpLines.appendChild(makeCatRow(CMPG,null,'шт')); recompute(); };
 
-    ['eng','urg','shleif','tax','paintMode','noShleifCut','noShleifWeld'].forEach(function(id){
+    document.getElementById('eng').addEventListener('change', function(){
+      document.getElementById('engCustom').style.display = this.value==='custom' ? '' : 'none';
+    });
+    ['eng','engCustom','urg','shleif','tax','paintMode','noShleifCut','noShleifWeld'].forEach(function(id){
       var e=document.getElementById(id); e.addEventListener('input',recompute); e.addEventListener('change',recompute);
     });
 
@@ -310,7 +315,7 @@
       return {
         operations:operations, materials:materials, components:components,
         urgency:+document.getElementById('urg').value||0,
-        engCoef:+document.getElementById('eng').value||0,
+        engCoef:(function(){ var v=document.getElementById('eng').value; if(v==='custom') return Math.max(0,(+document.getElementById('engCustom').value||0)/100); return +v||0; })(),
         shleifRate:(+document.getElementById('shleif').value||0)/100,
         taxRate:(+document.getElementById('tax').value||0)/100,
         paintInShop:document.getElementById('paintMode').value==='shop',
@@ -337,7 +342,7 @@
       r('Компоненты (материал)', res.componentsMat);
       r('Компоненты (работа)', res.componentsLabor);
       r('Срочность', res.urgency);
-      r('Инженерные', res.engineering);
+      r('Степень изобретения', res.engineering);
       r('Подытог', res.subtotal);
       r('Налог '+Math.round(res.taxRate*100)+'%', res.taxAmount);
       document.getElementById('totalBig').innerHTML = fmt(res.total)+' <span>₸ с налогом</span>';
@@ -712,7 +717,11 @@
         (i.materials||[]).forEach(function(m){ matLines.appendChild(makeCatRow(MATG,m,'м²/м')); });
         (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
-        if(i.engCoef!=null) document.getElementById('eng').value=i.engCoef;
+        if(i.engCoef!=null){
+          var _known=['0','0.03','0.09','0.18','1'];
+          if(_known.indexOf(String(i.engCoef))>=0) document.getElementById('eng').value=String(i.engCoef);
+          else { document.getElementById('eng').value='custom'; var ec=document.getElementById('engCustom'); ec.style.display=''; ec.value=Math.round(i.engCoef*100); }
+        }
         if(i.paintInShop!=null) document.getElementById('paintMode').value = i.paintInShop ? 'shop' : 'outside';
         document.getElementById('noShleifCut').checked = !!i.noShleifCut;
         document.getElementById('noShleifWeld').checked = !!i.noShleifWeld;

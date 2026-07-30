@@ -242,7 +242,7 @@
     var engCoef=(inp.engCoef!=null?+inp.engCoef:0);
     var G3=C7+sumOps+K4+L4+SC4+compLabor+J4;
     var E3=G3*engCoef;
-    if(E3)line.push({group:'engineering',section:'ИНЖЕНЕРНЫЕ',name:'Инженерные '+Math.round(engCoef*100)+'%',base:G3,lineTotal:E3,worker:null});
+    if(E3)line.push({group:'engineering',section:'ИНЖЕНЕРНЫЕ',name:'Степень изобретения '+Math.round(engCoef*100)+'%',base:G3,lineTotal:E3,worker:null});
 
     // подытог (A4)
     var subtotal=E3 + C7 + sumOps + matSum + compMat + K4 + L4 + SC4 + J4 + compLabor;
