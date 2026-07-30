@@ -104,9 +104,26 @@
   function money(v){ return window.INVOICE.money(v); }
 
   var ctx = { cardId:null, boardId:'', cardCompanyId:null, allCompanies:[], buyer:null };
+  // «Счёт на оплату» — только для начальства: право «Выставлять счета» или
+  // «Видит суммы (бухгалтер)», либо админ доски Trello
+  function gateAccess(t){
+    return t.member('id').then(function(m){
+      return Promise.all([
+        fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(m.id)).then(function(r){return r.json();}).catch(function(){return {};}),
+        t.board('memberships').catch(function(){ return { memberships: [] }; })
+      ]).then(function(rr){
+        var p = rr[0]||{}, b = rr[1]||{};
+        var isAdmin = ((b.memberships||[]).filter(function(x){ return x.idMember===m.id && x.memberType==='admin'; }).length>0);
+        return !!(p.canIssueInvoice || p.canInvoice || isAdmin);
+      });
+    });
+  }
   var selectedCompanyId = null;
   var ALL_ORDERS = [];   // every saved calc: {cardId, name, number, total, company_id, qty, checked}
   var supplierKey = 'ip';
+  // налог добавляется В СЧЁТЕ по выбранной компании (в расчёте заказа налога больше нет):
+  // наличные 0% · ИП FIRDAUS (упрощёнка) 3% · ИП MetalShop и ТОО TTMS 16%
+  var SUP_TAX = { cash: 1, firdaus: 1.03, ip: 1.16, too: 1.16 };
   var invNumber = null;
   var showOrphans = false;
   var showPaid = false;
@@ -179,7 +196,7 @@
   function loadAllOrders(){
     var pOrders = fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
       return ((j&&j.rows)||[]).map(function(row){
-        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'' };
+        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'' };
       });
     }).catch(function(){ return []; });
     var pRepairs = fetch(WORKER+'/repair-list?full=1').then(function(r){return r.json();}).then(function(j){
@@ -260,7 +277,7 @@
   }); }
   function hiddenOrders(){ return ALL_ORDERS.filter(function(o){ return o.hidden; }); }
   function selectedOrders(){ return clientOrders().filter(function(o){return o.checked;}); }
-  function grandTotal(){ return selectedOrders().reduce(function(s,o){return s+Math.ceil(o.total-1e-9);},0) + extrasCeilTotal(); }
+  function grandTotal(){ var K=SUP_TAX[supplierKey]||1; return selectedOrders().reduce(function(s,o){return s+Math.ceil(o.total*K-1e-9);},0) + validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)*K-1e-9); },0); }
   function extrasCeilTotal(){ return validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)-1e-9); },0); }
 
   function render(){
@@ -268,11 +285,14 @@
     var html='';
 
     // supplier
-    html+='<div class="sec"><h3>Поставщик (наша компания)</h3><div class="row">';
+    html+='<div class="sec"><h3>Поставщик (наша компания) — определяет налог счёта</h3><div class="row">';
+    html+='<label class="opt"><input type="radio" name="sup" value="cash"'+(supplierKey==='cash'?' checked':'')+'> Наличные (без счёта, налог 0%)</label>';
     Object.keys(SUPPLIERS).forEach(function(k){
-      html+='<label class="opt"><input type="radio" name="sup" value="'+k+'"'+(k===supplierKey?' checked':'')+'> '+esc(SUPPLIERS[k].label)+'</label>';
+      var tx = Math.round((SUP_TAX[k]||1)*100-100);
+      html+='<label class="opt"><input type="radio" name="sup" value="'+k+'"'+(k===supplierKey?' checked':'')+'> '+esc(SUPPLIERS[k].label)+(tx?(' (+'+tx+'%)'):'')+'</label>';
     });
-    html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+'</div></div>';
+    if (supplierKey==='cash') html+='</div><div class="small muted" style="margin-top:8px">Оплата наличными: счёт не формируется, налог не добавляется. Суммы ниже — как в расчётах. Отметить оплату можно кнопкой «оплачен» у заказа.</div></div>';
+    else html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+' · налог +'+Math.round((SUP_TAX[supplierKey]||1)*100-100)+'% добавляется к ценам строк</div></div>';
 
     // buyer — selectable from the directory (default = card's company)
     html+='<div class="sec"><h3>Покупатель</h3>';
@@ -320,7 +340,7 @@
       html+='<div class="muted">У выбранного клиента нет неоплаченных заказов и ремонтов'+(paidList.length?' (оплаченные скрыты — см. ниже)':'')+'. Если заказ есть, но привязан к другому/пустому клиенту — разверните «Заказы без привязки» и привяжите. Ремонт без заданной цены здесь не показывается — сначала укажите цену клиенту в панели «Ремонт».</div>';
     } else {
       html+='<div class="small muted" style="margin-bottom:6px">Отметьте заказы — каждый станет строкой счёта. Ремонтные заявки (Р-N) можно включать в тот же счёт вместе с производством. «Кол-во» — сколько это продуктов; цена за единицу = сумма заказа ÷ кол-во. Когда клиент оплатит — нажмите «оплачен», и заказ уйдёт из списка.</div>';
-      html+='<table><thead><tr><th></th><th>№</th><th>Наименование (заказ)</th><th class="num">Кол-во</th><th class="num">Сумма заказа</th><th></th></tr></thead><tbody>';
+      html+='<table><thead><tr><th></th><th>№</th><th>Наименование (заказ)</th><th class="num">Кол-во</th><th>Степень изобретения</th><th class="num">Сумма'+(supplierKey!=='cash'?' (с налогом)':'')+'</th><th></th></tr></thead><tbody>';
       co.forEach(function(o){
         var numCell = o.isRepair
           ? '<span style="display:inline-block;background:#2b1f45;color:#c9a8ff;border-radius:6px;padding:1px 8px;font-size:11.5px;font-weight:800">'+esc(o.number)+'</span>'
@@ -330,7 +350,13 @@
           '<td class="small">'+numCell+'</td>'+
           '<td>'+esc(o.name)+(o.isRepair?' <span class="pill">ремонт</span>':'')+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+'</td>'+
           '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'"></td>'+
-          '<td class="num">'+money(o.total)+' ₸</td>'+
+          (o.isRepair ? '<td></td>' :
+            '<td><select class="invSel" data-id="'+esc(o.cardId)+'" title="Степень изобретения назначает руководство: начисляется клиенту поверх работ, инженер получает свою долю от неё">'+
+              '<option value="0"'+((+o.engCoef||0)===0?' selected':'')+'>нет</option>'+
+              '<option value="0.5"'+((+o.engCoef||0)===0.5?' selected':'')+'>доработка +50%</option>'+
+              '<option value="1"'+((+o.engCoef||0)===1?' selected':'')+'>новый продукт +100%</option>'+
+            '</select></td>')+
+          '<td class="num">'+money(o.total*(SUP_TAX[supplierKey]||1))+' ₸</td>'+
           '<td style="white-space:nowrap"><button class="btn ghost paybtn" data-id="'+esc(o.cardId)+'" type="button" title="Клиент оплатил этот заказ">оплачен</button>'+(o.isRepair?'':' <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" title="Убрать заказ из списка (не оплата)">убрать</button>')+'</td>'+
         '</tr>';
       });
@@ -421,6 +447,18 @@
 
     // wire
     [].forEach.call(document.querySelectorAll('input[name=sup]'), function(r){ r.addEventListener('change', function(){ supplierKey=this.value; render(); }); });
+    [].forEach.call(document.querySelectorAll('.invSel'), function(sel){ sel.addEventListener('change', function(){
+      var cid=this.getAttribute('data-id'), v=+this.value, el=this; el.disabled=true;
+      fetch(WORKER+'/order-invention-set',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:cid, coef:v }) })
+        .then(function(r){return r.json();}).then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+          var o=ALL_ORDERS.filter(function(x){return x.cardId===cid;})[0];
+          if(o){ o.total=j.total; o.engCoef=j.coef; }
+          render();
+        }).catch(function(e){ el.disabled=false; alert('Не сохранилось: '+(e&&e.message||e)); });
+    }); });
+    // при наличных счёт не формируется
+    (function(){ var g=document.getElementById('gen'); if(g && supplierKey==='cash'){ g.disabled=true; g.title='Наличные — счёт не формируется; отметьте оплату кнопкой «оплачен»'; } })();
     var bs=document.getElementById('buyerSel');
     if(bs) bs.addEventListener('change', function(){ selectedCompanyId=this.value; setBuyerFromSelected(); render(); loadPersonNames().then(render); });
     [].forEach.call(document.querySelectorAll('.ck'), function(c){ c.addEventListener('change', function(){ var id=this.getAttribute('data-id'), chk=this.checked; var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.checked=chk; updateGrand(); }); });
@@ -518,8 +556,8 @@
     return { sum: sum, price: sum / qty };        // цена подгоняется, чтобы qty×цена = сумма
   }
   function buildData(){
-    var sup=SUPPLIERS[supplierKey];
-    var K = 1; // налог закладывается в расчёт заказа выбором компании-плательщика; счёт суммы не меняет
+    var sup=SUPPLIERS[supplierKey] || SUPPLIERS.ip;
+    var K = SUP_TAX[supplierKey] || 1; // налог компании добавляется к ценам строк счёта
     var numEl=document.getElementById('inum'), dEl=document.getElementById('idate'), cEl=document.getElementById('icontract');
     var items = selectedOrders().map(function(o){
       var qty=Math.max(1,o.qty||1);
@@ -624,6 +662,17 @@
 
   loadContext()
     .then(function(){ if(!ctx.cardId && !MODE_REPAIR){ boot('Не удалось определить карточку.'); return Promise.reject('no card'); } })
+    .then(function(){
+      // доступ в «Счёт на оплату» — только начальству
+      return gateAccess(t).then(function(ok){
+        if (ok) return;
+        document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#dbe4ec">'+
+          '<div style="font-size:40px;margin-bottom:12px">🔒</div>'+
+          '<h2 style="margin:0 0 8px">Доступ только для руководства</h2>'+
+          '<div style="color:#9aa7b4">Выставление счетов доступно работникам с правом «Выставлять счета» или «Видит суммы (бухгалтер)». Право выдаётся в «Зарплата / Работники».</div></div>';
+        throw new Error('no-access');
+      });
+    })
     .then(loadDirectory).then(loadAllOrders).then(loadCardNumbers).then(loadNumber)
     .then(function(){
       validIds = {}; ctx.allCompanies.forEach(function(c){ validIds[c.id]=true; });

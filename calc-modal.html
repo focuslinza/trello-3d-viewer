@@ -5,7 +5,7 @@
   <title>Калькулятор стоимости</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./calc-engine.js?v=18"></script>
+  <script src="./calc-engine.js?v=19"></script>
   <style>
     html[data-color-mode="light"] { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
     html[data-color-mode="dark"]  { --bg:#1d2125; --txt:#c7d1db; --muted:#9fadbc; --chip:#22272b; --line:#3c4149; --card:#22272b; }
@@ -113,28 +113,11 @@
       <h3>Параметры заказа</h3>
       <div class="params">
         <div class="fld">
-          <label>Степень изобретения</label>
-          <select id="eng">
-            <option value="0" selected>нет (0%)</option>
-            <option value="0.5">доработка существующего изделия (+50%)</option>
-            <option value="1">совершенно новый продукт (+100%)</option>
-          </select>
-        </div>
-        <div class="fld">
           <label>Срочность</label>
           <select id="urg">
             <option value="0" selected>нет</option>
             <option value="1">1 день</option>
             <option value="2">2 дня</option>
-          </select>
-        </div>
-        <div class="fld">
-          <label>Оплата / компания</label>
-          <select id="paySup" title="Определяет налог автоматически: наличные — 0%, ИП «FIRDAUS» (упрощёнка) — 3%, ИП «MetalShop» и ТОО «TTMS» — 16%">
-            <option value="cash" selected>наличные (налог 0%)</option>
-            <option value="firdaus">ИП «FIRDAUS» (+3%)</option>
-            <option value="ip">ИП «MetalShop» (+16%)</option>
-            <option value="too">ТОО «TTMS» (+16%)</option>
           </select>
         </div>
         <div class="fld">
@@ -294,7 +277,7 @@
     document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м')); recompute(); };
     document.getElementById('addCmp').onclick=function(){ cmpLines.appendChild(makeCatRow(CMPG,null,'шт')); recompute(); };
 
-    ['eng','urg','paySup','paintMode','noShleifCut','noShleifWeld'].forEach(function(id){
+    ['urg','paintMode','noShleifCut','noShleifWeld'].forEach(function(id){
       var e=document.getElementById(id); e.addEventListener('input',recompute); e.addEventListener('change',recompute);
     });
 
@@ -307,17 +290,18 @@
       return {
         operations:operations, materials:materials, components:components,
         urgency:+document.getElementById('urg').value||0,
-        engCoef:+document.getElementById('eng').value||0,
-        // проценты шлейфовок — глобальные (см. «Цены и коэффициенты»), на заказ только вкл/выкл
-        paySupplier:document.getElementById('paySup').value,
-        // налог назначается компанией-плательщиком: нал 0% / FIRDAUS 3% / ИП и ТОО 16%
-        taxRate:({cash:0, firdaus:0.03, ip:0.16, too:0.16})[document.getElementById('paySup').value]||0,
+        // степень изобретения назначает РУКОВОДСТВО в «Счёте на оплату»; здесь только
+        // сохранённое значение — пересохранение инженером его не сбрасывает
+        engCoef:SAVED_ENG,
+        // налог добавляется в «Счёте на оплату» при выборе компании; расчёт — без налога
+        taxRate:0,
         paintInShop:document.getElementById('paintMode').value==='shop',
         noShleifCut:document.getElementById('noShleifCut').checked,
         noShleifWeld:document.getElementById('noShleifWeld').checked
       };
     }
 
+    var SAVED_ENG=0; // степень изобретения (назначается в счёте руководством)
     var lastResult=null;
     function recompute(){
       var inp=gather();
@@ -338,7 +322,7 @@
       r('Степень изобретения', res.engineering);
       r('Подытог', res.subtotal);
       r('Налог '+Math.round(res.taxRate*100)+'%', res.taxAmount);
-      document.getElementById('totalBig').innerHTML = fmt(res.total)+' <span>₸ с налогом</span>';
+      document.getElementById('totalBig').innerHTML = fmt(res.total)+' <span>₸ итого</span>';
     }
     function paintLineTotals(res){
       // recompute each row independently for its own line total display
@@ -374,13 +358,13 @@
     if(MODE_REPAIR){
       // в ремонтах инженеры обычно не участвуют — по умолчанию 0%
       // (сохранённый расчёт при загрузке всё равно вернёт своё значение)
-      var _engSel=document.getElementById('eng'); if(_engSel) _engSel.value='0';
+      SAVED_ENG=0;
       // поля процентов шлейфовки из калькулятора убраны — глобальные ставки в «Ценах и коэффициентах»
     }
     if(MODE_REPAIR){
       // в ремонтах инженеры обычно не участвуют — по умолчанию 0%
       // (сохранённый расчёт с другим значением всё равно восстановится из базы)
-      var _eng0=document.getElementById('eng'); if(_eng0) _eng0.value='0';
+      SAVED_ENG=0;
     }
 
     function loadContext(){
@@ -398,7 +382,7 @@
         ctx._src='repair';
         // в ремонтах инженеры почти не участвуют — по умолчанию 0%
         // (если в сохранённом расчёте выбран другой процент, restore() вернёт его)
-        var engSel=document.getElementById('eng'); if(engSel) engSel.value='0';
+        SAVED_ENG=0;
         // шлейф и налог в ремонте не показываем — считаются по значениям по умолчанию
         // (шлейф 50% от сварки, налог из «Цены и коэффициенты»); в расчёте они участвуют как обычно
         var sf=document.getElementById('shleifFld'); if(sf) sf.style.display='none';
@@ -708,26 +692,19 @@
         (i.materials||[]).forEach(function(m){ matLines.appendChild(makeCatRow(MATG,m,'м²/м')); });
         (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
-        if(i.engCoef!=null){
-          var engSel=document.getElementById('eng');
-          if(['0','0.5','1'].indexOf(String(i.engCoef))>=0) engSel.value=String(i.engCoef);
-          else {
-            // старый расчёт с прежней шкалой (3/9/18% или свой %) — показываем как есть,
-            // добавив временную опцию, чтобы сумма не поменялась молча
-            var op=document.createElement('option');
-            op.value=String(i.engCoef); op.textContent='сохранённый: +'+Math.round(i.engCoef*100)+'%';
-            engSel.appendChild(op); engSel.value=String(i.engCoef);
+        SAVED_ENG = (i.engCoef!=null) ? (+i.engCoef||0) : 0;
+        if(SAVED_ENG>0){
+          var badge=document.getElementById('invBadge');
+          if(!badge){ badge=document.createElement('div'); badge.id='invBadge';
+            badge.style.cssText='margin:6px 0;padding:6px 10px;background:#2b3a2b;border:1px solid #3d5c3d;border-radius:8px;font-size:12.5px;color:#a8d5a8;display:inline-block';
+            var pp=document.querySelector('.params'); if(pp&&pp.parentNode) pp.parentNode.insertBefore(badge, pp);
           }
+          badge.textContent='Степень изобретения: +'+Math.round(SAVED_ENG*100)+'% (назначает руководство в «Счёте на оплату»)';
         }
         if(i.paintInShop!=null) document.getElementById('paintMode').value = i.paintInShop ? 'shop' : 'outside';
         document.getElementById('noShleifCut').checked = !!i.noShleifCut;
         document.getElementById('noShleifWeld').checked = !!i.noShleifWeld;
-        if(i.paySupplier){ document.getElementById('paySup').value=i.paySupplier; }
-        else if(i.taxRate!=null){
-          // старый расчёт без компании: восстанавливаем режим по ставке налога
-          var t=Math.round(i.taxRate*100);
-          document.getElementById('paySup').value = t===0?'cash' : (t===3?'firdaus':'ip');
-        }
+
       }).catch(function(){});
     }
 
