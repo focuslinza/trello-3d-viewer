@@ -5,7 +5,7 @@
   <title>Калькулятор стоимости</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./calc-engine.js?v=16"></script>
+  <script src="./calc-engine.js?v=17"></script>
   <style>
     html[data-color-mode="light"] { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
     html[data-color-mode="dark"]  { --bg:#1d2125; --txt:#c7d1db; --muted:#9fadbc; --chip:#22272b; --line:#3c4149; --card:#22272b; }
@@ -115,14 +115,10 @@
         <div class="fld">
           <label>Степень изобретения</label>
           <select id="eng">
-            <option value="0">нет (0%)</option>
-            <option value="0.03">всё готово (3%)</option>
-            <option value="0.09">есть чертёж (9%)</option>
-            <option value="0.18" selected>инж. работы (18%)</option>
-            <option value="1">новый продукт (100%)</option>
-            <option value="custom">свой %…</option>
+            <option value="0" selected>нет (0%)</option>
+            <option value="0.5">доработка существующего изделия (+50%)</option>
+            <option value="1">совершенно новый продукт (+100%)</option>
           </select>
-          <input type="number" id="engCustom" min="0" max="300" step="1" placeholder="%" style="width:70px;display:none;margin-top:4px" title="Произвольный процент степени изобретения — назначается руководством по сложности разработки" />
         </div>
         <div class="fld">
           <label>Срочность</label>
@@ -132,13 +128,14 @@
             <option value="2">2 дня</option>
           </select>
         </div>
-        <div class="fld" id="shleifFld">
-          <label>Шлейф, % от сварки</label>
-          <input type="number" id="shleif" value="50" min="0" step="5" style="width:120px" />
-        </div>
-        <div class="fld" id="taxFld">
-          <label>Налог, % (вычитается из итога)</label>
-          <input type="number" id="tax" value="16" min="0" step="1" style="width:140px" />
+        <div class="fld">
+          <label>Оплата / компания</label>
+          <select id="paySup" title="Определяет налог автоматически: наличные — 0%, ИП «FIRDAUS» (упрощёнка) — 3%, ИП «MetalShop» и ТОО «TTMS» — 16%">
+            <option value="cash" selected>наличные (налог 0%)</option>
+            <option value="firdaus">ИП «FIRDAUS» (+3%)</option>
+            <option value="ip">ИП «MetalShop» (+16%)</option>
+            <option value="too">ТОО «TTMS» (+16%)</option>
+          </select>
         </div>
         <div class="fld">
           <label>Краска</label>
@@ -147,10 +144,19 @@
             <option value="shop">в цеху у себя</option>
           </select>
         </div>
-        <div class="fld">
-          <label>Авто-работы</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer;margin-top:4px"><input type="checkbox" id="noShleifCut" style="width:auto"> без шлейфовки реза</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="noShleifWeld" style="width:auto"> без шлейфовки сварки</label>
+        <div class="fld" id="shleifFld" style="flex-basis:100%">
+          <label>Шлейф, % от сварки</label>
+          <div style="display:flex;align-items:center;gap:14px">
+            <input type="number" id="shleif" value="50" min="0" step="5" style="width:120px" />
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="noShleifWeld" style="width:auto"> без шлейфовки</label>
+          </div>
+        </div>
+        <div class="fld" style="flex-basis:100%">
+          <label>Шлейф, % от резки</label>
+          <div style="display:flex;align-items:center;gap:14px">
+            <input type="number" id="shleifCut" value="20" min="0" step="5" style="width:120px" />
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="noShleifCut" style="width:auto"> без шлейфовки</label>
+          </div>
         </div>
       </div>
     </div>
@@ -295,10 +301,7 @@
     document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м')); recompute(); };
     document.getElementById('addCmp').onclick=function(){ cmpLines.appendChild(makeCatRow(CMPG,null,'шт')); recompute(); };
 
-    document.getElementById('eng').addEventListener('change', function(){
-      document.getElementById('engCustom').style.display = this.value==='custom' ? '' : 'none';
-    });
-    ['eng','engCustom','urg','shleif','tax','paintMode','noShleifCut','noShleifWeld'].forEach(function(id){
+    ['eng','urg','shleif','shleifCut','paySup','paintMode','noShleifCut','noShleifWeld'].forEach(function(id){
       var e=document.getElementById(id); e.addEventListener('input',recompute); e.addEventListener('change',recompute);
     });
 
@@ -311,9 +314,12 @@
       return {
         operations:operations, materials:materials, components:components,
         urgency:+document.getElementById('urg').value||0,
-        engCoef:(function(){ var v=document.getElementById('eng').value; if(v==='custom') return Math.max(0,(+document.getElementById('engCustom').value||0)/100); return +v||0; })(),
+        engCoef:+document.getElementById('eng').value||0,
         shleifRate:(+document.getElementById('shleif').value||0)/100,
-        taxRate:(+document.getElementById('tax').value||0)/100,
+        shleifCutRate:(+document.getElementById('shleifCut').value||0)/100,
+        paySupplier:document.getElementById('paySup').value,
+        // налог назначается компанией-плательщиком: нал 0% / FIRDAUS 3% / ИП и ТОО 16%
+        taxRate:({cash:0, firdaus:0.03, ip:0.16, too:0.16})[document.getElementById('paySup').value]||0,
         paintInShop:document.getElementById('paintMode').value==='shop',
         noShleifCut:document.getElementById('noShleifCut').checked,
         noShleifWeld:document.getElementById('noShleifWeld').checked
@@ -713,15 +719,27 @@
         (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
         if(i.engCoef!=null){
-          var _known=['0','0.03','0.09','0.18','1'];
-          if(_known.indexOf(String(i.engCoef))>=0) document.getElementById('eng').value=String(i.engCoef);
-          else { document.getElementById('eng').value='custom'; var ec=document.getElementById('engCustom'); ec.style.display=''; ec.value=Math.round(i.engCoef*100); }
+          var engSel=document.getElementById('eng');
+          if(['0','0.5','1'].indexOf(String(i.engCoef))>=0) engSel.value=String(i.engCoef);
+          else {
+            // старый расчёт с прежней шкалой (3/9/18% или свой %) — показываем как есть,
+            // добавив временную опцию, чтобы сумма не поменялась молча
+            var op=document.createElement('option');
+            op.value=String(i.engCoef); op.textContent='сохранённый: +'+Math.round(i.engCoef*100)+'%';
+            engSel.appendChild(op); engSel.value=String(i.engCoef);
+          }
         }
         if(i.paintInShop!=null) document.getElementById('paintMode').value = i.paintInShop ? 'shop' : 'outside';
         document.getElementById('noShleifCut').checked = !!i.noShleifCut;
         document.getElementById('noShleifWeld').checked = !!i.noShleifWeld;
         if(i.shleifRate!=null) document.getElementById('shleif').value=Math.round(i.shleifRate*100);
-        if(i.taxRate!=null) document.getElementById('tax').value=Math.round(i.taxRate*100);
+        if(i.shleifCutRate!=null) document.getElementById('shleifCut').value=Math.round(i.shleifCutRate*100);
+        if(i.paySupplier){ document.getElementById('paySup').value=i.paySupplier; }
+        else if(i.taxRate!=null){
+          // старый расчёт без компании: восстанавливаем режим по ставке налога
+          var t=Math.round(i.taxRate*100);
+          document.getElementById('paySup').value = t===0?'cash' : (t===3?'firdaus':'ip');
+        }
       }).catch(function(){});
     }
 
@@ -847,7 +865,7 @@
         if(j&&j.ok&&j.pricing){ window.PRICING=j.pricing;
           if(CALC.applyCustom){ CALC.applyCustom(); rebuildCatalogs(); }
           var c=j.pricing.coef||{};
-          if(c.taxRate!=null&&c.taxRate!==''){ var tx=document.getElementById('tax'); if(tx&&!tx.dataset.userset) tx.value=Math.round(+c.taxRate*100); }
+          // налог теперь назначается выбором компании-плательщика — глобальная ставка из настроек цен не применяется
         }
       }).catch(function(){});
     }

@@ -88,13 +88,12 @@
       name:'Товарищество с ограниченной ответственностью "TTMS"', bin:'230940037731',
       addr:'Республика Казахстан, г. Астана, ул. Конаева 14',
       bank:'АО "Банк ЦентрКредит"', iban:'KZ318562203133118240', bik:'KCJBKZKX', kbe:'17', paycode:'859',
-      executor:'Жанбосинов А.Ж.' },
-    firdaus:{ key:'firdaus', label:'ИП «FIRDAUS» (+3% упрощ.)',
+      executor:'Жанбосинов А.Ж.' }, // seal:'ttms' — вернуть, когда будет скан настоящей печати
+    firdaus:{ key:'firdaus', label:'ИП «FIRDAUS»',
       name:'Индивидуальный предприниматель "FIRDAUS"', bin:'590502401351',
       addr:'Республика Казахстан, г. Астана, улица Ахмет Байтұрсынұлы, дом 23/2, кв/офис 145',
       bank:'АО "Kaspi Bank"', iban:'KZ57722S000005896028', bik:'CASPKZKA', kbe:'19', paycode:'859',
-      executor:'Акпарова Ж.',
-      taxUp:1.03 } // упрощённый режим: +3% налога закладывается в цены строк; подпись — общая директорская
+      executor:'Акпарова Ж.' } // +3% упрощёнки закладывается в РАСЧЁТ заказа (выбор компании в калькуляторе), счёт цен не меняет
   };
 
   var MONTHS=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
@@ -520,7 +519,7 @@
   }
   function buildData(){
     var sup=SUPPLIERS[supplierKey];
-    var K = sup.taxUp || 1; // ИП FIRDAUS (упрощёнка): +3% закладывается в цены строк
+    var K = 1; // налог закладывается в расчёт заказа выбором компании-плательщика; счёт суммы не меняет
     var numEl=document.getElementById('inum'), dEl=document.getElementById('idate'), cEl=document.getElementById('icontract');
     var items = selectedOrders().map(function(o){
       var qty=Math.max(1,o.qty||1);

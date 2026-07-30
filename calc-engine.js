@@ -196,7 +196,7 @@
     // шлейфовка после лазерного реза: шлейфовщики зачищают кромку.
     // Стоимость = shleifCutRate × стоимость резки (по умолчанию 20%),
     // работнику начисляется доля цеха (⅓) с этого этапа.
-    var shleifCutRate=coef('shleifCutRate',0.2);
+    var shleifCutRate=(inp.shleifCutRate!=null?+inp.shleifCutRate:coef('shleifCutRate',0.2));
     var SC4=inp.noShleifCut?0:cutSum*shleifCutRate;
     if(SC4)line.push({group:'shleifCut',section:'ШЛЕЙФ',name:'Шлейфовка реза ('+Math.round(shleifCutRate*100)+'% резки)',lineTotal:SC4,worker:null});
 
