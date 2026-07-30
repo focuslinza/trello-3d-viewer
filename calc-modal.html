@@ -149,6 +149,11 @@
             <option value="shop">в цеху у себя</option>
           </select>
         </div>
+        <div class="fld">
+          <label>Авто-работы</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer;margin-top:4px"><input type="checkbox" id="noShleifCut" style="width:auto"> без шлейфовки реза</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="noShleifWeld" style="width:auto"> без шлейфовки сварки</label>
+        </div>
       </div>
     </div>
 
@@ -292,7 +297,7 @@
     document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м')); recompute(); };
     document.getElementById('addCmp').onclick=function(){ cmpLines.appendChild(makeCatRow(CMPG,null,'шт')); recompute(); };
 
-    ['eng','urg','shleif','tax','paintMode'].forEach(function(id){
+    ['eng','urg','shleif','tax','paintMode','noShleifCut','noShleifWeld'].forEach(function(id){
       var e=document.getElementById(id); e.addEventListener('input',recompute); e.addEventListener('change',recompute);
     });
 
@@ -309,6 +314,8 @@
         shleifRate:(+document.getElementById('shleif').value||0)/100,
         taxRate:(+document.getElementById('tax').value||0)/100,
         paintInShop:document.getElementById('paintMode').value==='shop',
+        noShleifCut:document.getElementById('noShleifCut').checked,
+        noShleifWeld:document.getElementById('noShleifWeld').checked,
         unitsQty:Math.max(1,Math.round(+document.getElementById('unitsQty').value||1))
       };
     }
@@ -707,6 +714,8 @@
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
         if(i.engCoef!=null) document.getElementById('eng').value=i.engCoef;
         if(i.paintInShop!=null) document.getElementById('paintMode').value = i.paintInShop ? 'shop' : 'outside';
+        document.getElementById('noShleifCut').checked = !!i.noShleifCut;
+        document.getElementById('noShleifWeld').checked = !!i.noShleifWeld;
         if(i.shleifRate!=null) document.getElementById('shleif').value=Math.round(i.shleifRate*100);
         if(i.taxRate!=null) document.getElementById('tax').value=Math.round(i.taxRate*100);
         if(i.unitsQty!=null) document.getElementById('unitsQty').value=Math.max(1,Math.round(+i.unitsQty||1));
