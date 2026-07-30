@@ -252,11 +252,19 @@
           '<input class="engInvPct" type="number" min="0" max="100" step="1" style="width:70px" value="'+(FIN.engInventionShare!=null?FIN.engInventionShare:40)+'">'+
         '</label><span class="muted" style="font-size:11.5px">кол-во изделий — в калькуляторе заказа; все ставки меняются руководством в любой момент</span>';
       }
-      // личный % от работ СДАННЫХ заказов — для офисных (бухгалтер/снабженец/директор);
-      // производственникам оставлять 0 (они получают долей от своих этапов)
-      if (w.id) {
+      // личный % от работ СДАННЫХ заказов — ТОЛЬКО для офисных (без производственных
+      // этапов): у цеховых своя мотивация долей от этапов, и случайно вписанный сюда
+      // процент дал бы двойное начисление со ВСЕХ заказов компании
+      var isOffice = stagesSel.length === 0;
+      if (w.id && isOffice) {
         mot += '<label title="Личный процент от стоимости работ КАЖДОГО сданного заказа. Для офисных: бухгалтер, снабженец, директор. Начисляется в месяц сдачи. Агенту ремонта не назначать — у него свой бонус.">% от работ сданных заказов '+
           '<input class="wrkPct" type="number" min="0" max="100" step="0.1" style="width:70px" value="'+(w.works_percent>0?w.works_percent:'')+'" placeholder="0">'+
+        '</label>';
+      } else if (w.id && w.works_percent > 0) {
+        // у производственника уже стоит процент (двойная мотивация) — показываем
+        // с предупреждением, чтобы можно было осознанно обнулить или оставить
+        mot += '<label style="color:#e8987d" title="⚠ У этого работника есть производственные этапы (своя доля) И личный % от работ всех заказов — двойная мотивация. Обнулите, если это ошибка.">⚠ % от работ сданных заказов '+
+          '<input class="wrkPct" type="number" min="0" max="100" step="0.1" style="width:70px" value="'+w.works_percent+'">'+
         '</label>';
       }
       if (mot) h+='<div class="wrowlbl">Мотивация</div><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px">'+mot+'</div>';
