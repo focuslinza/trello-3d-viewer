@@ -97,7 +97,7 @@
       </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:10px">
         <label style="font-size:12.5px" title="Защита от «пира и голода»: на гигантском заказе один человек не заработает ×8 оклада. До порога — полная доля, сверх — пониженный процент. Пусто = порога нет.">Порог сдельной с одного заказа, ₸ <input id="capPerOrder" type="number" min="0" step="10000" style="width:110px" placeholder="нет"></label>
-        <label style="font-size:12.5px" title="Сколько платится от обычной ставки за часть, превышающую порог. Например 50%: всё сверх порога — вполцены.">Сверх порога, % от обычного <input id="capOverPct" type="number" min="0" max="100" step="5" style="width:70px" placeholder="50"></label>
+        <label style="font-size:12.5px" title="Сверх порога работник получает этот процент от СТОИМОСТИ РАБОТ (не от своей доли). Пример: доля цеха 25%, порог 500 000; резка на 15 млн → до порога полностью, сверх — 1% от соответствующих работ. Ставку меняет руководство.">Сверх порога, % от работ <input id="capOverWorksPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="1"></label>
       </div>
       <div class="hint" style="margin-top:6px">Сверх порога платится указанный %, срезанный остаток фиксируется по каждому работнику — сумма видна только руководству во вкладке «Зарплаты». Работнику порог, процент и удержания не показываются.</div>
     </div>
@@ -332,7 +332,7 @@
           put('shareAssembly', c.shareAssembly, 50);
           put('shareMontazh', c.shareMontazh, 50);
           var cap=document.getElementById('capPerOrder'); if(cap) cap.value = (c.pieceCapPerOrder>0) ? c.pieceCapPerOrder : '';
-          var cov=document.getElementById('capOverPct'); if(cov) cov.value = (c.pieceCapOver!=null&&c.pieceCapOver!=='') ? Math.round(c.pieceCapOver*100) : '';
+          var cov=document.getElementById('capOverWorksPct'); if(cov) cov.value = (c.pieceCapOverWorks!=null&&c.pieceCapOverWorks!=='') ? c.pieceCapOverWorks : '';
 
         }).catch(function(){});
       }).then(function(){
@@ -491,7 +491,7 @@
                      shareAssembly:+document.getElementById('shareAssembly').value||0,
                      shareMontazh:+document.getElementById('shareMontazh').value||0,
                      capPerOrder:+document.getElementById('capPerOrder').value||0,
-                     capOverPct:(document.getElementById('capOverPct').value==='')?50:(+document.getElementById('capOverPct').value||0) };
+                     capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0) };
             return fetch(WORKER+'/shares-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sh)})
               .then(function(r){return r.json();})
               .then(function(j){ if(!j||!j.ok) errs.push('доли работников: '+((j&&j.error)||'не сохранились')); });
