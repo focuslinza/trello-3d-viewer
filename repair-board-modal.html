@@ -395,12 +395,17 @@
 
       // блок руководителя: цена (из калькулятора), статусы, счёт
       if(PRICED){
-        h+='<div class="sec"><div class="sh">Цена клиенту</div>';
-        h+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">';
-        h+='<span class="price" style="font-size:16px">'+(r.clientTotal>0?money(r.clientTotal)+' ₸':'—')+'</span>';
-        h+='<span class="muted">'+(r.hasCalc?'из расчёта калькулятора':'расчёта ещё нет')+'</span>';
-        h+='<button class="btn" id="calcBtn" type="button">🧮 '+(r.hasCalc?'Открыть расчёт':'Посчитать')+'</button>';
-        h+='</div><div class="muted" style="margin-top:6px">Цена образуется в калькуляторе при «Отметить сделанным»; здесь её можно посмотреть и поправить расчёт.</div></div>';
+        h+='<div class="sec"><div class="sh">🧮 Калькулятор стоимости</div>';
+        h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
+        h+='<div>Итого: <b class="price" style="font-size:16px">'+(r.clientTotal>0?money(r.clientTotal)+' ₸':'—')+'</b><div class="muted" style="font-size:12px">'+(r.hasCalc?'из расчёта калькулятора':'расчёта ещё нет — цена образуется при «Отметить сделанным»')+'</div></div>';
+        h+='<button class="btn" id="calcBtn" type="button">'+(r.hasCalc?'Открыть расчёт':'Посчитать')+'</button></div>';
+        h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
+        h+='<span class="muted">Заработок и эффективность по этому заказу</span></div>';
+        h+='<div id="earnBlock" class="muted" style="margin-bottom:12px">Загрузка…</div>';
+        h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
+        h+='<span class="muted">Счёт на оплату</span>';
+        h+='<button class="btn primary" id="invBtn" type="button">Счёт на оплату</button></div>';
+        h+='<div id="invList" class="muted" style="margin-top:8px">Загрузка…</div></div>';
 
         h+='<div class="sec"><div class="sh">Статусы</div><div id="chips">';
         [['invoiceSent','счёт выслан'],['paid','оплачен'],['delivered','сдали'],['actSigned','акт подписан']].forEach(function(p){
@@ -408,11 +413,7 @@
         });
         h+='</div><div class="muted">«Оплачен» проставляется и автоматически из выписки банка по номеру счёта.</div></div>';
 
-        h+='<div class="sec"><div class="sh">Заработок по заказу</div><div id="earnBlock" class="muted">Загрузка…</div></div>';
 
-        h+='<div class="sec"><div class="sh">Счета</div>';
-        h+='<button class="btn primary" id="invBtn" type="button">🧾 Счёт на оплату</button>';
-        h+='<div id="invList" class="muted" style="margin-top:8px">Загрузка…</div></div>';
       } else if(r.status!=='new' && r.doneOperations && r.doneOperations.length){
         // работник-исполнитель видит свой заработок
         h+='<div class="sec" id="myEarnSec" style="display:none"><div class="sh">Мой заработок за эту работу</div><div id="earnBlock"></div></div>';
