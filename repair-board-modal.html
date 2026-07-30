@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>Ремонт</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./trello-shim.js"></script>
   <script src="./config.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --bg3:#282e33; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; --purple:#c9a8ff; }
@@ -376,7 +377,13 @@
       if(r.doneByName) h+='<br>Сделал: <b>'+esc(r.doneByName)+'</b>'+(r.doneAt?(' ('+esc(String(r.doneAt).slice(0,10))+')'):'')+(r.doneOperations&&r.doneOperations.length?('<br><span class="muted">'+esc(opsSummary(r.doneOperations))+'</span>'):'');
       if(r.note) h+='<br><span class="muted">Комментарий: '+esc(r.note)+'</span>';
       h+='</div><div id="kvEdit" style="display:none"></div>';
-      h+='<div class="thumbs" id="thumbs"></div></div>';
+      // «Описание» — как в карточке Trello: свободный текст, редактируется кликом
+      h+='<div style="margin-top:10px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Описание</div>';
+      h+='<div id="descView" style="white-space:pre-wrap;cursor:pointer;min-height:20px;padding:6px 8px;border:1px dashed var(--line);border-radius:8px;margin-top:4px">'+(r.description?esc(r.description):'<span class="muted">Добавить более подробное описание…</span>')+'</div>';
+      h+='<div id="descEdit" style="display:none;margin-top:4px"><textarea id="descTa" rows="4" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>';
+      h+='<div style="margin-top:6px"><button class="btn green" id="descSave" type="button">Сохранить</button> <button class="btn" id="descCancel" type="button">Отмена</button></div></div></div>';
+      h+='<div class="thumbs" id="thumbs"></div>';
+      h+='<div style="margin-top:8px"><label class="btn" style="cursor:pointer">➕ фото / PDF<input type="file" id="attachInp" accept="image/*,application/pdf" style="display:none"></label></div></div>';
 
       // отметить сделанным
       if(r.status==='new'){
@@ -418,6 +425,11 @@
         h+='<button class="btn danger" id="delBtn" type="button" title="Удалить безвозвратно (для тестовых)">✕ Удалить</button>';
       }
       h+='<button class="btn" id="popClose" type="button">Закрыть</button></div>';
+      // лента заявки — комментарии людей + события системы (как в Trello)
+      h+='<div class="sec"><div class="sh">Комментарии и события</div>';
+      h+='<div style="display:flex;gap:8px;margin-bottom:10px"><input id="cmtInp" placeholder="Напишите комментарий…" style="flex:1;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px">';
+      h+='<button class="btn green" id="cmtSend" type="button">Отправить</button></div>';
+      h+='<div id="feed" class="muted">Загрузка…</div></div>';
       h+='</div></div>';
       document.getElementById('ovlHost').innerHTML=h;
       wireCard();
@@ -428,6 +440,51 @@
       document.getElementById('popClose').onclick=function(){ closeOvl(); loadAll(); };
       document.getElementById('ovl').onclick=function(e){ if(e.target===this){ closeOvl(); loadAll(); } };
       document.getElementById('editBtn').onclick=function(e){ e.preventDefault(); toggleEdit(); };
+      // описание: клик — редактирование, сохранение — на сервер + событие в ленту
+      (function(){
+        var v=document.getElementById('descView'), ed=document.getElementById('descEdit'), ta=document.getElementById('descTa');
+        if(v&&ed&&ta){
+          v.onclick=function(){ ta.value=CUR.description||''; v.style.display='none'; ed.style.display=''; ta.focus(); };
+          document.getElementById('descCancel').onclick=function(){ ed.style.display='none'; v.style.display=''; };
+          document.getElementById('descSave').onclick=function(){
+            var txt=ta.value.trim();
+            post('/repair-desc-save',{ repairId:String(r.id), description:txt, byName:ME.name })
+              .then(function(){ CUR.description=txt; drawCard(); wireCard(); })
+              .catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); });
+          };
+        }
+      })();
+      // лента комментариев и событий
+      loadFeed(r.id);
+      (function(){
+        var inp=document.getElementById('cmtInp'), btn=document.getElementById('cmtSend');
+        if(!inp||!btn) return;
+        function send(){
+          var txt=inp.value.trim(); if(!txt) return;
+          btn.disabled=true;
+          post('/repair-comment-add',{ repairId:String(r.id), text:txt, byMemberId:ME.id, byName:ME.name })
+            .then(function(){ inp.value=''; btn.disabled=false; loadFeed(r.id); })
+            .catch(function(e){ btn.disabled=false; alert('Не удалось отправить: '+(e&&e.message||e)); });
+        }
+        btn.onclick=send;
+        inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); send(); } });
+      })();
+      // добавить вложение в любой момент (фото сжимается, PDF как есть)
+      (function(){
+        var f=document.getElementById('attachInp'); if(!f) return;
+        f.onchange=function(){
+          var file=f.files&&f.files[0]; if(!file) return;
+          var p;
+          if(file.type==='application/pdf'){
+            p=new Promise(function(res,rej){ var rd=new FileReader(); rd.onload=function(){ res(String(rd.result).split(',')[1]); }; rd.onerror=rej; rd.readAsDataURL(file); })
+              .then(function(b64){ return post('/receipt-save',{kind:'repair',refId:String(r.id),filename:file.name||'файл.pdf',mime:'application/pdf',dataB64:b64,byName:ME.name}); });
+          } else {
+            p=compressImage(file).then(function(b64){ return post('/receipt-save',{kind:'repair',refId:String(r.id),filename:file.name||'фото.jpg',mime:'image/jpeg',dataB64:b64,byName:ME.name}); });
+          }
+          p.then(function(){ f.value=''; loadThumbs(r.id); loadFeed(r.id); })
+           .catch(function(e){ alert('Не удалось загрузить: '+(e&&e.message||e)); });
+        };
+      })();
       loadThumbs(r.id);
       // вернулись из калькулятора по кнопке «Отметить сделанным» — операции уже в расчёте,
       // спрашиваем только исполнителей/комментарий/фото
@@ -501,12 +558,31 @@
       }
     }
 
+    function loadFeed(id){
+      fetch(WORKER+'/repair-events?repairId='+id).then(function(r){return r.json();}).then(function(j){
+        var el=document.getElementById('feed'); if(!el) return;
+        var ev=(j&&j.ok&&j.events)||[];
+        if(!ev.length){ el.innerHTML='<span class="muted">Пока пусто — напишите первый комментарий.</span>'; return; }
+        el.innerHTML=ev.map(function(e){
+          var when=(e.at||'').slice(0,16).replace('T',' ');
+          if(e.kind==='comment'){
+            return '<div style="margin-bottom:10px"><b>'+esc(e.byName||'—')+'</b> <span class="muted" style="font-size:11px">'+esc(when)+'</span>'+
+                   '<div style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:3px;white-space:pre-wrap;color:var(--txt)">'+esc(e.text)+'</div></div>';
+          }
+          return '<div class="muted" style="margin-bottom:8px;font-size:12px">'+(e.byName?('<b>'+esc(e.byName)+'</b> '):'')+esc(e.text)+' · '+esc(when)+'</div>';
+        }).join('');
+      }).catch(function(){});
+    }
+
     function loadThumbs(id){
       fetch(WORKER+'/receipts-list?kind=repair&refId='+id).then(function(r){return r.json();}).then(function(j){
         var el=document.getElementById('thumbs'); if(!el) return;
         var rc=(j&&j.ok&&j.receipts)||[];
         el.innerHTML=rc.map(function(x){
           var u=WORKER+'/receipt-get?id='+x.id;
+          if((x.mime||'').indexOf('pdf')>=0){
+            return '<a href="'+u+'" target="_blank" style="display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border:1px solid var(--line);border-radius:8px;text-decoration:none;font-size:11px;color:var(--muted)" title="'+esc(x.filename||'')+'">PDF</a>';
+          }
           return '<a href="'+u+'" target="_blank"><img src="'+u+'" title="'+esc(x.filename||'')+'"></a>';
         }).join('');
       }).catch(function(){});
