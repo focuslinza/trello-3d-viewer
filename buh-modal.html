@@ -73,7 +73,7 @@
                 var ids = (j && j.cardData && j.cardData.cardContacts) || [];
                 var nm = ids.map(function(id){ return CONTACT_NAMES[id]; }).filter(Boolean)[0] || '';
                 PERSONS[r.cardId]=nm;
-                if(nm){ var el=document.querySelector('.prsn[data-cid="'+r.cardId+'"]'); if(el) el.textContent=nm; }
+                if(nm){ var el=document.querySelector('.prsn[data-cid="'+r.cardId+'"]'); if(el) el.textContent='('+nm+')'; }
               }).catch(function(){ PERSONS[r.cardId]=''; });
           })).then(next);
         }
@@ -262,7 +262,7 @@
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
           h+='<tr'+(closed?' class="rowclosed"':'')+'><td><a href="#" class="onum" data-card="'+esc(r.cardId)+'" title="Показать счёт по этому заказу" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a></td>'+
              '<td>'+esc(r.name)+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+'</td>'+
-             '<td>'+esc(r.client)+'<div class="prsn" data-cid="'+esc(r.cardId)+'" style="font-size:11.5px;color:var(--muted)">'+esc(PERSONS[r.cardId]||'')+'</div></td><td class="num">'+money(r.total)+' ₸</td>'+
+             '<td>'+esc(r.client)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span></td><td class="num">'+money(r.total)+' ₸</td>'+
              '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
              '<td>'+chip(r,'paid','оплачен')+'</td>'+
              '<td>'+chip(r,'delivered','сдали')+'</td>'+
