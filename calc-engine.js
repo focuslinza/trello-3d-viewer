@@ -188,6 +188,7 @@
 
     // шлейф = shleifRate × weld (sheet: 0.5 of each weld grade)
     var shleifRate=(inp.shleifRate!=null?+inp.shleifRate:coef('shleifRate',0.5));
+    if(inp.noShleifWeld)shleifRate=0;
     var K4=weldSSsum*shleifRate, L4=weldBlackSum*shleifRate;
     if(K4)line.push({group:'shleif',section:'ШЛЕЙФ',name:'Шлейф нерж ('+(shleifRate*100)+'% сварки)',lineTotal:K4,worker:null});
     if(L4)line.push({group:'shleif',section:'ШЛЕЙФ',name:'Шлейф черн ('+(shleifRate*100)+'% сварки)',lineTotal:L4,worker:null});
@@ -196,7 +197,7 @@
     // Стоимость = shleifCutRate × стоимость резки (по умолчанию 20%),
     // работнику начисляется доля цеха (⅓) с этого этапа.
     var shleifCutRate=coef('shleifCutRate',0.2);
-    var SC4=cutSum*shleifCutRate;
+    var SC4=inp.noShleifCut?0:cutSum*shleifCutRate;
     if(SC4)line.push({group:'shleifCut',section:'ШЛЕЙФ',name:'Шлейфовка реза ('+Math.round(shleifCutRate*100)+'% резки)',lineTotal:SC4,worker:null});
 
     // materials M..AY : true area/length × price, +ост +рах
