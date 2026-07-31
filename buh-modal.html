@@ -53,18 +53,12 @@
     function loadPersonNames(){
       var need = (ROWS||[]).filter(function(r){ return r.cardId && PERSONS[r.cardId]===undefined; });
       if(!need.length) return;
+      // справочник контактов — из базы CRM (тот же источник, что у счетов),
+      // а не из данных доски: там контактов нет
       var prep = CONTACT_NAMES!==null ? Promise.resolve() :
-        t.board('id').then(function(b){
-          return fetch(WORKER+'/plugindata?boardId='+encodeURIComponent(b.id))
-            .then(function(r){return r.json();})
-            .then(function(j){
-              // старый воркер требует cardId — запасной путь: спросить с первой карточкой
-              if(!(j&&j.ok) && need[0]) return fetch(WORKER+'/plugindata?cardId='+encodeURIComponent(need[0].cardId)+'&boardId='+encodeURIComponent(b.id)).then(function(r){return r.json();});
-              return j;
-            });
-        }).then(function(j){
+        fetch(WORKER+'/companies-list').then(function(r){return r.json();}).then(function(j){
           CONTACT_NAMES = {};
-          (((j&&j.boardData)||{}).companies||[]).forEach(function(co){
+          (((j&&j.companies)||[])).forEach(function(co){
             ((co&&co.contacts)||[]).forEach(function(c){ if(c&&c.id) CONTACT_NAMES[c.id]=c.name||''; });
           });
         }).catch(function(){ CONTACT_NAMES = {}; });
