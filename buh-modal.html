@@ -110,12 +110,15 @@
     var VIEW='orders'; // orders | invoices | payroll | repairs
     // просмотр счёта в поп-апе (iframe поверх бухгалтерии)
     function openInvView(qs){
-      var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:70;display:flex;flex-direction:column">'+
-        '<div style="background:var(--bg2,#22272b);border-bottom:1px solid var(--line,#3a414a);padding:8px 14px;display:flex;justify-content:space-between;align-items:center">'+
-        '<b style="font-size:13px">Счёт на оплату</b><button class="btn" id="invOvlClose" type="button" style="padding:4px 12px">✕ Закрыть</button></div>'+
+      var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:86;display:flex;flex-direction:column">'+
+        '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
+        '<button id="invBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
+        '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт на оплату</div>'+
+        '<button id="invOvlClose" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
         '<iframe src="./invoice-view.html?'+qs+'&t='+Date.now()+'" style="flex:1;border:0;background:var(--bg,#1d2125)"></iframe></div>';
       document.getElementById('invOvlHost').innerHTML=h;
       document.getElementById('invOvlClose').onclick=closeInvView;
+      document.getElementById('invBack').onclick=closeInvView;
     }
     function closeInvView(){ document.getElementById('invOvlHost').innerHTML=''; }
 
@@ -127,9 +130,10 @@
       var host=document.getElementById('invOvlHost');
       var stat=function(label,on){ return '<span class="chip'+(on?' on':'')+'" style="pointer-events:none">'+(on?'✓ ':'')+label+'</span>'; };
       var person = PERSONS[cardId] ? ' <span class="muted">('+esc(PERSONS[cardId])+')</span>' : '';
-      var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:70;display:flex;flex-direction:column">'+
+      var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:86;display:flex;flex-direction:column">'+
         '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
-        '<div style="width:40px"></div><div style="flex:1;text-align:center;font-weight:700;font-size:15px">Заказ №'+esc(r.number)+'</div>'+
+        '<button id="ordBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
+        '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Заказ №'+esc(r.number)+'</div>'+
         '<button id="ordX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
         '<div style="flex:1;overflow:auto;background:var(--bg,#1d2125);padding:18px 22px">'+
         '<h3 style="margin:0 0 4px">'+esc(r.name)+'</h3>'+
@@ -142,6 +146,7 @@
         '</div></div>';
       host.innerHTML=h;
       document.getElementById('ordX').onclick=closeInvView;
+      document.getElementById('ordBack').onclick=closeInvView; // закрыть попап = вернуться в бухгалтерию
       // причастные счета
       fetch(WORKER+'/invoice-list?cardId='+encodeURIComponent(cardId)).then(function(x){return x.json();}).then(function(j){
         var el=document.getElementById('ordInvs'); if(!el) return;
@@ -329,7 +334,8 @@
         h+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
         rows.forEach(function(r){
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
-          h+='<tr'+(closed?' class="rowclosed"':'')+'><td><a href="#" class="onum" data-card="'+esc(r.cardId)+'" title="Открыть заказ" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a></td>'+
+          h+='<tr'+(closed?' class="rowclosed"':'')+'><td style="white-space:nowrap"><a href="https://trello.com/c/'+esc(r.cardId)+'" target="_blank" rel="noopener" title="Открыть карточку Trello в новой вкладке" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a> '+
+             '<a href="#" class="oinfo" data-card="'+esc(r.cardId)+'" title="Счета по заказу, состав, статусы" style="color:var(--muted);text-decoration:none;font-size:12px">ⓘ</a></td>'+
              '<td>'+esc(r.name)+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+'</td>'+
              '<td>'+esc(r.client)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span></td><td class="num">'+money(r.total)+' ₸</td>'+
              '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
@@ -346,7 +352,7 @@
       bindCommon();
     }
     function _bindChipsBody(){
-      [].forEach.call(document.querySelectorAll('.onum'), function(el){
+      [].forEach.call(document.querySelectorAll('.oinfo'), function(el){
         el.addEventListener('click', function(e){ e.preventDefault(); openOrderView(this.getAttribute('data-card')); });
       });
       [].forEach.call(document.querySelectorAll('.chip'), function(c){
