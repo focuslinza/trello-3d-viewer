@@ -167,7 +167,8 @@
     function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     var STAGE_GROUPS = [
       {key:'eng',label:'Инж'},{key:'cut',label:'Резка'},{key:'bend',label:'Гибка'},
-      {key:'weld',label:'Сварка'},{key:'assembly',label:'Сборка'},{key:'montazh',label:'Монтаж'}
+      {key:'weld',label:'Сварка'},{key:'assembly',label:'Сборка'},{key:'montazh',label:'Монтаж'},
+      {key:'repair',label:'Ремонт'} // кто чинит: попадает в список «Кто сделал» в заявках ремонта
     ];
     function stagesHtml(sel){
       sel = sel || [];
@@ -178,7 +179,6 @@
     var PERMS = [
       {cls:'cantabel',  fld:'can_timesheet', label:'Табель',              hint:'заполняет посещаемость'},
       {cls:'candash',   fld:'can_dashboard', label:'Панель руководителя', hint:'выручка, прибыль, этапы, заработки, оплаты'},
-      {cls:'canrepair', fld:'can_repair',    label:'Ремонт',              hint:'панель заявок на ремонт'},
       {cls:'cansup',    fld:'can_supply',    label:'Снабжение',           hint:'заявки, инструмент, наличные'},
       {cls:'canissue',  fld:'can_issue_invoice', label:'Выставлять счета', hint:'кнопка «Выставить счёт» на карточке заказа'},
       {cls:'caninv',    fld:'can_invoice',   label:'Бухгалтерия',         hint:'панель бухгалтера: статусы, счета на оплату, поступления из банка — только бухгалтеру'},
@@ -284,8 +284,8 @@
       var pr=card.querySelector('.preset');
       if(pr) pr.addEventListener('click', function(ev){
         ev.preventDefault();
-        // профиль «начальник цеха»: табель + панель руководителя + ремонт + снабжение
-        ['cantabel','candash','canrepair','cansup'].forEach(function(cls){
+        // профиль «начальник цеха»: табель + панель руководителя + снабжение (ремонт теперь этап)
+        ['cantabel','candash','cansup'].forEach(function(cls){
           var cb=card.querySelector('.'+cls); if(cb){ cb.checked=true; cb.parentNode.classList.add('on'); }
         });
       });
@@ -376,7 +376,7 @@
       var canSeeCost=tr.querySelector('.cancost')?tr.querySelector('.cancost').checked:false;
       var canTimesheet=tr.querySelector('.cantabel')?tr.querySelector('.cantabel').checked:false;
       var canDashboard=tr.querySelector('.candash')?tr.querySelector('.candash').checked:false;
-      var canRepair=tr.querySelector('.canrepair')?tr.querySelector('.canrepair').checked:false;
+      var canRepair=stages.indexOf('repair')>=0; // право = этап «Ремонт» (раздел открыт всем)
       var hideStats=tr.querySelector('.hidestats')?tr.querySelector('.hidestats').checked:false;
       var payType=tr.querySelector('.ptype')?tr.querySelector('.ptype').value:'piece';
       var isSalaried = payType!=='piece';
