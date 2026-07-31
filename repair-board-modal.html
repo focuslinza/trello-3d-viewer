@@ -363,12 +363,22 @@
 
     function drawCard(){
       var r=CUR;
-      var h='<div class="ovl" id="ovl"><div class="pop">';
-      h+='<h3><span class="num-badge">'+esc(r.number)+'</span>'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'</h3>';
-      h+='<div class="muted">'+statusLabel(r.status)+' · создана '+esc((r.createdAt||'').slice(0,10))+(r.byName?(' · заявил: '+esc(r.byName)):'')+'</div>';
-
-      // сведения
-      h+='<div class="sec"><div class="sh">Сведения <a href="#" id="editBtn" style="font-weight:400;text-transform:none">✎ редактировать</a></div>';
+      var h='<div class="ovl" id="ovl"><div class="pop" style="max-width:1200px">';
+      // ОБЛОЖКА (первое вложение) — во всю ширину сверху, как в Trello
+      h+='<div id="coverBox" style="display:none;background:#8a8f95;border-radius:10px 10px 0 0;margin:-16px -16px 14px;min-height:120px;max-height:240px;overflow:hidden;text-align:center"></div>';
+      // ниже — две колонки: слева содержимое, справа лента
+      h+='<div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">';
+      h+='<div style="flex:1.5;min-width:340px">';
+      // 1. наименование  2. номер
+      h+='<h3 style="margin:0 0 4px">'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'</h3>';
+      h+='<div class="muted" style="margin-bottom:12px"><span class="num-badge">'+esc(r.number)+'</span> '+statusLabel(r.status)+' · создана '+esc((r.createdAt||'').slice(0,10))+(r.byName?(' · заявил: '+esc(r.byName)):'')+'</div>';
+      // 3. описание
+      h+='<div style="margin-bottom:14px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Описание</div>';
+      h+='<div id="descView" style="white-space:pre-wrap;cursor:pointer;min-height:20px;padding:6px 8px;border:1px dashed var(--line);border-radius:8px;margin-top:4px">'+(r.description?esc(r.description):'<span class="muted">Добавить более подробное описание…</span>')+'</div>';
+      h+='<div id="descEdit" style="display:none;margin-top:4px"><textarea id="descTa" rows="4" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>';
+      h+='<div style="margin-top:6px"><button class="btn green" id="descSave" type="button">Сохранить</button> <button class="btn" id="descCancel" type="button">Отмена</button></div></div></div>';
+      // 4. компания и контакт
+      h+='<div class="sec"><div class="sh">Компания и контакт <a href="#" id="editBtn" style="font-weight:400;text-transform:none">✎ редактировать</a></div>';
       h+='<div class="kv" id="kvView">';
       h+='Клиент: <b>'+esc(r.companyName||'—')+'</b>';
       if(r.contactName) h+=' · контакт: <b>'+esc(r.contactName)+'</b>';
@@ -376,14 +386,7 @@
       h+='<br>Категория: <b>'+esc(r.category||'—')+'</b>';
       if(r.doneByName) h+='<br>Сделал: <b>'+esc(r.doneByName)+'</b>'+(r.doneAt?(' ('+esc(String(r.doneAt).slice(0,10))+')'):'')+(r.doneOperations&&r.doneOperations.length?('<br><span class="muted">'+esc(opsSummary(r.doneOperations))+'</span>'):'');
       if(r.note) h+='<br><span class="muted">Комментарий: '+esc(r.note)+'</span>';
-      h+='</div><div id="kvEdit" style="display:none"></div>';
-      // «Описание» — как в карточке Trello: свободный текст, редактируется кликом
-      h+='<div style="margin-top:10px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Описание</div>';
-      h+='<div id="descView" style="white-space:pre-wrap;cursor:pointer;min-height:20px;padding:6px 8px;border:1px dashed var(--line);border-radius:8px;margin-top:4px">'+(r.description?esc(r.description):'<span class="muted">Добавить более подробное описание…</span>')+'</div>';
-      h+='<div id="descEdit" style="display:none;margin-top:4px"><textarea id="descTa" rows="4" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>';
-      h+='<div style="margin-top:6px"><button class="btn green" id="descSave" type="button">Сохранить</button> <button class="btn" id="descCancel" type="button">Отмена</button></div></div></div>';
-      h+='<div class="thumbs" id="thumbs"></div>';
-      h+='<div style="margin-top:8px"><label class="btn" style="cursor:pointer">➕ фото / PDF<input type="file" id="attachInp" accept="image/*,application/pdf" style="display:none"></label></div></div>';
+      h+='</div><div id="kvEdit" style="display:none"></div></div>';
 
 
       // блок руководителя: цена (из калькулятора), статусы, счёт
@@ -416,6 +419,19 @@
         h+='<div class="sec" id="myEarnSec" style="display:none"><div class="sh">Мой заработок за эту работу</div><div id="earnBlock"></div></div>';
       }
 
+      // 6. вложения — низ левой колонки
+      h+='<div class="sec"><div class="sh">Вложения</div>';
+      h+='<div class="thumbs" id="thumbs"></div>';
+      h+='<div style="margin-top:8px"><label class="btn" style="cursor:pointer">➕ фото / PDF<input type="file" id="attachInp" accept="image/*,application/pdf" style="display:none"></label></div></div>';
+      h+='</div>'; // конец левой колонки
+      // правая колонка: лента «Комментарии и события» (начинается под обложкой)
+      h+='<div style="flex:1;min-width:300px">';
+      h+='<div class="sh">Комментарии и события</div>';
+      h+='<div style="display:flex;gap:8px;margin:8px 0 10px"><input id="cmtInp" placeholder="Напишите комментарий…" style="flex:1;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px">';
+      h+='<button class="btn green" id="cmtSend" type="button">Отправить</button></div>';
+      h+='<div id="feed" class="muted">Загрузка…</div>';
+      h+='</div>'; // конец правой колонки
+      h+='</div>'; // конец двух колонок
       h+='<div class="popbar">';
       if(IS_ADMIN){
         h+='<button class="btn" id="rejBtn" type="button" title="Отклонить заявку (уйдёт с доски, останется в базе)">Отклонить</button>';
@@ -423,11 +439,6 @@
         h+='<button class="btn danger" id="delBtn" type="button" title="Удалить безвозвратно (для тестовых)">✕ Удалить</button>';
       }
       h+='<button class="btn" id="popClose" type="button">Закрыть</button></div>';
-      // лента заявки — комментарии людей + события системы (как в Trello)
-      h+='<div class="sec"><div class="sh">Комментарии и события</div>';
-      h+='<div style="display:flex;gap:8px;margin-bottom:10px"><input id="cmtInp" placeholder="Напишите комментарий…" style="flex:1;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px">';
-      h+='<button class="btn green" id="cmtSend" type="button">Отправить</button></div>';
-      h+='<div id="feed" class="muted">Загрузка…</div></div>';
       h+='</div></div>';
       document.getElementById('ovlHost').innerHTML=h;
       wireCard();
@@ -591,6 +602,13 @@
       fetch(WORKER+'/receipts-list?kind=repair&refId='+id).then(function(r){return r.json();}).then(function(j){
         var el=document.getElementById('thumbs'); if(!el) return;
         var rc=(j&&j.ok&&j.receipts)||[];
+        // обложка карточки: первое фото-вложение — сверху во всю ширину, как в Trello
+        var cov=document.getElementById('coverBox');
+        if(cov){
+          var img=rc.filter(function(x){ return (x.mime||'').indexOf('pdf')<0; })[0];
+          if(img){ cov.style.display=''; cov.innerHTML='<img src="'+WORKER+'/receipt-get?id='+img.id+'" style="max-height:240px;max-width:100%;object-fit:contain">'; }
+          else { cov.style.display='none'; cov.innerHTML=''; }
+        }
         el.innerHTML=rc.map(function(x){
           var u=WORKER+'/receipt-get?id='+x.id;
           if((x.mime||'').indexOf('pdf')>=0){
