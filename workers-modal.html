@@ -138,7 +138,7 @@
   <script>
     var t = window.TrelloPowerUp.iframe();
     document.getElementById('backToDash').onclick=function(){
-      t.modal({ url:'./dashboard-modal.html?t='+Date.now(), fullscreen:true, title:'Панель руководителя' });
+      t.modal({ url:'./dashboard-modal.html?t='+Date.now(), fullscreen:true });
     };
     var WORKER = (window.WORKER_URL || '').replace(/\/+$/,'');
     var rowsEl = document.getElementById('rows');

@@ -141,9 +141,20 @@
       if(s.b) h+='<span class="pill blk">⛔ '+esc(s.r)+'</span>';
       h+='<span style="flex:1"></span><button class="lnk" id="rework" type="button" style="color:#e8987d" title="Переделка/рекламация: переоткрыть этапы, зафиксировать причину и виновника">↩ Переделка</button> <button class="lnk" id="edit" type="button">✎ состав</button><span id="msg"></span></div>';
       h+='<div id="rwHost"></div>';
+      // соответствие этапа маршрута → этап в карточке работника: в списке
+      // только потенциально причастные (у кого отмечен этот этап). Текущий
+      // сохранённый исполнитель показывается всегда; нет подходящих — все.
+      var OP2STAGE={ eng:'eng', cut:'cut', bend:'bend', weld:'weld', shleif:'assembly', assembly:'assembly', paint:'assembly', components:'assembly', montazh:'montazh' };
       ROUTE.ops.forEach(function(o,i){
+        var stKey=OP2STAGE[o.key]||null;
+        var pool=WORKERS.filter(function(w){
+          if(String(o.workerId)===String(w.id)) return true;                    // выбранный — всегда
+          if(!stKey) return true;                                              // неизвестный этап — не фильтруем
+          return (w.stages||[]).indexOf(stKey)>=0;
+        });
+        if(!pool.some(function(w){ return String(o.workerId)!==String(w.id); })) pool=WORKERS; // подходящих нет — показываем всех
         var wsel='<select data-i="'+i+'" class="wsel"><option value="">— исполнитель —</option>';
-        WORKERS.forEach(function(w){
+        pool.forEach(function(w){
           wsel+='<option value="'+w.id+'"'+(String(o.workerId)===String(w.id)?' selected':'')+'>'+esc(w.name)+'</option>';
         });
         wsel+='</select>';
@@ -191,7 +202,7 @@
           // постановка блокировки: обязательно создаётся заявка на снабжение,
           // чтобы снабженец сразу увидел, что купить (окно всё сделает само)
           t.modal({
-            title: '🚫 Блокировка: нет материала',
+            title: 'Блокировка: нет материала',
             url: './supply-block-modal.html?t=' + Date.now(),
             fullscreen: false,
             accentColor: '#c9372c',

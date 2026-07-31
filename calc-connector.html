@@ -33,7 +33,7 @@
       },
       'card-back-section': function (t, options) {
         return {
-          title: 'Калькулятор стоимости',
+          title: 'Калькулятор стоимости', // подпись СЕКЦИИ на карточке — не шапка окна
           icon: t.signUrl('./calc-icon.svg'),
           content: {
             type: 'iframe',
@@ -62,13 +62,15 @@
           }).catch(function(){ return false; });
         }
         var earnBtn = {
-          icon: { dark: ICON_BASE + 'ic-earnings-w.png', light: ICON_BASE + 'ic-earnings-b.png' },
+          // эксперимент: подпись нарисована в самой иконке (новая шапка Trello не
+          // показывает текст кнопок Power-Up). Если отрендерится читаемо — переведём все.
+          icon: { dark: ICON_BASE + 'ic-lbl-earnings-w.png', light: ICON_BASE + 'ic-lbl-earnings-b.png' },
           text: 'Мой заработок',
           callback: function (t) {
             return t.modal({
               url: t.signUrl('./my-earnings-modal.html') + '?t=' + Date.now(),
               fullscreen: true,
-              title: 'Мой заработок'
+              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -79,7 +81,7 @@
             return t.modal({
               url: './crm-modal.html?t=' + Date.now(),
               fullscreen: true,
-              title: 'CRM — Клиенты'
+              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -90,7 +92,7 @@
             return t.modal({
               url: './buh-modal.html?t=' + Date.now(),
               fullscreen: true,
-              title: 'Бухгалтерия'
+              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -101,7 +103,7 @@
             return t.modal({
               url: './repair-board-modal.html?t=' + Date.now(),
               fullscreen: true,
-              title: 'Ремонт'
+              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -112,7 +114,7 @@
             return t.modal({
               url: './supply-modal.html?t=' + Date.now(),
               fullscreen: true,
-              title: 'Снабжение'
+              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -123,7 +125,7 @@
             return t.modal({
               url: './timesheet-modal.html?t=' + Date.now(),
               fullscreen: true,
-              title: 'Табель'
+              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -134,7 +136,7 @@
             return t.modal({
               url: t.signUrl('./dashboard-modal.html') + '?t=' + Date.now(),
               fullscreen: true,
-              title: 'Панель руководителя'
+              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -154,7 +156,7 @@
             text: 'Управление',
             callback: function (t) {
               return t.popup({
-                title: 'Управление',
+                title: 'Управление', // заголовок попап-меню — не шапка модала
                 items: items.map(function(b){ return { text: b.text, callback: b.callback }; })
               });
             }

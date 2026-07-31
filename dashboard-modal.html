@@ -606,7 +606,7 @@
 
   document.getElementById('close').onclick=function(){ t.closeModal(); };
   document.getElementById('workers').onclick=function(){
-    t.modal({ url:'./workers-modal.html?t='+Date.now(), fullscreen:true, title:'Зарплата и работники' });
+    t.modal({ url:'./workers-modal.html?t='+Date.now(), fullscreen:true }); // шапку рисует само окно
   };
   document.getElementById('financeBtn').onclick=function(){
     var r=range();

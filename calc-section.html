@@ -30,7 +30,7 @@
 
     function openCalc(){
       return t.modal({
-        title: 'Калькулятор стоимости',
+        // title убран: шапку рисует само окно (синий бар)
         url: './calc-modal.html?t=' + Date.now(),
         fullscreen: true,
         accentColor: '#0c66e4',
@@ -39,7 +39,7 @@
     }
     function openEarnings(){
       return t.modal({
-        title: 'Заработок по заказу',
+        // title убран: шапку рисует само окно (синий бар)
         url: './earnings-modal.html?t=' + Date.now(),
         fullscreen: true,
         accentColor: '#0c66e4',
@@ -48,7 +48,7 @@
     }
     function openInvoice(){
       return t.modal({
-        title: 'Счёт на оплату',
+        // title убран: шапку рисует само окно (синий бар)
         url: './invoice-modal.html?t=' + Date.now(),
         fullscreen: true,
         accentColor: '#0c66e4',
