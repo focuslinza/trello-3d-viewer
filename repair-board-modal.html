@@ -374,18 +374,17 @@
       h+='<div class="muted" style="margin-bottom:12px"><span class="num-badge">'+esc(r.number)+'</span> '+statusLabel(r.status)+' · создана '+esc((r.createdAt||'').slice(0,10))+(r.byName?(' · заявил: '+esc(r.byName)):'')+'</div>';
       // 3. описание
       h+='<div style="margin-bottom:14px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Описание</div>';
-      h+='<div id="descView" style="white-space:pre-wrap;cursor:pointer;min-height:20px;padding:6px 8px;border:1px dashed var(--line);border-radius:8px;margin-top:4px">'+(r.description?esc(r.description):'<span class="muted">Добавить более подробное описание…</span>')+'</div>';
+      var descText = r.description || r.note || '';
+      h+='<div id="descView" style="white-space:pre-wrap;cursor:pointer;min-height:20px;padding:6px 8px;border:1px dashed var(--line);border-radius:8px;margin-top:4px">'+(descText?esc(descText):'<span class="muted">Добавить более подробное описание…</span>')+'</div>';
       h+='<div id="descEdit" style="display:none;margin-top:4px"><textarea id="descTa" rows="4" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>';
       h+='<div style="margin-top:6px"><button class="btn green" id="descSave" type="button">Сохранить</button> <button class="btn" id="descCancel" type="button">Отмена</button></div></div></div>';
       // 4. компания и контакт
       h+='<div class="sec"><div class="sh">Компания и контакт <a href="#" id="editBtn" style="font-weight:400;text-transform:none">✎ редактировать</a></div>';
       h+='<div class="kv" id="kvView">';
-      h+='Клиент: <b>'+esc(r.companyName||'—')+'</b>';
-      if(r.contactName) h+=' · контакт: <b>'+esc(r.contactName)+'</b>';
-      if(r.objectName) h+=' · объект: <b>'+esc(r.objectName)+'</b>';
-      h+='<br>Категория: <b>'+esc(r.category||'—')+'</b>';
+      h+='Компания клиент: <b>'+esc(r.companyName||'—')+'</b>';
+      h+='<br>Представитель: <b>'+esc(r.contactName||'—')+'</b>';
+      if(r.objectName) h+='<br>Объект: <b>'+esc(r.objectName)+'</b>';
       if(r.doneByName) h+='<br>Сделал: <b>'+esc(r.doneByName)+'</b>'+(r.doneAt?(' ('+esc(String(r.doneAt).slice(0,10))+')'):'')+(r.doneOperations&&r.doneOperations.length?('<br><span class="muted">'+esc(opsSummary(r.doneOperations))+'</span>'):'');
-      if(r.note) h+='<br><span class="muted">Комментарий: '+esc(r.note)+'</span>';
       h+='</div><div id="kvEdit" style="display:none"></div></div>';
 
 
@@ -395,9 +394,9 @@
       h+='<div class="sec"><div class="sh">🧮 Калькулятор стоимости</div>';
       h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
       if(PRICED){
-        h+='<div>Итого: <b class="price" style="font-size:16px">'+(r.clientTotal>0?money(r.clientTotal)+' ₸':'—')+'</b><div class="muted" style="font-size:12px">'+(r.hasCalc?'из расчёта калькулятора':'расчёта ещё нет — заполните «Посчитать», заявка станет «сделана» автоматически')+'</div></div>';
+        h+='<div>Итого: <b class="price" style="font-size:16px">'+(r.clientTotal>0?money(r.clientTotal)+' ₸':'—')+'</b></div>';
       } else {
-        h+='<div class="muted">'+(r.hasCalc?'Расчёт заполнен — заявка сделана.':'Внесите, что сделали (работы и материалы) — заявка автоматически станет «сделана».')+'</div>';
+        h+='<div></div>';
       }
       h+='<button class="btn'+(r.hasCalc?'':' green')+'" id="calcBtn" type="button">'+(r.hasCalc?'Открыть расчёт':'Посчитать')+'</button></div>';
       // «Кто сделал» — выпадающий список работников, допущенных к ремонту
@@ -406,8 +405,7 @@
       h+='<select id="perfSel2" style="display:none;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:180px"><option value="">— без второго —</option></select>';
       h+='<a href="#" id="perfAdd" class="muted" style="font-size:12px;text-decoration:none">+ второй исполнитель</a></div>';
       if(PRICED){
-        h+='<div class="muted" style="margin-bottom:4px">Заработок и эффективность по этому заказу</div>';
-        h+='<div id="earnBlock" class="muted" style="margin-bottom:12px">Загрузка…</div>';
+        h+='<div id="earnBlock" class="muted" style="margin-bottom:12px"></div>';
         h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
         h+='<span class="muted">Счёт на оплату (только руководство)</span>';
         h+='<button class="btn primary" id="invBtn" type="button">Счёт на оплату</button></div>';
@@ -453,7 +451,7 @@
       (function(){
         var v=document.getElementById('descView'), ed=document.getElementById('descEdit'), ta=document.getElementById('descTa');
         if(v&&ed&&ta){
-          v.onclick=function(){ ta.value=CUR.description||''; v.style.display='none'; ed.style.display=''; ta.focus(); };
+          v.onclick=function(){ ta.value=CUR.description||CUR.note||''; v.style.display='none'; ed.style.display=''; ta.focus(); };
           document.getElementById('descCancel').onclick=function(){ ed.style.display='none'; v.style.display=''; };
           document.getElementById('descSave').onclick=function(){
             var txt=ta.value.trim();
@@ -610,12 +608,16 @@
           if(img){ cov.style.display=''; cov.innerHTML='<img src="'+WORKER+'/receipt-get?id='+img.id+'" style="max-height:240px;max-width:100%;object-fit:contain">'; }
           else { cov.style.display='none'; cov.innerHTML=''; }
         }
-        el.innerHTML=rc.map(function(x){
+        // компактный список: сортировка по типу — сначала фото, затем документы;
+        // без превью, только иконка + имя файла (ссылкой)
+        var sorted = rc.slice().sort(function(a2,b2){
+          var ap=(a2.mime||'').indexOf('pdf')>=0?1:0, bp=(b2.mime||'').indexOf('pdf')>=0?1:0;
+          return ap-bp || (b2.id-a2.id);
+        });
+        el.innerHTML=sorted.map(function(x){
           var u=WORKER+'/receipt-get?id='+x.id;
-          if((x.mime||'').indexOf('pdf')>=0){
-            return '<a href="'+u+'" target="_blank" style="display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border:1px solid var(--line);border-radius:8px;text-decoration:none;font-size:11px;color:var(--muted)" title="'+esc(x.filename||'')+'">PDF</a>';
-          }
-          return '<a href="'+u+'" target="_blank"><img src="'+u+'" title="'+esc(x.filename||'')+'"></a>';
+          var isDoc=(x.mime||'').indexOf('pdf')>=0;
+          return '<div style="margin:3px 0"><a href="'+u+'" target="_blank" style="text-decoration:none;color:var(--txt);font-size:13px">'+(isDoc?'📄':'🖼')+' '+esc(x.filename||(isDoc?'документ.pdf':'фото.jpg'))+'</a></div>';
         }).join('');
       }).catch(function(){});
     }
@@ -624,7 +626,7 @@
       fetch(WORKER+'/repair-earnings?id='+id).then(function(r){return r.json();}).then(function(j){
         var el=document.getElementById('earnBlock'); if(!el) return;
         if(!j||!j.ok){ el.textContent='Не удалось загрузить.'; return; }
-        if(!j.hasWork){ el.innerHTML='<span class="muted">Работа ещё не отмечена выполненной — заработок появится после «Отметить сделанным».</span>'; return; }
+        if(!j.hasWork){ el.innerHTML=''; return; }
         if(PRICED){
           var perf=(j.performers&&j.performers.length)?j.performers:[{name:j.doneByName}];
           var who=perf.map(function(p){return esc(p.name||'—');}).join(', ');
@@ -650,7 +652,7 @@
       fetch(WORKER+'/invoice-list?repairId='+id).then(function(r){return r.json();}).then(function(j){
         var el=document.getElementById('invList'); if(!el) return;
         var rows=(j&&j.ok&&j.rows)||[];
-        if(!rows.length){ el.innerHTML='<span class="muted">По этой заявке счета ещё не выставлялись.</span>'; return; }
+        if(!rows.length){ el.innerHTML=''; return; }
         var h='<table><thead><tr><th>Счёт</th><th>Дата</th><th class="num">Сумма</th></tr></thead><tbody>';
         rows.forEach(function(x){
           h+='<tr><td><b>№'+esc(x.number)+'</b></td><td>'+esc(x.date_text||String(x.date_iso||'').slice(0,10))+'</td><td class="num">'+money(x.total)+' ₸</td></tr>';
@@ -672,17 +674,13 @@
       var h='';
       if(r.status!=='new') h+='<div class="muted" style="color:var(--amber);margin-bottom:4px">⚠ Заявка уже не новая — правьте, только если это исправление ошибки.</div>';
       h+='<div class="fld"><label>Название</label><input type="text" id="eTitle" value="'+esc(r.title)+'"></div>';
-      h+='<div class="fld"><label>Категория</label><select id="eCat">'+categoryOptions(r.category)+'</select><input type="text" id="eCatNew" placeholder="Название категории" style="display:none;margin-top:6px"></div>';
+      h+='<input type="hidden" id="eCat" value="'+esc(r.category||'')+'">';
       h+='<div class="fld"><label>Клиент</label><select id="eCompany">'+companyOptions(r.companyId)+'</select></div>';
       h+='<div class="fld"><label>Контактное лицо</label><select id="eContact">'+contactOptions(co, r.contactName)+'</select></div>';
       h+='<div class="fld"><label>Объект</label><select id="eObject">'+objectOptions(co, r.objectName)+'</select></div>';
       h+='<label class="f"><input type="checkbox" id="eUrgent"'+(r.urgent?' checked':'')+'> 🔥 Срочно</label>';
       h+='<div style="margin-top:10px"><button class="btn primary" id="eSave" type="button">Сохранить</button> <span class="msg" id="eMsg"></span></div>';
       e.innerHTML=h;
-      document.getElementById('eCat').onchange=function(){
-        var txt=document.getElementById('eCatNew');
-        if(this.value==='__new__'){ txt.style.display=''; txt.focus(); } else txt.style.display='none';
-      };
       document.getElementById('eCompany').onchange=function(){
         var c2=companyById(this.value);
         document.getElementById('eContact').innerHTML=contactOptions(c2,'');
@@ -691,8 +689,7 @@
       document.getElementById('eSave').onclick=function(){
         var title=document.getElementById('eTitle').value.trim();
         if(!title){ alert('Укажите название заявки.'); return; }
-        var catSel=document.getElementById('eCat');
-        var category = catSel.value==='__new__' ? document.getElementById('eCatNew').value.trim() : catSel.value;
+        var category = document.getElementById('eCat').value; // категория сохранена как была (из карточки убрана)
         var cid=document.getElementById('eCompany').value;
         var c2=companyById(cid);
         var msg=document.getElementById('eMsg'); msg.textContent='Сохранение…'; msg.style.color='var(--muted)';
