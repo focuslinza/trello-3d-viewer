@@ -55,7 +55,13 @@
       if(!need.length) return;
       var prep = CONTACT_NAMES!==null ? Promise.resolve() :
         t.board('id').then(function(b){
-          return fetch(WORKER+'/plugindata?boardId='+encodeURIComponent(b.id)).then(function(r){return r.json();});
+          return fetch(WORKER+'/plugindata?boardId='+encodeURIComponent(b.id))
+            .then(function(r){return r.json();})
+            .then(function(j){
+              // старый воркер требует cardId — запасной путь: спросить с первой карточкой
+              if(!(j&&j.ok) && need[0]) return fetch(WORKER+'/plugindata?cardId='+encodeURIComponent(need[0].cardId)+'&boardId='+encodeURIComponent(b.id)).then(function(r){return r.json();});
+              return j;
+            });
         }).then(function(j){
           CONTACT_NAMES = {};
           (((j&&j.boardData)||{}).companies||[]).forEach(function(co){
