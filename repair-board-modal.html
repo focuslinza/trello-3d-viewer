@@ -914,9 +914,17 @@
     document.getElementById('q').oninput=function(){ FILTER=this.value; renderBoard(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
     document.getElementById('onlyUrgent').onchange=function(){ ONLY_URGENT=this.checked; renderBoard(); };
 
-    t.member('id','fullName','username').then(function(m){
+    // Во вложенном окне (из бухгалтерии) Trello-контекста нет: личность и права
+    // приходят параметрами из родителя, иначе страница зависнет на «Загрузка…»
+    var QS = (function(){ try { return new URLSearchParams(location.search); } catch(e){ return { get:function(){return null;} }; } })();
+    var EMBED = !!QS.get('embed');
+    var mePromise = EMBED
+      ? Promise.resolve({ id: QS.get('memberId')||'', fullName: QS.get('memberName')||'', username: QS.get('memberName')||'' })
+      : t.member('id','fullName','username');
+
+    mePromise.then(function(m){
       ME.id=(m&&m.id)||''; ME.name=(m&&(m.fullName||m.username))||'';
-      return isDirector();
+      return EMBED ? Promise.resolve(QS.get('admin')==='1') : isDirector();
     }).then(function(admin){
       IS_ADMIN=admin;
       if(admin){ PRICED=true; CAN_SEE_COST=true; }

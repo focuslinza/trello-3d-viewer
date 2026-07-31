@@ -117,7 +117,9 @@
         '<div style="padding:12px 18px;border-bottom:1px solid var(--line);background:var(--bg2)">'+
         '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Счета с этой заявкой</div>'+
         '<div id="rvInvs" class="muted">Загрузка…</div></div>'+
-        '<iframe id="rvFrame" src="./repair-board-modal.html?embed=1&openRepair='+encodeURIComponent(r.id)+'&t='+Date.now()+'" style="flex:1;border:0;width:100%;background:var(--bg,#1d2125)"></iframe></div>';
+        '<iframe id="rvFrame" src="./repair-board-modal.html?embed=1&openRepair='+encodeURIComponent(r.id)+
+          '&memberId='+encodeURIComponent(ME.id||'')+'&memberName='+encodeURIComponent(ME.name||'')+'&admin='+(IS_ADMIN?'1':'0')+
+          '&t='+Date.now()+'" style="flex:1;border:0;width:100%;background:var(--bg,#1d2125)"></iframe></div>';
       document.getElementById('invOvlHost').innerHTML=h;
       var back=function(){ closeInvView(); load(); };
       document.getElementById('rvBack').onclick=back;
@@ -206,6 +208,8 @@
         }).catch(function(){ return false; });
     }
     var IS_ADMIN=false;
+    var ME={id:'',name:''}; // нужна, чтобы передать личность во вложенное окно ремонта
+    try { t.member('id','fullName','username').then(function(m){ ME.id=(m&&m.id)||''; ME.name=(m&&(m.fullName||m.username))||''; }).catch(function(){}); } catch(e){}
     function canUse(){
       return isDirector().then(function(admin){
         IS_ADMIN=admin;
@@ -633,7 +637,7 @@
           '<button id="riBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
           '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт на оплату по ремонтам</div>'+
           '<button id="riX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
-          '<iframe src="./invoice-modal.html?embed=1&mode=repair&onlyRepair=1&t='+Date.now()+'" style="flex:1;border:0;width:100%;background:var(--bg,#1d2125)"></iframe></div>';
+          '<iframe src="./invoice-modal.html?embed=1&mode=repair&onlyRepair=1&memberId='+encodeURIComponent(ME.id||'')+'&t='+Date.now()+'" style="flex:1;border:0;width:100%;background:var(--bg,#1d2125)"></iframe></div>';
         document.getElementById('invOvlHost').innerHTML=h;
         var back=function(){ closeInvView(); load(); }; // вернувшись — перечитать статусы заявок
         document.getElementById('riBack').onclick=back;
