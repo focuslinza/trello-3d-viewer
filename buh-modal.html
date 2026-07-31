@@ -118,6 +118,56 @@
       document.getElementById('invOvlClose').onclick=closeInvView;
     }
     function closeInvView(){ document.getElementById('invOvlHost').innerHTML=''; }
+
+    // окно ЗАКАЗА: клик по номеру в «Заказах» открывает сам заказ, а не счёт.
+    // Сверху — причастные счета (клик по чипу открывает существующий просмотр счёта).
+    function openOrderView(cardId){
+      var r = ROWS.filter(function(x){ return x.cardId===cardId; })[0];
+      if(!r) return;
+      var host=document.getElementById('invOvlHost');
+      var stat=function(label,on){ return '<span class="chip'+(on?' on':'')+'" style="pointer-events:none">'+(on?'✓ ':'')+label+'</span>'; };
+      var person = PERSONS[cardId] ? ' <span class="muted">('+esc(PERSONS[cardId])+')</span>' : '';
+      var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:70;display:flex;flex-direction:column">'+
+        '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
+        '<div style="width:40px"></div><div style="flex:1;text-align:center;font-weight:700;font-size:15px">Заказ №'+esc(r.number)+'</div>'+
+        '<button id="ordX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
+        '<div style="flex:1;overflow:auto;background:var(--bg,#1d2125);padding:18px 22px">'+
+        '<h3 style="margin:0 0 4px">'+esc(r.name)+'</h3>'+
+        '<div class="muted" style="margin-bottom:12px">'+esc(r.client||'без компании')+person+' · '+esc(r.date||'')+' · <b style="color:var(--txt)">'+money(r.total)+' ₸</b></div>'+
+        '<div style="margin-bottom:14px">'+stat('счёт выслан',r.invoiceSent)+' '+stat('оплачен',r.paid)+' '+stat('сдали',r.delivered)+' '+stat('акт',r.actSigned)+'</div>'+
+        '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Счета по этому заказу</div>'+
+        '<div id="ordInvs" class="muted" style="margin-bottom:16px">Загрузка…</div>'+
+        '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Состав заказа</div>'+
+        '<div id="ordItems" class="muted">Загрузка…</div>'+
+        '</div></div>';
+      host.innerHTML=h;
+      document.getElementById('ordX').onclick=closeInvView;
+      // причастные счета
+      fetch(WORKER+'/invoice-list?cardId='+encodeURIComponent(cardId)).then(function(x){return x.json();}).then(function(j){
+        var el=document.getElementById('ordInvs'); if(!el) return;
+        var rows=(j&&j.ok&&(j.rows||j.invoices))||[];
+        if(!rows.length){ el.textContent='счётов пока нет'; return; }
+        el.innerHTML=rows.map(function(iv){
+          return '<a href="#" class="ordInv" data-n="'+esc(iv.number)+'" style="display:inline-block;margin:0 8px 8px 0;padding:6px 12px;border:1px solid #579dff;border-radius:8px;color:#579dff;text-decoration:none">№'+esc(iv.number)+' · '+money(iv.total)+' ₸'+((iv.sent_at||iv.sentAt)?' · выслан':'')+'</a>';
+        }).join('');
+        [].forEach.call(el.querySelectorAll('.ordInv'), function(a2){
+          a2.onclick=function(e){ e.preventDefault(); openInvView('number='+encodeURIComponent(this.getAttribute('data-n'))); };
+        });
+      }).catch(function(){ var el=document.getElementById('ordInvs'); if(el) el.textContent='не удалось загрузить счета'; });
+      // состав из расчёта
+      fetch(WORKER+'/calc-get?cardId='+encodeURIComponent(cardId)).then(function(x){return x.json();}).then(function(j){
+        var el=document.getElementById('ordItems'); if(!el) return;
+        var row=(j&&j.ok&&j.row)||null;
+        var items=[]; try{ items=JSON.parse(row.line_items)||[]; }catch(e){}
+        if(!items.length){ el.textContent='расчёт не заполнен'; return; }
+        var rowsH=items.map(function(it){
+          var nm=(it.name||'')+(it.thickness?(' '+it.thickness+'мм'):'');
+          return '<tr><td>'+esc(nm)+'</td><td class="num">'+(it.qty!=null?esc(String(it.qty)):'')+'</td><td class="num">'+money(it.lineTotal||0)+' ₸</td></tr>';
+        }).join('');
+        el.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left">Позиция</th><th class="num">Кол-во</th><th class="num">Сумма</th></tr></thead><tbody>'+rowsH+
+          '<tr><td style="font-weight:700;padding-top:8px">Итого</td><td></td><td class="num" style="font-weight:700;padding-top:8px">'+money(r.total)+' ₸</td></tr></tbody></table>';
+      }).catch(function(){ var el=document.getElementById('ordItems'); if(el) el.textContent='не удалось загрузить состав'; });
+    }
     window.addEventListener('message', function(e){
       if(e && e.data && e.data.metalshopEmbedClose) closeInvView();
     });
@@ -279,7 +329,7 @@
         h+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
         rows.forEach(function(r){
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
-          h+='<tr'+(closed?' class="rowclosed"':'')+'><td><a href="#" class="onum" data-card="'+esc(r.cardId)+'" title="Показать счёт по этому заказу" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a></td>'+
+          h+='<tr'+(closed?' class="rowclosed"':'')+'><td><a href="#" class="onum" data-card="'+esc(r.cardId)+'" title="Открыть заказ" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a></td>'+
              '<td>'+esc(r.name)+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+'</td>'+
              '<td>'+esc(r.client)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span></td><td class="num">'+money(r.total)+' ₸</td>'+
              '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
@@ -297,7 +347,7 @@
     }
     function _bindChipsBody(){
       [].forEach.call(document.querySelectorAll('.onum'), function(el){
-        el.addEventListener('click', function(e){ e.preventDefault(); openInvView('cardId='+encodeURIComponent(this.getAttribute('data-card'))); });
+        el.addEventListener('click', function(e){ e.preventDefault(); openOrderView(this.getAttribute('data-card')); });
       });
       [].forEach.call(document.querySelectorAll('.chip'), function(c){
         c.onclick=function(){
