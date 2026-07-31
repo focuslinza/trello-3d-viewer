@@ -173,6 +173,15 @@
       ctx._diag = { http:ctx._http, ok:!!(j&&j.ok), d1ok:!!(j2&&j2.ok), companyId:ctx.cardCompanyId, companies:ctx.allCompanies.length };
       nameToId = {}; ctx.allCompanies.forEach(function(c){ if(c.name) nameToId[c.name]=c.id; });
       var want = (MODE_REPAIR && PRESELECT_COMPANY) ? PRESELECT_COMPANY : ctx.cardCompanyId;
+      // ремонт без привязки по id, но с заполненным именем компании в «Компания и контакт»:
+      // ищем её в справочнике по имени — покупатель заполнится автоматически
+      if (MODE_REPAIR && !want) {
+        var rn = String(t.arg('companyName')||'').trim().toLowerCase();
+        if (rn) {
+          var hit = ctx.allCompanies.filter(function(c){ return String(c.name||'').trim().toLowerCase()===rn; })[0];
+          if (hit) want = hit.id;
+        }
+      }
       // default selected = card's company (или клиент ремонта) if it exists in the directory
       if(want && ctx.allCompanies.some(function(c){return c.id===want;})) {
         selectedCompanyId=want;

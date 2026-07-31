@@ -547,6 +547,7 @@
           openEmbed('./invoice-modal.html?embed=1&mode=repair'+
             '&repairId='+r.id+
             '&companyId='+encodeURIComponent(r.companyId||'')+
+            '&companyName='+encodeURIComponent(r.companyName||'')+
             '&memberId='+encodeURIComponent(ME.id)+
             '&t='+Date.now());
         };
