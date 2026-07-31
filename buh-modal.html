@@ -39,6 +39,25 @@
   </style>
 </head>
 <body>
+<div id="msTopbar" style="position:fixed;top:0;left:0;right:0;z-index:80;display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff">
+  <div style="width:40px"></div>
+  <div style="flex:1;text-align:center;font-weight:700;font-size:15px">Бухгалтерия</div>
+  <button id="msTopbarX" type="button" title="Закрыть" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px;line-height:1">✕</button>
+</div>
+<script>
+(function(){
+  try {
+    var q = new URLSearchParams(location.search);
+    if (q.get('embed')) { var b=document.getElementById('msTopbar'); if(b) b.remove(); return; }
+  } catch(e){}
+  document.body.style.paddingTop = '46px';
+  document.getElementById('msTopbarX').onclick = function(){
+    try { window.TrelloPowerUp.iframe().closeModal(); }
+    catch(e){ try { parent.postMessage({ metalshopEmbedClose: 1 }, '*'); } catch(e2){} }
+  };
+})();
+</script>
+
   <div id="app"><div class="empty" id="boot">Загрузка…</div></div>
   <div id="invOvlHost"></div>
   <div class="bar"><button class="btn" id="close" type="button">Закрыть</button></div>

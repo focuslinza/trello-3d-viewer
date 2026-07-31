@@ -43,7 +43,7 @@
     .mv{background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:12px;padding:1px 7px;cursor:pointer}
     .mv:hover{border-color:var(--blue);color:#cfe1ff}
     /* оверлеи */
-    .ovl{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 12px;z-index:60;overflow:auto}
+    .ovl{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 12px;z-index:85;overflow:auto}
     .pop{background:var(--bg2);border:1px solid var(--line);border-radius:14px;max-width:720px;width:100%;padding:18px 20px 20px}
     .pop h3{margin:0 0 2px;font-size:16px}
     .pop .popbar{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
@@ -76,6 +76,25 @@
   </style>
 </head>
 <body>
+<div id="msTopbar" style="position:fixed;top:0;left:0;right:0;z-index:80;display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff">
+  <div style="width:40px"></div>
+  <div style="flex:1;text-align:center;font-weight:700;font-size:15px">Ремонт</div>
+  <button id="msTopbarX" type="button" title="Закрыть" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px;line-height:1">✕</button>
+</div>
+<script>
+(function(){
+  try {
+    var q = new URLSearchParams(location.search);
+    if (q.get('embed')) { var b=document.getElementById('msTopbar'); if(b) b.remove(); return; }
+  } catch(e){}
+  document.body.style.paddingTop = '46px';
+  document.getElementById('msTopbarX').onclick = function(){
+    try { window.TrelloPowerUp.iframe().closeModal(); }
+    catch(e){ try { parent.postMessage({ metalshopEmbedClose: 1 }, '*'); } catch(e2){} }
+  };
+})();
+</script>
+
   <div id="wrap">
     <div class="top">
       <h2>Ремонт</h2>
