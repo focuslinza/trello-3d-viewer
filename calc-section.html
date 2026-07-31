@@ -30,28 +30,25 @@
 
     function openCalc(){
       return t.modal({
-        // title убран: шапку рисует само окно (синий бар)
         url: './calc-modal.html?t=' + Date.now(),
+            title: 'Калькулятор стоимости', accentColor: '#1f6ce8',
         fullscreen: true,
-        accentColor: '#0c66e4',
         args: { cardId: CARD.id, boardId: CARD.board, cardName: CARD.name, status: CARD.status }
       });
     }
     function openEarnings(){
       return t.modal({
-        // title убран: шапку рисует само окно (синий бар)
         url: './earnings-modal.html?t=' + Date.now(),
+            title: 'Заработок по заказу', accentColor: '#1f6ce8',
         fullscreen: true,
-        accentColor: '#0c66e4',
         args: { cardId: CARD.id }
       });
     }
     function openInvoice(){
       return t.modal({
-        // title убран: шапку рисует само окно (синий бар)
         url: './invoice-modal.html?t=' + Date.now(),
+            title: 'Счёт на оплату', accentColor: '#1f6ce8',
         fullscreen: true,
-        accentColor: '#0c66e4',
         args: { cardId: CARD.id, boardId: CARD.board }
       });
     }
@@ -118,10 +115,9 @@
           sb.textContent='Счета (PDF)';
           sb.addEventListener('click', function(){
             return t.modal({
-              title: 'Счета по заказу',
+              title: 'Счета по заказу', accentColor: '#1f6ce8',
               url: './card-invoices-modal.html?t=' + Date.now(),
               fullscreen: true,
-              accentColor: '#0c66e4',
               args: { cardId: CARD.id }
             });
           });

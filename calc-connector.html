@@ -25,6 +25,7 @@
                 url: './label-modal.html?t=' + Date.now(),
                 fullscreen: true,
                 title: 'Этикетка со штрих-кодом',
+                accentColor: '#1f6ce8',
                 args: { cardId: (c && c.id) || '', boardId: (b && b.id) || '' }
               });
             });
@@ -69,8 +70,8 @@
           callback: function (t) {
             return t.modal({
               url: t.signUrl('./my-earnings-modal.html') + '?t=' + Date.now(),
+              title: 'Мой заработок', accentColor: '#1f6ce8',
               fullscreen: true,
-              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -80,8 +81,8 @@
           callback: function (t) {
             return t.modal({
               url: './crm-modal.html?t=' + Date.now(),
+            title: 'CRM — Клиенты', accentColor: '#1f6ce8',
               fullscreen: true,
-              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -91,8 +92,8 @@
           callback: function (t) {
             return t.modal({
               url: './buh-modal.html?t=' + Date.now(),
+            title: 'Бухгалтерия', accentColor: '#1f6ce8',
               fullscreen: true,
-              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -102,8 +103,8 @@
           callback: function (t) {
             return t.modal({
               url: './repair-board-modal.html?t=' + Date.now(),
+            title: 'Ремонт', accentColor: '#1f6ce8',
               fullscreen: true,
-              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -113,8 +114,8 @@
           callback: function (t) {
             return t.modal({
               url: './supply-modal.html?t=' + Date.now(),
+            title: 'Снабжение', accentColor: '#1f6ce8',
               fullscreen: true,
-              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -124,8 +125,8 @@
           callback: function (t) {
             return t.modal({
               url: './timesheet-modal.html?t=' + Date.now(),
+            title: 'Табель', accentColor: '#1f6ce8',
               fullscreen: true,
-              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };
@@ -135,8 +136,8 @@
           callback: function (t) {
             return t.modal({
               url: t.signUrl('./dashboard-modal.html') + '?t=' + Date.now(),
+              title: 'Панель руководителя', accentColor: '#1f6ce8',
               fullscreen: true,
-              // title убран: шапку рисует само окно (синий бар)
             });
           }
         };

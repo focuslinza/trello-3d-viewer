@@ -140,10 +140,9 @@
             return;
           }
           t.modal({
-            // title убран: шапку рисует само окно (синий бар)
             url: './invoice-modal.html?t=' + Date.now(),
+            title: 'Счёт на оплату', accentColor: '#1f6ce8',
             fullscreen: true,
-            accentColor: '#0c66e4',
             args: { mode: 'repair', repairId: id, companyId: r0.companyId || '' }
           });
         };
