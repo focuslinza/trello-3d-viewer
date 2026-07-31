@@ -369,11 +369,12 @@
       // ниже — две колонки: слева содержимое, справа лента
       h+='<div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">';
       h+='<div style="flex:1.5;min-width:340px">';
-      // 1. наименование  2. номер
-      h+='<h3 style="margin:0 0 4px">'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'</h3>';
-      h+='<div class="muted" style="margin-bottom:12px"><span class="num-badge">'+esc(r.number)+'</span> '+statusLabel(r.status)+' · создана '+esc((r.createdAt||'').slice(0,10))+(r.byName?(' · заявил: '+esc(r.byName)):'')+'</div>';
-      // 3. описание
-      h+='<div style="margin-bottom:14px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px">Описание</div>';
+      // 1. наименование (крупно)  2. номер + этикетка (создание/заявитель — в ленте событий)
+      h+='<h3 style="margin:0 0 10px;font-size:26px;line-height:1.25">'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'</h3>';
+      h+='<div style="margin-bottom:14px;display:flex;align-items:center;gap:12px"><span class="num-badge" style="font-size:14px">'+esc(r.number)+'</span>'+
+         '<button class="btn" id="labelBtn" type="button" title="Этикетка с номером и QR — распечатать и наклеить на изделие">▦ QR / печать</button></div>';
+      // 3. описание — в таком же затемнённом боксе, как остальные разделы
+      h+='<div class="sec"><div class="sh">Описание</div>';
       var descText = r.description || r.note || '';
       h+='<div id="descView" style="white-space:pre-wrap;cursor:pointer;min-height:20px;padding:6px 8px;border:1px dashed var(--line);border-radius:8px;margin-top:4px">'+(descText?esc(descText):'<span class="muted">Добавить более подробное описание…</span>')+'</div>';
       h+='<div id="descEdit" style="display:none;margin-top:4px"><textarea id="descTa" rows="4" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>';
@@ -420,7 +421,7 @@
       // 6. вложения — низ левой колонки
       h+='<div class="sec"><div class="sh">Вложения</div>';
       h+='<div class="thumbs" id="thumbs"></div>';
-      h+='<div style="margin-top:8px"><label class="btn" style="cursor:pointer">➕ фото / PDF<input type="file" id="attachInp" accept="image/*,application/pdf" style="display:none"></label></div></div>';
+      h+='<div style="margin-top:12px;margin-bottom:6px"><label class="btn" style="cursor:pointer">➕ фото / PDF<input type="file" id="attachInp" accept="image/*,application/pdf" style="display:none"></label></div></div>';
       h+='</div>'; // конец левой колонки
       // правая колонка: лента «Комментарии и события» (начинается под обложкой)
       h+='<div style="flex:1;min-width:300px">';
@@ -499,6 +500,23 @@
       // «Посчитать» доступно всем допущенным (работник/инженер); сохранение расчёта
       // автоматически делает заявку «сделанной» (статусами дальше управляет бухгалтер)
       document.getElementById('calcBtn').onclick=function(){ openCalcEmbed(r); };
+      // этикетка: номер + название + QR (печать из новой вкладки)
+      (function(){
+        var lb=document.getElementById('labelBtn'); if(!lb) return;
+        lb.onclick=function(){
+          var qr='https://api.qrserver.com/v1/create-qr-code/?size=180x180&data='+encodeURIComponent(r.number+' '+r.title);
+          var html='<html><head><meta charset="utf-8"><title>'+esc(r.number)+'</title></head>'+
+            '<body style="font-family:Arial;margin:24px;text-align:center">'+
+            '<div style="font-size:44px;font-weight:800;letter-spacing:1px">'+esc(r.number)+'</div>'+
+            '<div style="font-size:17px;margin:8px 0 14px">'+esc(r.title)+'</div>'+
+            '<img src="'+qr+'" style="width:180px;height:180px">'+
+            '<script>window.onload=function(){ setTimeout(function(){ window.print(); }, 400); }<'+'/script>'+
+            '</body></html>';
+          var w=window.open('about:blank','_blank');
+          if(w){ w.document.write(html); w.document.close(); }
+          else alert('Браузер заблокировал окно печати — разрешите всплывающие окна.');
+        };
+      })();
       // «Кто сделал» — работники с правом «Ремонт»
       loadRepairWorkers().then(function(list){
         var sel=document.getElementById('perfSel'), sel2=document.getElementById('perfSel2'), addL=document.getElementById('perfAdd');
@@ -585,6 +603,11 @@
       fetch(WORKER+'/repair-events?repairId='+id).then(function(r){return r.json();}).then(function(j){
         var el=document.getElementById('feed'); if(!el) return;
         var ev=(j&&j.ok&&j.events)||[];
+        // событие создания — всегда в самом низу ленты (для старых заявок, где лог
+        // не вёлся, дорисовываем из данных заявки: дата/время + кто заявил)
+        if(!ev.some(function(e){ return e.kind==='event' && String(e.text||'').indexOf('создал')>=0; }) && CUR){
+          ev = ev.concat([{ kind:'event', text:'заявка создана', byName:CUR.byName||'', at:String(CUR.createdAt||'') }]);
+        }
         if(!ev.length){ el.innerHTML='<span class="muted">Пока пусто — напишите первый комментарий.</span>'; return; }
         el.innerHTML=ev.map(function(e){
           var when=(e.at||'').slice(0,16).replace('T',' ');
