@@ -121,6 +121,7 @@
   }
   var selectedCompanyId = null;
   var ALL_ORDERS = [];   // every saved calc: {cardId, name, number, total, company_id, qty, checked}
+  var BILLED = {};       // 'cardId' | 'R<repairId>' -> ['№173', ...] — заказ уже включался в счета
   var supplierKey = 'ip';
   // налог добавляется В СЧЁТЕ по выбранной компании (в расчёте заказа налога больше нет):
   // наличные 0% · ИП FIRDAUS (упрощёнка) 3% · ИП MetalShop и ТОО TTMS 16%
@@ -217,7 +218,17 @@
                  _rTitle:r.title, _rCat:r.category||'', _rObj:r.objectName||'' };
       });
     }).catch(function(){ return []; });
-    return Promise.all([pOrders, pRepairs]).then(function(res){ ALL_ORDERS = res[0].concat(res[1]); });
+    // какие заказы/заявки уже включались в счета — для явной пометки при выборе
+    var pBilled = fetch(WORKER+'/invoice-list').then(function(r){return r.json();}).then(function(j){
+      var map = {};
+      (((j&&j.rows)||[])).forEach(function(iv){
+        var mark = String(iv.number||'');
+        try { (JSON.parse(iv.card_ids_json)||[]).forEach(function(cid){ (map[cid]=map[cid]||[]).push(mark); }); } catch(e){}
+        try { (JSON.parse(iv.repair_ids_json)||[]).forEach(function(rid){ var k='R'+rid; (map[k]=map[k]||[]).push(mark); }); } catch(e){}
+      });
+      BILLED = map;
+    }).catch(function(){ BILLED = {}; });
+    return Promise.all([pOrders, pRepairs, pBilled]).then(function(res){ ALL_ORDERS = res[0].concat(res[1]); });
   }
 
   // Имя заказчика-человека (контакт, отмеченный на карточке в «Компания и контакты»):
@@ -358,7 +369,8 @@
         html+='<tr>'+
           '<td><input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'></td>'+
           '<td class="small">'+numCell+'</td>'+
-          '<td>'+esc(o.name)+(o.isRepair?' <span class="pill">ремонт</span>':'')+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+'</td>'+
+          '<td>'+esc(o.name)+(o.isRepair?' <span class="pill">ремонт</span>':'')+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+
+            (BILLED[o.cardId]&&BILLED[o.cardId].length?' <span style="background:#4a3413;color:#e8c07d;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700" title="Этот заказ уже включался в счёт — проверьте, чтобы не выставить дважды">⚠ уже в счёте №'+esc(BILLED[o.cardId].join(', №'))+'</span>':'')+'</td>'+
           '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'"></td>'+
           (o.isRepair ? '<td></td>' :
             '<td><select class="invSel" data-id="'+esc(o.cardId)+'" title="Степень изобретения назначает руководство: начисляется клиенту поверх работ, инженер получает свою долю от неё">'+

@@ -159,6 +159,7 @@
       if(e && e.data && e.data.metalshopEmbedClose) closeInvView();
     });
     var INV_ROWS=[], INV_TOTALS={}, INV_SHARE=0.5;
+    var INV_KIND='all'; // all | prod | repair — раздел счетов: все / изготовление / по ремонту
     var REP_ROWS=[], REP_TOTALS={};
     var PAY=null, PAY_OPEN={};
     var INV_EDIT=null; // id счёта в режиме правки
@@ -318,8 +319,8 @@
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
           h+='<tr'+(closed?' class="rowclosed"':'')+'><td style="white-space:nowrap"><a href="https://trello.com/c/'+esc(r.cardId)+'" target="_blank" rel="noopener" title="Открыть карточку Trello в новой вкладке" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a> '+
              '<a href="#" class="oinfo" data-card="'+esc(r.cardId)+'" title="Счета по заказу, состав, статусы" style="color:var(--muted);text-decoration:none;font-size:12px">ⓘ</a></td>'+
-             '<td>'+esc(r.name)+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+'</td>'+
-             '<td>'+esc(r.client)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span></td><td class="num">'+money(r.total)+' ₸</td>'+
+             '<td>'+esc(r.name)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span>'+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+'</td>'+
+             '<td>'+esc(r.client)+'</td><td class="num">'+money(r.total)+' ₸</td>'+
              '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
              '<td>'+chip(r,'paid','оплачен')+'</td>'+
              '<td>'+chip(r,'delivered','сдали')+'</td>'+
@@ -537,8 +538,14 @@
       h+='<div class="kpi green"><div class="k">Оплачено</div><div class="v">'+(T.full||0)+'</div></div>';
       h+='</div>';
       h+='<div class="muted" style="margin:-6px 0 10px">Поступления подтягиваются из выписки БЦК автоматически. Порог запуска в производство: '+Math.round((INV_SHARE||0.5)*100)+'% суммы счёта. Статусы счетов не зависят от галочек по заказам.</div>';
+      h+='<div style="display:flex;gap:8px;margin-bottom:10px">'+
+         '<div class="tab'+(INV_KIND==='all'?' active':'')+'" data-ik="all">Все счета</div>'+
+         '<div class="tab'+(INV_KIND==='prod'?' active':'')+'" data-ik="prod">Изготовление</div>'+
+         '<div class="tab'+(INV_KIND==='repair'?' active':'')+'" data-ik="repair">По ремонту</div></div>';
       var f=FILTER.toLowerCase();
       var rows=(INV_ROWS||[]).filter(function(r){
+        if(INV_KIND==='repair' && !(+r.repairs>0)) return false;
+        if(INV_KIND==='prod' && (+r.repairs>0)) return false;
         if(!f) return true;
         return (String(r.number)+' '+(r.buyer||'')).toLowerCase().indexOf(f)>=0;
       });
@@ -565,7 +572,7 @@
         h+='<tr><td><a href="#" class="invnum" data-num="'+esc(r.number)+'" title="Показать счёт" style="color:#579dff;text-decoration:none"><b>№'+esc(r.number)+'</b></a>'+
            (r.sentAt?('<div style="font-size:10.5px;color:var(--green);white-space:nowrap" title="Счёт отправлен клиенту'+(r.sentTo?(' на '+esc(r.sentTo)):'')+'">📤 выслан '+esc((r.sentAt||'').slice(0,10))+'</div>'):
                      ('<div style="font-size:10.5px;color:var(--muted)">не выслан</div>'))+
-           '</td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+'</td>'+
+           '</td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+((+r.repairs>0)?' <span class="pill" style="background:#2b1f45;color:#c9a8ff">ремонт'+(r.repairs>1?(' ×'+r.repairs):'')+'</span>':'')+'</td>'+
            '<td class="num">'+(r.cards||0)+(r.repairs?' <span style="color:#c9a8ff" title="ремонтных заявок в счёте">+'+r.repairs+'Р</span>':'')+'</td>'+
            '<td class="num">'+money(r.total)+' ₸</td>'+
            '<td class="num">'+money(r.received)+' ₸</td>'+
@@ -582,6 +589,7 @@
 
     function bindCommon(){
       [].forEach.call(document.querySelectorAll('[data-view]'), function(el){ el.onclick=function(){ var v=this.getAttribute('data-view'); if(v!==VIEW){ VIEW=v; load(); } }; });
+      [].forEach.call(document.querySelectorAll('[data-ik]'), function(el){ el.onclick=function(){ INV_KIND=this.getAttribute('data-ik'); render(); bindCommon(); }; });
       [].forEach.call(document.querySelectorAll('[data-preset]'), function(el){ el.onclick=function(){ applyPreset(this.getAttribute('data-preset')); }; });
       var ap=document.getElementById('applyR');
       if(ap) ap.onclick=function(){
