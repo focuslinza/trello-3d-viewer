@@ -596,15 +596,15 @@
     var ov=document.createElement('div');
     ov.id='finOverlay';
     ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column';
-    ov.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #3a414a">'+
-      '<button class="btn" id="finBack" type="button">← Назад к панели</button>'+
-      '<div style="font-weight:700">₸ Финансы: чистая прибыль</div></div>'+
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
+      '<button id="finBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">₸ Финансы: чистая прибыль</div>'+
+      '<button id="finX" type="button" title="Закрыть" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px;line-height:1">✕</button></div>'+
       '<iframe src="'+WORKER+'/profit?from='+r.from+'&to='+r.to+'" style="flex:1;border:0;width:100%"></iframe>';
     document.body.appendChild(ov);
-    document.getElementById('finBack').onclick=function(){
-      ov.remove();
-      load(); // вернувшись, пересчитать плитки — настройки финансов могли измениться
-    };
+    var finClose=function(){ ov.remove(); load(); }; // вернувшись, пересчитать плитки
+    document.getElementById('finBack').onclick=finClose;
+    document.getElementById('finX').onclick=finClose;
   };
   document.getElementById('pricingBtn').onclick=function(){
     tab='pricing'; render();
