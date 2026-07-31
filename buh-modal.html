@@ -104,6 +104,37 @@
     }
     function closeInvView(){ document.getElementById('invOvlHost').innerHTML=''; }
 
+    // окно ЗАЯВКИ РЕМОНТА: сверху — счета, в которые она включена, ниже — сама
+    // карточка заявки (встроенная доска ремонта, открытая на этой заявке)
+    function openRepairView(rid){
+      var r = (REP_ROWS||[]).filter(function(x){ return String(x.id)===String(rid); })[0];
+      if(!r) return;
+      var h='<div style="position:fixed;inset:0;background:var(--bg,#1d2125);z-index:86;display:flex;flex-direction:column">'+
+        '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
+        '<button id="rvBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
+        '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Заявка '+esc(r.number)+'</div>'+
+        '<button id="rvX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
+        '<div style="padding:12px 18px;border-bottom:1px solid var(--line);background:var(--bg2)">'+
+        '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Счета с этой заявкой</div>'+
+        '<div id="rvInvs" class="muted">Загрузка…</div></div>'+
+        '<iframe id="rvFrame" src="./repair-board-modal.html?embed=1&openRepair='+encodeURIComponent(r.id)+'&t='+Date.now()+'" style="flex:1;border:0;width:100%;background:var(--bg,#1d2125)"></iframe></div>';
+      document.getElementById('invOvlHost').innerHTML=h;
+      var back=function(){ closeInvView(); load(); };
+      document.getElementById('rvBack').onclick=back;
+      document.getElementById('rvX').onclick=back;
+      fetch(WORKER+'/invoice-list?repairId='+encodeURIComponent(r.id)).then(function(x){return x.json();}).then(function(j){
+        var el=document.getElementById('rvInvs'); if(!el) return;
+        var rows=(j&&j.ok&&(j.rows||j.invoices))||[];
+        if(!rows.length){ el.textContent='эта заявка ещё не включена ни в один счёт'; return; }
+        el.innerHTML=rows.map(function(iv){
+          return '<a href="#" class="rvInv" data-n="'+esc(iv.number)+'" style="display:inline-block;margin:0 8px 6px 0;padding:5px 11px;border:1px solid #579dff;border-radius:8px;color:#579dff;text-decoration:none">№'+esc(iv.number)+' · '+money(iv.total)+' ₸'+((iv.sent_at||iv.sentAt)?' · выслан':'')+'</a>';
+        }).join('');
+        [].forEach.call(el.querySelectorAll('.rvInv'), function(a2){
+          a2.onclick=function(e){ e.preventDefault(); openInvView('number='+encodeURIComponent(this.getAttribute('data-n'))); };
+        });
+      }).catch(function(){ var el=document.getElementById('rvInvs'); if(el) el.textContent='не удалось загрузить счета'; });
+    }
+
     // окно ЗАКАЗА: клик по номеру в «Заказах» открывает сам заказ, а не счёт.
     // Сверху — причастные счета (клик по чипу открывает существующий просмотр счёта).
     function openOrderView(cardId){
@@ -465,7 +496,9 @@
       h+='<div class="kpi red"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
       h+='<div class="kpi amber"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
       h+='</div>';
-      h+='<div class="muted" style="margin:-6px 0 10px">Заявки на ремонт с их статусами — вместо колонки «Внесен в гугл» на доске «Ремонт». Цену клиенту задаёт руководитель в разделе «Ремонт» панели руководителя.</div>';
+      h+='<div style="display:flex;align-items:center;gap:10px;margin:-6px 0 10px;flex-wrap:wrap">'+
+         '<button class="btn" id="repInvBtn" type="button" style="background:#1f6ce8;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:600">🧾 Счёт на оплату по ремонтам</button>'+
+         '<span class="muted">Выберите клиента и отметьте несколько заявок — они уйдут в один счёт. Заявки, уже включённые в счета, помечены предупреждением.</span></div>';
       var f=FILTER.toLowerCase();
       var rows=(REP_ROWS||[]).filter(function(r){
         if(ONLY_OPEN && r.invoiceSent && r.paid && r.delivered && r.actSigned) return false;
@@ -483,7 +516,7 @@
           +(r.status==='new'?' <span style="font-size:11px;color:var(--amber)" title="Работа ещё не отмечена выполненной">· в работе</span>':'')
           +(r.status==='sent'?' <span style="font-size:11px;color:#8ab4ff" title="Изделие отправлено/возвращено клиенту">· отправлен</span>':'')
           +(r.status==='rejected'?' <span style="font-size:11px;color:var(--red)">· отклонена</span>':'');
-        h+='<tr'+(closed?' class="rowclosed"':'')+'><td>'+esc(r.number)+'</td>'+
+        h+='<tr'+(closed?' class="rowclosed"':'')+'><td><a href="#" class="rnum" data-rid="'+esc(String(r.id))+'" title="Открыть карточку заявки" style="color:#c9a8ff;text-decoration:none;font-weight:700">'+esc(r.number)+'</a></td>'+
            '<td>'+titleCell+'</td>'+
            '<td>'+esc(r.client)+'</td>'+
            '<td class="num">'+(r.priced?money(r.total)+' ₸':'<span class="muted" title="Цена клиенту ещё не задана в разделе «Ремонт» панели руководителя">—</span>')+'</td>'+
@@ -590,6 +623,22 @@
     function bindCommon(){
       [].forEach.call(document.querySelectorAll('[data-view]'), function(el){ el.onclick=function(){ var v=this.getAttribute('data-view'); if(v!==VIEW){ VIEW=v; load(); } }; });
       [].forEach.call(document.querySelectorAll('[data-ik]'), function(el){ el.onclick=function(){ INV_KIND=this.getAttribute('data-ik'); render(); bindCommon(); }; });
+      [].forEach.call(document.querySelectorAll('.rnum'), function(el){
+        el.onclick=function(e){ e.preventDefault(); openRepairView(this.getAttribute('data-rid')); };
+      });
+      var rib=document.getElementById('repInvBtn');
+      if(rib) rib.onclick=function(){
+        var h='<div style="position:fixed;inset:0;background:var(--bg,#1d2125);z-index:86;display:flex;flex-direction:column">'+
+          '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
+          '<button id="riBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
+          '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт на оплату по ремонтам</div>'+
+          '<button id="riX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
+          '<iframe src="./invoice-modal.html?embed=1&mode=repair&onlyRepair=1&t='+Date.now()+'" style="flex:1;border:0;width:100%;background:var(--bg,#1d2125)"></iframe></div>';
+        document.getElementById('invOvlHost').innerHTML=h;
+        var back=function(){ closeInvView(); load(); }; // вернувшись — перечитать статусы заявок
+        document.getElementById('riBack').onclick=back;
+        document.getElementById('riX').onclick=back;
+      };
       [].forEach.call(document.querySelectorAll('[data-preset]'), function(el){ el.onclick=function(){ applyPreset(this.getAttribute('data-preset')); }; });
       var ap=document.getElementById('applyR');
       if(ap) ap.onclick=function(){

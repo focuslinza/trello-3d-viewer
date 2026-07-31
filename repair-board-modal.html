@@ -115,12 +115,16 @@
     }
 
     // ---------- загрузка ----------
+    // ?openRepair=<id> — открыть карточку заявки сразу (заход из бухгалтерии)
+    var AUTO_OPEN = (function(){ try { return new URLSearchParams(location.search).get('openRepair')||''; } catch(e){ return ''; } })();
     function loadAll(){
       var u = PRICED ? '/repair-list?full=1' : '/repair-list';
       return fetch(WORKER+u).then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
         ROWS=(j.requests||[]).filter(function(r){ return r.status!=='rejected'; });
         renderBoard();
+        // заход из бухгалтерии по номеру заявки — сразу открыть её карточку
+        if(AUTO_OPEN){ var _id=AUTO_OPEN; AUTO_OPEN=''; if(ROWS.some(function(x){ return String(x.id)===String(_id); })) openCard(_id); }
         // миниатюры: одним батч-запросом id первого фото каждой заявки
         var ids=ROWS.map(function(r){return r.id;});
         if(ids.length){
