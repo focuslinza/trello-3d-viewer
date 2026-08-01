@@ -89,7 +89,7 @@
       name:'Товарищество с ограниченной ответственностью "TTMS"', bin:'230940037731',
       addr:'Республика Казахстан, г. Астана, ул. Конаева 14',
       bank:'АО "Банк ЦентрКредит"', iban:'KZ318562203133118240', bik:'KCJBKZKX', kbe:'17', paycode:'859',
-      executor:'Жанбосинов А.Ж.' }, // seal:'ttms' — вернуть, когда будет скан настоящей печати
+      executor:'Жанбосинов А.Ж.', seal:'ttms' }, // печать ТОО «TTMS» ставится автоматически на счёт
     firdaus:{ key:'firdaus', label:'ИП «FIRDAUS»',
       name:'Индивидуальный предприниматель "FIRDAUS"', bin:'590502401351',
       addr:'Республика Казахстан, г. Астана, улица Ахмет Байтұрсынұлы, дом 23/2, кв/офис 145',
@@ -140,6 +140,7 @@
   // клиент и заявка могут быть предвыбраны аргументами
   var MODE_REPAIR = (t.arg('mode')==='repair');
   var PRESELECT_REPAIR = +t.arg('repairId')||null;
+  var ONLY_REPAIR = String(t.arg('onlyRepair')||'')==='1'; // счёт по ремонтам из бухгалтерии: производство не показываем
   var PRESELECT_COMPANY = t.arg('companyId')||null;
   var nameToId = {};
 
@@ -285,7 +286,10 @@
     if(o.isRepair && !o.company_id && o.company_name){ return nameToId[o.company_name]===selectedCompanyId; }
     return false;
   }
-  function clientOrders(){ return ALL_ORDERS.filter(function(o){ return belongsToSelected(o) && !o.paid && !o.hidden; }); }
+  function clientOrders(){
+    // режим «только ремонты» (счёт из бухгалтерии) — производство не показываем
+    return ALL_ORDERS.filter(function(o){ return (!ONLY_REPAIR || o.isRepair) && belongsToSelected(o) && !o.paid && !o.hidden; });
+  }
   function clientPaid(){ return ALL_ORDERS.filter(function(o){ return belongsToSelected(o) && o.paid && !o.hidden; }); }
   function orphanOrders(){ return ALL_ORDERS.filter(function(o){
     if(o.paid || o.hidden) return false;
