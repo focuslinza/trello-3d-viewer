@@ -148,15 +148,11 @@
            (c.l?' · <span style="color:#e8c07d">'+c.l+' оп ('+lateMin+'м)</span>':'')+
            (c.e?' · <span style="color:#e8e07d">'+c.e+' уш</span>':'')+
            (c.t?' · '+c.t+' от':'')+
-           ' · <a href="#" class="dossier" data-w="'+esc(w.id)+'" data-n="'+esc(w.name)+'" style="color:#579dff;text-decoration:none">досье</a></td></tr>';
+           '</td></tr>';
       });
       h+='</tbody></table></div>';
       app.innerHTML=h;
       bindNav();
-      // «досье» доступно всем, кто видит табель
-      [].forEach.call(document.querySelectorAll('a.dossier'), function(a2){
-        a2.onclick=function(e){ e.preventDefault(); openDossier(this.getAttribute('data-w'), this.getAttribute('data-n')); };
-      });
       if(CAN_EDIT){
         [].forEach.call(document.querySelectorAll('td.cell'), function(td){
           td.onclick=function(e){ e.stopPropagation(); openPicker(this); };
