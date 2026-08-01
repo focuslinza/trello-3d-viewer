@@ -52,7 +52,18 @@
 <script>
   var t = window.TrelloPowerUp.iframe();
   var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
-  var DATA = null, TAB = 'current', ME_NAME = '';
+  var DATA = null, TAB = 'current', ME_NAME = '', ME_ID = '', IS_ADMIN = false;
+
+  function isDirector(){
+    return Promise.all([ t.member('id'), t.board('memberships'), t.organization('memberships').catch(function(){return null;}) ])
+      .then(function(res){
+        var me = res[0]||{}, b = res[1]||{}, o = res[2];
+        var admin = ((b.memberships||[]).filter(function(x){ return x.idMember===me.id && x.memberType==='admin'; }).length>0);
+        if(!admin && o){ admin = ((o.memberships||[]).filter(function(x){ return x.idMember===me.id && x.memberType==='admin'; }).length>0); }
+        return admin;
+      }).catch(function(){ return false; });
+  }
+  function q(extra){ return 'memberId='+encodeURIComponent(ME_ID)+'&admin='+(IS_ADMIN?'1':'0')+(extra?('&'+extra):''); }
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function money(n){ return (Math.round(+n||0)).toLocaleString('ru-RU'); }
@@ -63,10 +74,14 @@
   };
 
   function load(){
-    fetch(WORKER+'/hr-list').then(function(r){return r.json();}).then(function(j){
+    fetch(WORKER+'/hr-list?'+q()).then(function(r){return r.json();}).then(function(j){
       if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
       DATA = j; render();
-    }).catch(function(e){ document.getElementById('app').innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+    }).catch(function(e){
+      document.getElementById('app').innerHTML='<h2>HR кабинет</h2><div class="sec"><b>Доступ ограничен</b>'+
+        '<div class="muted" style="margin-top:6px">'+esc(e&&e.message||e)+'</div>'+
+        '<div class="muted" style="margin-top:6px">Право «HR кабинет» выдаёт директор в разделе «Зарплата / Работники».</div></div>';
+    });
   }
 
   function render(){
@@ -103,7 +118,7 @@
   // ---------- личное дело ----------
   function openProfile(wid){
     document.getElementById('app').innerHTML = '<div class="muted">Загрузка личного дела…</div>';
-    fetch(WORKER+'/hr-profile?workerId='+encodeURIComponent(wid)).then(function(r){return r.json();}).then(function(j){
+    fetch(WORKER+'/hr-profile?'+q('workerId='+encodeURIComponent(wid))).then(function(r){return r.json();}).then(function(j){
       if(!j||!j.ok) throw new Error((j&&j.error)||'ошибка');
       drawProfile(j);
     }).catch(function(e){ document.getElementById('app').innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
@@ -221,7 +236,7 @@
       };
       var msg = document.getElementById('saveMsg'); msg.textContent = 'Сохраняю…';
       fetch(WORKER+'/hr-profile-save',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({workerId:w.id, profile:prof, rehire: !prof.firedAt})})
+        body:JSON.stringify({workerId:w.id, profile:prof, rehire: !prof.firedAt, memberId:ME_ID, admin:IS_ADMIN})})
         .then(function(r){return r.json();})
         .then(function(res){
           if(!res||!res.ok) throw new Error((res&&res.error)||'не сохранено');
@@ -246,8 +261,11 @@
   function fld(label,id,value,type){ return '<div class="fld"><label>'+esc(label)+'</label><input id="'+id+'" type="'+(type||'text')+'" value="'+esc(value||'')+'"></div>'; }
   function val(id){ var el=document.getElementById(id); return el?el.value.trim():''; }
 
-  t.member('id','fullName','username').then(function(m){ ME_NAME=(m&&(m.fullName||m.username))||''; }).catch(function(){});
-  load();
+  t.member('id','fullName','username').then(function(m){
+    ME_ID=(m&&m.id)||''; ME_NAME=(m&&(m.fullName||m.username))||'';
+    return isDirector();
+  }).then(function(admin){ IS_ADMIN=admin; load(); })
+   .catch(function(){ load(); });
 </script>
 </body>
 </html>

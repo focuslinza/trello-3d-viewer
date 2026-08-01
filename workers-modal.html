@@ -179,6 +179,7 @@
     }
     var PERMS = [
       {cls:'cantabel',  fld:'can_timesheet', label:'Табель',              hint:'заполняет посещаемость'},
+      {cls:'canhr',     fld:'can_hr',        label:'HR кабинет',          hint:'личные дела сотрудников; собственное дело недоступно'},
       {cls:'candash',   fld:'can_dashboard', label:'Панель руководителя', hint:'выручка, прибыль, этапы, заработки, оплаты'},
       {cls:'cansup',    fld:'can_supply',    label:'Снабжение',           hint:'заявки, инструмент, наличные'},
       {cls:'canissue',  fld:'can_issue_invoice', label:'Выставлять счета', hint:'кнопка «Выставить счёт» на карточке заказа'},
@@ -376,6 +377,7 @@
       var canCrm=tr.querySelector('.cancrm')?tr.querySelector('.cancrm').checked:false;
       var canSeeCost=tr.querySelector('.cancost')?tr.querySelector('.cancost').checked:false;
       var canTimesheet=tr.querySelector('.cantabel')?tr.querySelector('.cantabel').checked:false;
+      var canHr=tr.querySelector('.canhr')?tr.querySelector('.canhr').checked:false;
       var canDashboard=tr.querySelector('.candash')?tr.querySelector('.candash').checked:false;
       var canRepair=stages.indexOf('repair')>=0; // право = этап «Ремонт» (раздел открыт всем)
       var hideStats=tr.querySelector('.hidestats')?tr.querySelector('.hidestats').checked:false;
@@ -393,7 +395,7 @@
       setMsg('Сохранение…');
       return fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){

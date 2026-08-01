@@ -60,7 +60,7 @@
         '.clip{position:absolute;top:1px;right:2px;font-size:9px;opacity:.85}td.cell{position:relative}';
       document.head.appendChild(st); })();
     var YM=new Date().toISOString().slice(0,7);
-    var DATA=null, CAN_EDIT=false, ME_NAME='';
+    var DATA=null, CAN_EDIT=false, ME_NAME='', CAN_HR=false;
 
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function ymTitle(ym){
@@ -84,13 +84,13 @@
       return Promise.all([ isDirector(), t.member('id','fullName') ]).then(function(res){
         var admin=res[0], me=res[1]||{};
         ME_NAME = me.fullName || '';
-        if(admin) return { view:true, edit:true };
+        if(admin) return { view:true, edit:true, hr:true };
         return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||''))
           .then(function(r){return r.json();})
           .then(function(j){
             var ts=!!(j&&j.canTimesheet), inv=!!(j&&j.canInvoice);
-            return { view: ts||inv, edit: ts };
-          }).catch(function(){ return { view:false, edit:false }; });
+            return { view: ts||inv, edit: ts, hr: !!(j&&j.canHr) };
+          }).catch(function(){ return { view:false, edit:false, hr:false }; });
       });
     }
 
@@ -111,7 +111,7 @@
       var today=new Date().toISOString().slice(0,10);
       var h='<h2>Табель <span class="muted" style="font-weight:400">· '+(CAN_EDIT?'клик по клетке меняет статус':'просмотр')+'</span></h2>';
       h+='<div class="nav"><button class="btn" id="prevM" type="button">←</button><b>'+ymTitle(YM)+'</b><button class="btn" id="nextM" type="button">→</button>'+
-         '<button class="btn" id="hrBtn" type="button" style="margin-left:auto;background:#2b4a7d;border-color:#4f7cff;color:#fff;font-weight:600" title="Личные дела сотрудников: данные, документы, статистика">👤 HR кабинет</button></div>';
+         (CAN_HR?'<button class="btn" id="hrBtn" type="button" style="margin-left:auto;background:#2b4a7d;border-color:#4f7cff;color:#fff;font-weight:600" title="Личные дела сотрудников: данные, документы, статистика">👤 HR кабинет</button>':'')+'</div>';
       h+='<div class="legend">'+
          '<span><span class="sw" style="background:#1c3329"></span>Я — явка</span>'+
          '<span><span class="sw" style="background:#3a2226"></span>Н — не явился</span>'+
@@ -299,7 +299,7 @@
         document.getElementById('boot').textContent='Табель доступен руководителю, бухгалтеру и начальнику цеха (право «табель» включается в «Зарплата / Работники»).';
         return;
       }
-      CAN_EDIT=a.edit;
+      CAN_EDIT=a.edit; CAN_HR=!!a.hr;
       load();
     }).catch(function(e){
       document.getElementById('boot').textContent='Ошибка: '+(e&&e.message||e);
