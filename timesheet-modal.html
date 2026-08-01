@@ -175,6 +175,8 @@
         ['l','Оп — опоздание'], ['e','Уш — отпросился / ушёл раньше'],
         ['b','Б — больничный'], ['o','О — отпуск'], ['t','От — отгул'], ['n','Н — не явился']
       ];
+      // у заполненной клетки первым пунктом — правка причины/времени/скана
+      if (cur && NEEDS_DETAIL[cur]) items.unshift(['@edit','✎ изменить причину / время / скан']);
       var h = '<div id="stPick" style="position:fixed;z-index:99;background:var(--bg2);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.6);padding:4px;min-width:210px">'+
         items.map(function(it){
           var sel = (it[0]===cur);
@@ -195,6 +197,7 @@
           ev.stopPropagation();
           var v=this.getAttribute('data-v');
           closePicker();
+          if(v==='@edit') return openDetail(el, cur);   // правка существующей записи
           // опоздание/уход/прогул/больничный/отгул — окно с причиной, минутами и сканом
           if(NEEDS_DETAIL[v]) return openDetail(el, v);
           saveCell(el, v, null, '');
@@ -224,14 +227,21 @@
     function openDetail(el, st){
       var wId=el.getAttribute('data-w'), date=el.getAttribute('data-d');
       var needMin = (st==='l'||st==='e');
+      // если запись уже есть — открываем её значения на правку, а не пустую форму
+      var prev = ((DATA.records||{})[wId]||{})[date] || {};
+      var isEdit = (prev.s === st);
+      var prevMin = isEdit ? (+prev.min||0) : 0;
+      var prevNote = isEdit ? (prev.note||'') : '';
+      var oldDocs = (DATA.docs && DATA.docs[wId+'|'+date]) ? DATA.docs[wId+'|'+date] : 0;
       var h='<div id="attOvl" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:95;display:flex;align-items:center;justify-content:center;padding:16px">'+
         '<div style="background:var(--bg2,#22272b);border:1px solid var(--line,#3a414a);border-radius:12px;max-width:460px;width:100%;padding:16px">'+
-        '<div style="font-weight:700;margin-bottom:4px">'+esc(SNAME[st]||'')+' · '+esc(date)+'</div>'+
+        '<div style="font-weight:700;margin-bottom:4px">'+(isEdit?'Изменить запись: ':'')+esc(SNAME[st]||'')+' · '+esc(date)+'</div>'+
         '<div class="muted" style="font-size:12px;margin-bottom:12px">Причина попадёт в досье сотрудника. Скан объяснительной или больничного можно приложить здесь же.</div>'+
         (needMin?'<label style="display:block;font-size:12px;margin-bottom:4px">'+(st==='l'?'На сколько минут опоздал':'На сколько минут раньше ушёл')+'</label>'+
-          '<input id="attMin" type="number" min="0" step="5" value="'+(st==='l'?30:60)+'" style="width:110px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px;margin-bottom:10px">':'')+
+          '<input id="attMin" type="number" min="0" step="5" value="'+(prevMin||(st==='l'?30:60))+'" style="width:110px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px;margin-bottom:10px">':'')+
         '<label style="display:block;font-size:12px;margin-bottom:4px">Причина / комментарий</label>'+
-        '<input id="attNote" type="text" placeholder="напр.: к врачу, семейные обстоятельства, больничный №442" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:10px">'+
+        '<input id="attNote" type="text" value="'+esc(prevNote)+'" placeholder="напр.: к врачу, семейные обстоятельства, больничный №442" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:10px">'+
+        (oldDocs?'<div class="muted" style="font-size:12px;margin-bottom:8px">📎 уже приложено документов: '+oldDocs+' (новый файл добавится к ним)</div>':'')+
         '<label class="btn" style="cursor:pointer;display:inline-block;margin-bottom:12px">📎 Прикрепить скан<input type="file" id="attFile" accept="image/*,application/pdf" style="display:none"></label>'+
         '<span id="attFileName" class="muted" style="font-size:12px;margin-left:8px"></span>'+
         '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="attCancel" type="button">Отмена</button>'+
