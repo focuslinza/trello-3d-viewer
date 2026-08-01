@@ -50,8 +50,15 @@
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     document.getElementById('close').onclick=function(){ t.closeModal(); };
 
-    var STATUSES=['','p','n','b','o','v'];                // цикл по клику
-    var LABEL={p:'Я',n:'Н',b:'Б',o:'О',v:'В'};            // Я=явка Н=неявка Б=больничный О=отпуск В=выходной
+    var STATUSES=['','p','n','b','o','v','l','e','t'];     // цикл по клику
+    var LABEL={p:'Я',n:'Н',b:'Б',o:'О',v:'В',l:'Оп',e:'Уш',t:'От'};
+    var SNAME={p:'явка',n:'прогул',b:'больничный',o:'отпуск',v:'выходной',
+               l:'опоздание',e:'отпросился / ушёл раньше',t:'отгул'};
+    var NEEDS_DETAIL={l:1,e:1,n:1,b:1,t:1};               // просим причину (и минуты)
+    (function(){ var st=document.createElement('style');
+      st.textContent='.s-l{background:#4a3413;color:#e8c07d}.s-e{background:#3a3a13;color:#e8e07d}.s-t{background:#13324a;color:#7dc0e8}'+
+        '.clip{position:absolute;top:1px;right:2px;font-size:9px;opacity:.85}td.cell{position:relative}';
+      document.head.appendChild(st); })();
     var YM=new Date().toISOString().slice(0,7);
     var DATA=null, CAN_EDIT=false, ME_NAME='';
 
@@ -103,7 +110,8 @@
       var days=daysIn(YM);
       var today=new Date().toISOString().slice(0,10);
       var h='<h2>Табель <span class="muted" style="font-weight:400">· '+(CAN_EDIT?'клик по клетке меняет статус':'просмотр')+'</span></h2>';
-      h+='<div class="nav"><button class="btn" id="prevM" type="button">←</button><b>'+ymTitle(YM)+'</b><button class="btn" id="nextM" type="button">→</button></div>';
+      h+='<div class="nav"><button class="btn" id="prevM" type="button">←</button><b>'+ymTitle(YM)+'</b><button class="btn" id="nextM" type="button">→</button>'+
+         '<button class="btn" id="hrBtn" type="button" style="margin-left:auto;background:#2b4a7d;border-color:#4f7cff;color:#fff;font-weight:600" title="Личные дела сотрудников: данные, документы, статистика">👤 HR кабинет</button></div>';
       h+='<div class="legend">'+
          '<span><span class="sw" style="background:#1c3329"></span>Я — явка</span>'+
          '<span><span class="sw" style="background:#3a2226"></span>Н — не явился</span>'+
@@ -118,45 +126,169 @@
       h+='<th>Итого</th></tr></thead><tbody>';
       ws.forEach(function(w){
         var rec=(DATA.records&&DATA.records[w.id])||{};
-        var c={p:0,n:0,b:0,o:0,v:0};
+        var c={p:0,n:0,b:0,o:0,v:0,l:0,e:0,t:0}, lateMin=0;
         h+='<tr><td class="name">'+esc(w.name)+'</td>';
         for(var d=1;d<=days;d++){
           var date=YM+'-'+(d<10?'0':'')+d;
           var r=rec[date]; var s=r?r.s:'';
           if(s&&c[s]!=null)c[s]++;
+          if(s==='l'&&r&&r.min) lateMin+=r.min;
+          var hasDoc = DATA.docs && DATA.docs[w.id+'|'+date];
+          var tip = s ? (SNAME[s]||'') + (r&&r.min?(' '+r.min+' мин'):'') + (r&&r.note?(' · '+r.note):'') : '';
           h+='<td class="cell'+(s?' s-'+s:'')+(isWeekend(YM,d)?' we':'')+(CAN_EDIT?'':' ro')+(date===today?' today':'')+'"'+
              ' data-w="'+esc(w.id)+'" data-d="'+date+'" data-s="'+(s||'')+'"'+
-             (r&&r.src&&r.src!=='manual'?' title="источник: '+esc(r.src)+'"':'')+'>'+(s?LABEL[s]:'')+'</td>';
+             (tip?' title="'+esc(tip)+'"':'')+'>'+(s?LABEL[s]:'')+
+             (r&&r.min?'<div style="font-size:8px;line-height:1">'+r.min+'</div>':'')+
+             (hasDoc?'<span class="clip" title="есть скан">📎</span>':'')+'</td>';
         }
-        h+='<td class="sum"><b>'+c.p+'</b> я · '+c.n+' н · '+c.b+' б · '+c.o+' о · '+c.v+' в</td></tr>';
+        h+='<td class="sum"><b>'+c.p+'</b> я · '+c.n+' н · '+c.b+' б · '+c.o+' о'+
+           (c.l?' · <span style="color:#e8c07d">'+c.l+' оп ('+lateMin+'м)</span>':'')+
+           (c.e?' · <span style="color:#e8e07d">'+c.e+' уш</span>':'')+
+           (c.t?' · '+c.t+' от':'')+
+           ' · <a href="#" class="dossier" data-w="'+esc(w.id)+'" data-n="'+esc(w.name)+'" style="color:#579dff;text-decoration:none">досье</a></td></tr>';
       });
       h+='</tbody></table></div>';
       app.innerHTML=h;
       bindNav();
+      // «досье» доступно всем, кто видит табель
+      [].forEach.call(document.querySelectorAll('a.dossier'), function(a2){
+        a2.onclick=function(e){ e.preventDefault(); openDossier(this.getAttribute('data-w'), this.getAttribute('data-n')); };
+      });
       if(CAN_EDIT){
         [].forEach.call(document.querySelectorAll('td.cell'), function(td){
           td.onclick=function(){
             var el=this;
             var cur=el.getAttribute('data-s')||'';
             var next=STATUSES[(STATUSES.indexOf(cur)+1)%STATUSES.length];
-            el.classList.add('busy');
-            fetch(WORKER+'/att-set',{method:'POST',headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({workerId:el.getAttribute('data-w'),date:el.getAttribute('data-d'),status:next,byName:ME_NAME})})
-              .then(function(r){return r.json();})
-              .then(function(j){
-                if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
-                var wId=el.getAttribute('data-w'), date=el.getAttribute('data-d');
-                DATA.records[wId]=DATA.records[wId]||{};
-                if(next) DATA.records[wId][date]={s:next,src:'manual'}; else delete DATA.records[wId][date];
-                render();
-              })
-              .catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); el.classList.remove('busy'); });
+            // опоздание/прогул/больничный/отгул — сразу спрашиваем причину, минуты и скан
+            if(NEEDS_DETAIL[next]) return openDetail(el, next);
+            saveCell(el, next, null, '');
           };
         });
       }
     }
 
+    function saveCell(el, next, minutes, note){
+      el.classList.add('busy');
+      return fetch(WORKER+'/att-set',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({workerId:el.getAttribute('data-w'),date:el.getAttribute('data-d'),status:next,minutes:minutes,note:note,byName:ME_NAME})})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+          var wId=el.getAttribute('data-w'), date=el.getAttribute('data-d');
+          DATA.records[wId]=DATA.records[wId]||{};
+          if(next) DATA.records[wId][date]={s:next,src:'manual',min:+minutes||0,note:note||''}; else delete DATA.records[wId][date];
+          render();
+        })
+        .catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); el.classList.remove('busy'); });
+    }
+
+    // окно отметки: причина, минуты (для опоздания/раннего ухода) и скан документа
+    function openDetail(el, st){
+      var wId=el.getAttribute('data-w'), date=el.getAttribute('data-d');
+      var needMin = (st==='l'||st==='e');
+      var h='<div id="attOvl" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:95;display:flex;align-items:center;justify-content:center;padding:16px">'+
+        '<div style="background:var(--bg2,#22272b);border:1px solid var(--line,#3a414a);border-radius:12px;max-width:460px;width:100%;padding:16px">'+
+        '<div style="font-weight:700;margin-bottom:4px">'+esc(SNAME[st]||'')+' · '+esc(date)+'</div>'+
+        '<div class="muted" style="font-size:12px;margin-bottom:12px">Причина попадёт в досье сотрудника. Скан объяснительной или больничного можно приложить здесь же.</div>'+
+        (needMin?'<label style="display:block;font-size:12px;margin-bottom:4px">'+(st==='l'?'На сколько минут опоздал':'На сколько минут раньше ушёл')+'</label>'+
+          '<input id="attMin" type="number" min="0" step="5" value="'+(st==='l'?30:60)+'" style="width:110px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px;margin-bottom:10px">':'')+
+        '<label style="display:block;font-size:12px;margin-bottom:4px">Причина / комментарий</label>'+
+        '<input id="attNote" type="text" placeholder="напр.: к врачу, семейные обстоятельства, больничный №442" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:10px">'+
+        '<label class="btn" style="cursor:pointer;display:inline-block;margin-bottom:12px">📎 Прикрепить скан<input type="file" id="attFile" accept="image/*,application/pdf" style="display:none"></label>'+
+        '<span id="attFileName" class="muted" style="font-size:12px;margin-left:8px"></span>'+
+        '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="attCancel" type="button">Отмена</button>'+
+        '<button class="btn primary" id="attOk" type="button" style="background:#1f6ce8;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">Сохранить</button></div></div></div>';
+      var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host.firstChild);
+      var fileB64=null, fileName='', fileMime='';
+      document.getElementById('attFile').onchange=function(){
+        var f=this.files&&this.files[0]; if(!f) return;
+        fileName=f.name; fileMime=f.type||'application/octet-stream';
+        document.getElementById('attFileName').textContent=fileName;
+        var rd=new FileReader(); rd.onload=function(){ fileB64=String(rd.result).split(',')[1]; }; rd.readAsDataURL(f);
+      };
+      function close(){ var o=document.getElementById('attOvl'); if(o) o.remove(); }
+      document.getElementById('attCancel').onclick=close;
+      document.getElementById('attOk').onclick=function(){
+        var mn = needMin ? (+document.getElementById('attMin').value||0) : null;
+        var nt = document.getElementById('attNote').value.trim();
+        saveCell(el, st, mn, nt).then(function(){
+          if(fileB64){
+            return fetch(WORKER+'/receipt-save',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({kind:'att',refId:wId+'|'+date,filename:fileName,mime:fileMime,dataB64:fileB64})})
+              .then(function(r){return r.json();}).then(function(){ load(); });
+          }
+        }).then(close);
+      };
+    }
+
+    // ДОСЬЕ: все отклонения сотрудника с причинами, минутами и сканами
+    function openDossier(wid, wname){
+      var from=YM+'-01', to=YM+'-31';
+      var h='<div id="dosOvl" style="position:fixed;inset:0;background:var(--bg,#1d2125);z-index:96;display:flex;flex-direction:column">'+
+        '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box">'+
+        '<button id="dosBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад в табель</button>'+
+        '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Досье · '+esc(wname)+'</div>'+
+        '<button id="dosX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
+        '<div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line)">'+
+        '<label class="muted" style="font-size:12px">период</label>'+
+        '<input type="date" id="dosFrom" value="'+from+'" style="background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px">'+
+        '<input type="date" id="dosTo" value="'+to+'" style="background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px">'+
+        '<button class="btn" id="dosApply" type="button">Показать</button>'+
+        '<button class="btn" id="dosYear" type="button">Весь год</button></div>'+
+        '<div id="dosBody" style="flex:1;overflow:auto;padding:16px 20px">Загрузка…</div></div>';
+      var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host.firstChild);
+      function close(){ var o=document.getElementById('dosOvl'); if(o) o.remove(); }
+      document.getElementById('dosBack').onclick=close;
+      document.getElementById('dosX').onclick=close;
+      function draw(){
+        var f=document.getElementById('dosFrom').value, t2=document.getElementById('dosTo').value;
+        var body=document.getElementById('dosBody'); body.textContent='Загрузка…';
+        fetch(WORKER+'/att-dossier?workerId='+encodeURIComponent(wid)+'&from='+f+'&to='+t2)
+          .then(function(r){return r.json();}).then(function(j){
+            if(!j||!j.ok) throw new Error((j&&j.error)||'ошибка');
+            var c=j.counts||{};
+            var kp=function(lbl,val,color){ return '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:120px">'+
+              '<div class="muted" style="font-size:11px;text-transform:uppercase">'+lbl+'</div><div style="font-size:19px;font-weight:700'+(color?';color:'+color:'')+'">'+val+'</div></div>'; };
+            var kpis='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'+
+              kp('Опозданий', (c.l||0)+' · '+(j.lateMinutes||0)+' мин', '#e8c07d')+
+              kp('Отпрашивался', (c.e||0)+' · '+(j.earlyMinutes||0)+' мин', '#e8e07d')+
+              kp('Прогулов', c.n||0, '#f28b82')+
+              kp('Больничных', c.b||0, '#8ab4ff')+
+              kp('Отпуск / отгулы', (c.o||0)+' / '+(c.t||0))+
+              kp('Явок', c.p||0, '#4bce97')+'</div>';
+            var ev=j.events||[];
+            if(!ev.length){ body.innerHTML=kpis+'<div class="muted">За период отклонений нет — все дни отработаны.</div>'; return; }
+            var rows=ev.map(function(e){
+              var docs=(e.docs||[]).map(function(d){
+                return '<a href="'+WORKER+'/receipt-get?id='+d.id+'" target="_blank" style="color:#579dff;text-decoration:none;margin-right:8px">'+((d.mime||'').indexOf('pdf')>=0?'📄':'🖼')+' '+esc(d.filename||'документ')+'</a>';
+              }).join('') || '<span class="muted">—</span>';
+              return '<tr><td>'+esc(e.date)+'</td><td>'+esc(SNAME[e.status]||e.status)+'</td>'+
+                '<td>'+(e.minutes?esc(String(e.minutes))+' мин':'')+'</td>'+
+                '<td>'+esc(e.note||'')+'</td><td>'+docs+'</td><td class="muted">'+esc(e.markedBy||'')+'</td></tr>';
+            }).join('');
+            body.innerHTML=kpis+'<table style="width:100%;border-collapse:collapse"><thead><tr>'+
+              '<th style="text-align:left">Дата</th><th style="text-align:left">Что было</th><th style="text-align:left">Время</th>'+
+              '<th style="text-align:left">Причина</th><th style="text-align:left">Документы</th><th style="text-align:left">Отметил</th>'+
+              '</tr></thead><tbody>'+rows+'</tbody></table>';
+          }).catch(function(e){ body.textContent='Ошибка: '+(e&&e.message||e); });
+      }
+      document.getElementById('dosApply').onclick=draw;
+      document.getElementById('dosYear').onclick=function(){
+        var y=YM.slice(0,4);
+        document.getElementById('dosFrom').value=y+'-01-01';
+        document.getElementById('dosTo').value=y+'-12-31';
+        draw();
+      };
+      draw();
+    }
+
+    function openHr(){
+      t.modal({ url:'./hr-modal.html?t='+Date.now(), fullscreen:true, title:'HR кабинет', accentColor:'#1f6ce8' });
+    }
+
     function bindNav(){
+      var hb=document.getElementById('hrBtn'); if(hb) hb.onclick=openHr;
       var p=document.getElementById('prevM'), n=document.getElementById('nextM');
       if(p) p.onclick=function(){ YM=shiftYm(YM,-1); load(); };
       if(n) n.onclick=function(){ YM=shiftYm(YM,1); load(); };

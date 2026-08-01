@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>HR кабинет</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./trello-shim.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; --violet:#b58de6; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #app{max-width:1100px;margin:0 auto;padding:16px 16px 70px}
+    h2{margin:0 0 4px;font-size:18px}
+    h3{margin:18px 0 8px;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+    .muted{color:var(--muted);font-size:12.5px}
+    .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 14px;font-size:13px;cursor:pointer}
+    .btn:hover{border-color:var(--blue)}
+    .btn.primary{background:#1f6ce8;border-color:#1f6ce8;color:#fff;font-weight:600}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:50}
+    table{width:100%;border-collapse:collapse}
+    th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+    td{padding:10px;border-bottom:1px solid var(--line);vertical-align:top}
+    tr:hover td{background:rgba(255,255,255,.02)}
+    .tabs{display:flex;gap:8px;margin:12px 0}
+    .tab{padding:7px 16px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-size:13px;background:var(--bg2)}
+    .tab.active{background:#2b4a7d;border-color:var(--blue);color:#fff;font-weight:600}
+    .kpis{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 16px}
+    .kpi{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:120px;flex:1}
+    .kpi .k{font-size:11px;text-transform:uppercase;color:var(--muted)}
+    .kpi .v{font-size:20px;font-weight:700;margin-top:2px}
+    .sec{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+    .fld{margin-bottom:10px}
+    .fld label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:4px}
+    input,select,textarea{background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px;font-family:inherit;box-sizing:border-box}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+    .grid input,.grid select{width:100%}
+    a{color:#579dff;text-decoration:none}
+    .link{cursor:pointer;color:#579dff}
+    .badge{display:inline-block;background:#2b4a7d;color:#cfe0ff;border-radius:6px;padding:1px 8px;font-size:11px;margin-left:6px}
+    .barchart{display:flex;align-items:flex-end;gap:4px;height:90px;padding:6px 0}
+    .barchart .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px}
+    .barchart .bx{width:100%;border-radius:3px 3px 0 0;min-height:2px}
+    .barchart .lb{font-size:9px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div id="app">Загрузка…</div>
+  <div class="bar">
+    <button class="btn" id="backTs" type="button">← Табель</button>
+    <button class="btn" id="close" type="button">Закрыть</button>
+  </div>
+<script>
+  var t = window.TrelloPowerUp.iframe();
+  var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+  var DATA = null, TAB = 'current', ME_NAME = '';
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function money(n){ return (Math.round(+n||0)).toLocaleString('ru-RU'); }
+
+  document.getElementById('close').onclick = function(){ t.closeModal(); };
+  document.getElementById('backTs').onclick = function(){
+    t.modal({ url:'./timesheet-modal.html?t='+Date.now(), fullscreen:true, title:'Табель', accentColor:'#1f6ce8' });
+  };
+
+  function load(){
+    fetch(WORKER+'/hr-list').then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+      DATA = j; render();
+    }).catch(function(e){ document.getElementById('app').innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+  }
+
+  function render(){
+    var rows = TAB==='current' ? DATA.current : DATA.former;
+    var h = '<h2>HR кабинет</h2><div class="muted">Личные дела сотрудников: кадровые данные, документы, статистика по табелю.</div>';
+    h += '<div class="tabs">'+
+      '<div class="tab'+(TAB==='current'?' active':'')+'" data-tab="current">Сотрудники <span class="badge">'+DATA.countCurrent+'</span></div>'+
+      '<div class="tab'+(TAB==='former'?' active':'')+'" data-tab="former">Бывшие <span class="badge">'+DATA.countFormer+'</span></div></div>';
+    h += '<div class="muted" style="margin-bottom:8px">'+(TAB==='current'
+      ? ('С нами работает: <b style="color:var(--txt);font-size:15px">'+DATA.countCurrent+'</b> чел.')
+      : ('Ранее работали: <b style="color:var(--txt);font-size:15px">'+DATA.countFormer+'</b> чел.'))+'</div>';
+    if(!rows.length){ h += '<div class="muted">Список пуст.</div>'; }
+    else {
+      h += '<table><thead><tr><th>Должность</th><th>ФИО</th><th>Телефон</th>'+
+           (TAB==='current'?'<th>С нами с</th>':'<th>Уволен</th>')+'</tr></thead><tbody>';
+      rows.forEach(function(r){
+        h += '<tr><td>'+(r.position?esc(r.position):'<span class="muted">— не указана —</span>')+'</td>'+
+             '<td><span class="link" data-open="'+esc(r.id)+'">'+esc(r.fullName||r.name)+'</span>'+
+             (!r.filled?' <span class="muted" title="Личное дело не заполнено">·  не заполнено</span>':'')+'</td>'+
+             '<td>'+(r.phone?('<a href="tel:'+esc(r.phone)+'">'+esc(r.phone)+'</a>'+(r.whatsapp?' <span class="muted">· WA '+esc(r.whatsapp)+'</span>':'')):'<span class="muted">—</span>')+'</td>'+
+             '<td class="muted">'+esc(TAB==='current'?(r.hiredAt||''):(r.firedAt||''))+'</td></tr>';
+      });
+      h += '</tbody></table>';
+    }
+    document.getElementById('app').innerHTML = h;
+    [].forEach.call(document.querySelectorAll('.tab'), function(el){
+      el.onclick = function(){ TAB = this.getAttribute('data-tab'); render(); };
+    });
+    [].forEach.call(document.querySelectorAll('[data-open]'), function(el){
+      el.onclick = function(){ openProfile(this.getAttribute('data-open')); };
+    });
+  }
+
+  // ---------- личное дело ----------
+  function openProfile(wid){
+    document.getElementById('app').innerHTML = '<div class="muted">Загрузка личного дела…</div>';
+    fetch(WORKER+'/hr-profile?workerId='+encodeURIComponent(wid)).then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok) throw new Error((j&&j.error)||'ошибка');
+      drawProfile(j);
+    }).catch(function(e){ document.getElementById('app').innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+  }
+
+  function drawProfile(j){
+    var p = j.profile||{}, w = j.worker||{}, st = j.stats||{}, att = st.att||{};
+    var name = p.fullName || w.name || '';
+    var h = '<div><span class="link" id="toList">← все сотрудники</span></div>';
+    h += '<h2 style="margin-top:10px">'+(p.position?esc(p.position)+' · ':'')+esc(name)+(w.active?'':' <span class="badge" style="background:#4a2b2b;color:#f3b3b3">бывший</span>')+'</h2>';
+
+    // ---- визуальные показатели (как плитки на карточке) ----
+    h += '<div class="kpis">'+
+      kpi('Явок за год', att.p||0, 'var(--green)')+
+      kpi('Больничных', att.b||0, '#8ab4ff')+
+      kpi('Отгулов', (att.t||0)+(att.o?(' · отпуск '+att.o):''), '')+
+      kpi('Опозданий', (att.l||0)+(st.lateMinutes?(' · '+st.lateMinutes+'м'):''), 'var(--amber)')+
+      kpi('Отпрашивался', (att.e||0)+(st.earlyMinutes?(' · '+st.earlyMinutes+'м'):''), '#e8e07d')+
+      kpi('Прогулов', att.n||0, 'var(--red)')+
+      kpi('Брак / переделки', (st.reworks||0)+(st.reworkCost?(' · '+money(st.reworkCost)+' ₸'):''), st.reworks?'var(--red)':'')+
+    '</div>';
+
+    // ---- помесячный график ----
+    var bm = st.byMonth||{}, keys = Object.keys(bm).sort();
+    if(keys.length){
+      var max = 1; keys.forEach(function(k){ var m=bm[k]; max = Math.max(max, (m.p||0)); });
+      h += '<div class="sec"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Посещаемость по месяцам</div>'+
+        '<div class="barchart">';
+      keys.slice(-12).forEach(function(k){
+        var m = bm[k], hp = Math.round((m.p||0)/max*70);
+        var bad = (m.n||0)+(m.l||0)+(m.e||0);
+        var hb = Math.round(bad/max*70);
+        h += '<div class="col" title="'+esc(k)+': явок '+(m.p||0)+', отклонений '+bad+'">'+
+             (hb?'<div class="bx" style="height:'+hb+'px;background:#e8987d"></div>':'')+
+             '<div class="bx" style="height:'+Math.max(hp,2)+'px;background:#4bce97"></div>'+
+             '<div class="lb">'+esc(k.slice(5))+'</div></div>';
+      });
+      h += '</div><div class="muted" style="font-size:11px">🟩 явки · 🟧 отклонения (прогул/опоздание/ушёл раньше)</div></div>';
+    }
+
+    // ---- кадровые данные ----
+    h += '<h3>Личные данные</h3><div class="sec"><div class="grid">'+
+      fld('Должность','f_position',p.position)+
+      fld('ФИО полностью','f_fullName',p.fullName||w.name)+
+      fld('Дата рождения','f_birthDate',p.birthDate,'date')+
+      fld('Телефон','f_phone',p.phone)+
+      fld('WhatsApp','f_whatsapp',p.whatsapp||p.phone)+
+      fld('Адрес проживания','f_address',p.address)+
+      '<div class="fld"><label>Семейное положение</label><select id="f_marital">'+
+        ['','женат','замужем','холост','не замужем','разведён(а)'].map(function(o){
+          return '<option value="'+esc(o)+'"'+(String(p.marital||'')===o?' selected':'')+'>'+(o||'— не указано —')+'</option>';
+        }).join('')+'</select></div>'+
+      fld('Дети (имя и возраст, через запятую)','f_children',(p.children||[]).map(function(c){ return (c.name||'')+' '+(c.age||''); }).join(', '))+
+    '</div></div>';
+
+    h += '<h3>Работа у нас</h3><div class="sec"><div class="grid">'+
+      fld('Дата начала работы','f_hiredAt',p.hiredAt||w.createdAt,'date')+
+      fld('Дата увольнения','f_firedAt',p.firedAt,'date')+
+    '</div>'+
+      '<div class="fld"><label>Причина увольнения от нас</label><textarea id="f_fireReason" rows="2" style="width:100%">'+esc(p.fireReason||'')+'</textarea></div>'+
+      '<div class="muted">Как только проставлена дата увольнения — сотрудник уходит в «Бывшие», исчезает из табеля, маршрутов и начислений.</div>'+
+    '</div>';
+
+    h += '<h3>Предыдущее место работы</h3><div class="sec"><div class="grid">'+
+      fld('Компания','f_prevCompany',p.prevCompany)+
+      fld('Контакты (телефон, ФИО руководителя)','f_prevContacts',p.prevContacts)+
+    '</div>'+
+      '<div class="fld"><label>Почему ушёл оттуда</label><textarea id="f_prevReason" rows="2" style="width:100%">'+esc(p.prevReason||'')+'</textarea></div>'+
+    '</div>';
+
+    h += '<h3>Документы</h3><div class="sec">'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
+      '<label class="btn" style="cursor:pointer">🆔 Удостоверение / паспорт<input type="file" id="up_id" accept="image/*,application/pdf" style="display:none"></label>'+
+      '<label class="btn" style="cursor:pointer">📄 Резюме<input type="file" id="up_resume" style="display:none"></label>'+
+      '<label class="btn" style="cursor:pointer">📎 Другой документ<input type="file" id="up_other" style="display:none"></label>'+
+      '</div><div id="docList"></div></div>';
+
+    h += '<div class="fld"><label>Заметки кадровика</label><textarea id="f_notes" rows="3" style="width:100%">'+esc(p.notes||'')+'</textarea></div>';
+    h += '<div style="display:flex;gap:8px;margin:14px 0 6px"><button class="btn primary" id="saveProf" type="button">💾 Сохранить личное дело</button>'+
+         '<span id="saveMsg" class="muted"></span></div>';
+
+    document.getElementById('app').innerHTML = h;
+    document.getElementById('toList').onclick = function(){ render(); };
+    drawDocs(j.docs||[]);
+
+    ['id','resume','other'].forEach(function(kind){
+      var inp = document.getElementById('up_'+kind);
+      inp.onchange = function(){
+        var f = this.files && this.files[0]; if(!f) return;
+        var rd = new FileReader();
+        rd.onload = function(){
+          fetch(WORKER+'/receipt-save',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({kind:'hr',refId:w.id+'|'+kind,filename:f.name,mime:f.type||'application/octet-stream',dataB64:String(rd.result).split(',')[1]})})
+            .then(function(r){return r.json();})
+            .then(function(res){ if(!res||!res.ok) throw new Error((res&&res.error)||'не сохранено'); openProfile(w.id); })
+            .catch(function(e){ alert('Не удалось загрузить: '+(e&&e.message||e)); });
+        };
+        rd.readAsDataURL(f);
+      };
+    });
+
+    document.getElementById('saveProf').onclick = function(){
+      var kids = document.getElementById('f_children').value.split(',').map(function(x){
+        x = x.trim(); if(!x) return null;
+        var m = x.match(/^(.*?)(\d+)\s*$/);
+        return m ? { name:m[1].trim(), age:+m[2] } : { name:x, age:null };
+      }).filter(Boolean);
+      var prof = {
+        position:val('f_position'), fullName:val('f_fullName'), birthDate:val('f_birthDate'),
+        address:val('f_address'), phone:val('f_phone'), whatsapp:val('f_whatsapp'),
+        marital:val('f_marital'), children:kids,
+        hiredAt:val('f_hiredAt'), firedAt:val('f_firedAt'), fireReason:val('f_fireReason'),
+        prevCompany:val('f_prevCompany'), prevContacts:val('f_prevContacts'), prevReason:val('f_prevReason'),
+        notes:val('f_notes')
+      };
+      var msg = document.getElementById('saveMsg'); msg.textContent = 'Сохраняю…';
+      fetch(WORKER+'/hr-profile-save',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({workerId:w.id, profile:prof, rehire: !prof.firedAt})})
+        .then(function(r){return r.json();})
+        .then(function(res){
+          if(!res||!res.ok) throw new Error((res&&res.error)||'не сохранено');
+          msg.textContent = 'Сохранено ✓';
+          load();
+        })
+        .catch(function(e){ msg.textContent = 'Ошибка: '+(e&&e.message||e); });
+    };
+  }
+
+  function drawDocs(docs){
+    var el = document.getElementById('docList'); if(!el) return;
+    if(!docs.length){ el.innerHTML = '<span class="muted">Документов пока нет.</span>'; return; }
+    var TN = { id:'🆔 Удостоверение', resume:'📄 Резюме', other:'📎 Документ' };
+    el.innerHTML = docs.map(function(d){
+      return '<div style="margin:4px 0"><a href="'+WORKER+'/receipt-get?id='+d.id+'" target="_blank">'+
+        esc(TN[d.type]||'📎')+' — '+esc(d.filename||'файл')+'</a> <span class="muted">· '+esc(d.at||'')+'</span></div>';
+    }).join('');
+  }
+
+  function kpi(k,v,color){ return '<div class="kpi"><div class="k">'+esc(k)+'</div><div class="v"'+(color?' style="color:'+color+'"':'')+'>'+esc(String(v))+'</div></div>'; }
+  function fld(label,id,value,type){ return '<div class="fld"><label>'+esc(label)+'</label><input id="'+id+'" type="'+(type||'text')+'" value="'+esc(value||'')+'"></div>'; }
+  function val(id){ var el=document.getElementById(id); return el?el.value.trim():''; }
+
+  t.member('id','fullName','username').then(function(m){ ME_NAME=(m&&(m.fullName||m.username))||''; }).catch(function(){});
+  load();
+</script>
+</body>
+</html>
