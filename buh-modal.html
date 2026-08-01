@@ -93,7 +93,7 @@
     // просмотр счёта в поп-апе (iframe поверх бухгалтерии)
     function openInvView(qs){
       var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:86;display:flex;flex-direction:column">'+
-        '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border-bottom:3px solid #10192b;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
+        '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
         '<button id="invBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
         '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт на оплату</div>'+
         '<button id="invOvlClose" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
@@ -110,7 +110,7 @@
       var r = (REP_ROWS||[]).filter(function(x){ return String(x.id)===String(rid); })[0];
       if(!r) return;
       var h='<div style="position:fixed;inset:0;background:var(--bg,#1d2125);z-index:86;display:flex;flex-direction:column">'+
-        '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border-bottom:3px solid #10192b;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
+        '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
         '<button id="rvBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
         '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Заявка '+esc(r.number)+'</div>'+
         '<button id="rvX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
@@ -150,7 +150,7 @@
       var stat=function(label,on){ return '<span class="chip'+(on?' on':'')+'" style="pointer-events:none">'+(on?'✓ ':'')+label+'</span>'; };
       var person = PERSONS[cardId] ? ' <span class="muted">('+esc(PERSONS[cardId])+')</span>' : '';
       var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:86;display:flex;flex-direction:column">'+
-        '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border-bottom:3px solid #10192b;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
+        '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
         '<button id="ordBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
         '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Заказ №'+esc(r.number)+'</div>'+
         '<button id="ordX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
@@ -637,7 +637,7 @@
       var rib=document.getElementById('repInvBtn');
       if(rib) rib.onclick=function(){
         var h='<div style="position:fixed;inset:0;background:var(--bg,#1d2125);z-index:86;display:flex;flex-direction:column">'+
-          '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border-bottom:3px solid #10192b;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
+          '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
           '<button id="riBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
           '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт на оплату по ремонтам</div>'+
           '<button id="riX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
