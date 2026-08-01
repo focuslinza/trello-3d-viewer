@@ -454,9 +454,13 @@
 
     function wireCard(){
       var r=CUR;
-      document.getElementById('popClose').onclick=function(){ closeOvl(); loadAll(); };
-      var px=document.getElementById('popX'); if(px) px.onclick=function(){ closeOvl(); loadAll(); };
-      document.getElementById('ovl').onclick=function(e){ if(e.target===this){ closeOvl(); loadAll(); } };
+      var closeCard=function(){
+        if (CARD_ONLY) { try { window.parent.postMessage({ metalshopEmbedClose: 1 }, '*'); } catch(e){} return; }
+        closeOvl(); loadAll();
+      };
+      document.getElementById('popClose').onclick=closeCard;
+      var px=document.getElementById('popX'); if(px) px.onclick=closeCard;
+      document.getElementById('ovl').onclick=function(e){ if(e.target===this){ closeCard(); } };
       document.getElementById('editBtn').onclick=function(e){ e.preventDefault(); toggleEdit(); };
       // описание: клик — редактирование, сохранение — на сервер + событие в ленту
       (function(){
@@ -918,6 +922,14 @@
     // приходят параметрами из родителя, иначе страница зависнет на «Загрузка…»
     var QS = (function(){ try { return new URLSearchParams(location.search); } catch(e){ return { get:function(){return null;} }; } })();
     var EMBED = !!QS.get('embed');
+    // ?openRepair=… из бухгалтерии — показываем ТОЛЬКО карточку заявки:
+    // прячем шапку доски, колонки и нижнюю панель, чтобы не мелькали фоном
+    var CARD_ONLY = EMBED && !!QS.get('openRepair');
+    if (CARD_ONLY) {
+      var _st = document.createElement('style');
+      _st.textContent = '#wrap .top, #board, .bar { display:none !important; } body{background:transparent} .ovl{background:transparent;padding:0} .pop{margin:0}';
+      document.head.appendChild(_st);
+    }
     var mePromise = EMBED
       ? Promise.resolve({ id: QS.get('memberId')||'', fullName: QS.get('memberName')||'', username: QS.get('memberName')||'' })
       : t.member('id','fullName','username');

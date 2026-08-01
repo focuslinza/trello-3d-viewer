@@ -124,6 +124,10 @@
       var back=function(){ closeInvView(); load(); };
       document.getElementById('rvBack').onclick=back;
       document.getElementById('rvX').onclick=back;
+      // карточка внутри iframe попросила закрыться — возвращаемся в бухгалтерию
+      window.addEventListener('message', function onMsg(ev){
+        if(ev && ev.data && ev.data.metalshopEmbedClose){ window.removeEventListener('message', onMsg); back(); }
+      });
       fetch(WORKER+'/invoice-list?repairId='+encodeURIComponent(r.id)).then(function(x){return x.json();}).then(function(j){
         var el=document.getElementById('rvInvs'); if(!el) return;
         var rows=(j&&j.ok&&(j.rows||j.invoices))||[];
