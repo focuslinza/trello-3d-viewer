@@ -109,7 +109,7 @@
       var app=document.getElementById('app');
       var days=daysIn(YM);
       var today=new Date().toISOString().slice(0,10);
-      var h='<h2>Табель <span class="muted" style="font-weight:400">· '+(CAN_EDIT?'клик по клетке меняет статус':'просмотр')+'</span></h2>';
+      var h='<h2>Табель <span class="muted" style="font-weight:400">· '+(CAN_EDIT?'клик по клетке — выбор статуса из списка':'просмотр')+'</span></h2>';
       h+='<div class="nav"><button class="btn" id="prevM" type="button">←</button><b>'+ymTitle(YM)+'</b><button class="btn" id="nextM" type="button">→</button>'+
          (CAN_HR?'<button class="btn" id="hrBtn" type="button" style="margin-left:auto;background:#2b4a7d;border-color:#4f7cff;color:#fff;font-weight:600" title="Личные дела сотрудников: данные, документы, статистика">👤 HR кабинет</button>':'')+'</div>';
       h+='<div class="legend">'+
@@ -118,6 +118,9 @@
          '<span><span class="sw" style="background:#3d321c"></span>Б — больничный</span>'+
          '<span><span class="sw" style="background:#2b2340"></span>О — отпуск</span>'+
          '<span><span class="sw" style="background:#26303c"></span>В — выходной / праздник</span>'+
+         '<span><span class="sw" style="background:#4a3413"></span>Оп — опоздание</span>'+
+         '<span><span class="sw" style="background:#3a3a13"></span>Уш — отпросился / ушёл раньше</span>'+
+         '<span><span class="sw" style="background:#13324a"></span>От — отгул</span>'+
          '<span class="muted">пустая клетка — не заполнено</span></div>';
       var ws=(DATA&&DATA.workers)||[];
       if(!ws.length){ app.innerHTML=h+'<div class="empty">Нет активных работников. Добавьте их в «Зарплата / Работники».</div>'; bindNav(); return; }
@@ -156,16 +159,50 @@
       });
       if(CAN_EDIT){
         [].forEach.call(document.querySelectorAll('td.cell'), function(td){
-          td.onclick=function(){
-            var el=this;
-            var cur=el.getAttribute('data-s')||'';
-            var next=STATUSES[(STATUSES.indexOf(cur)+1)%STATUSES.length];
-            // опоздание/прогул/больничный/отгул — сразу спрашиваем причину, минуты и скан
-            if(NEEDS_DETAIL[next]) return openDetail(el, next);
-            saveCell(el, next, null, '');
-          };
+          td.onclick=function(e){ e.stopPropagation(); openPicker(this); };
         });
       }
+    }
+
+    // выпадающий список статусов у ячейки: выбираем явно, без цикла по клику
+    function closePicker(){ var p=document.getElementById('stPick'); if(p) p.remove(); }
+    function openPicker(el){
+      closePicker();
+      var cur = el.getAttribute('data-s')||'';
+      var r = el.getBoundingClientRect();
+      var items = [
+        ['', '— очистить —'], ['p','Я — явка'], ['v','В — выходной / праздник'],
+        ['l','Оп — опоздание'], ['e','Уш — отпросился / ушёл раньше'],
+        ['b','Б — больничный'], ['o','О — отпуск'], ['t','От — отгул'], ['n','Н — не явился']
+      ];
+      var h = '<div id="stPick" style="position:fixed;z-index:99;background:var(--bg2);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.6);padding:4px;min-width:210px">'+
+        items.map(function(it){
+          var sel = (it[0]===cur);
+          return '<div class="stOpt" data-v="'+it[0]+'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:13px'+(sel?';background:#2b4a7d;color:#fff;font-weight:600':'')+'">'+esc(it[1])+'</div>';
+        }).join('')+'</div>';
+      var host=document.createElement('div'); host.innerHTML=h;
+      var pick=host.firstChild; document.body.appendChild(pick);
+      // позиционируем у ячейки, не вылезая за экран
+      var top = r.bottom + 4, left = r.left;
+      var ph = pick.offsetHeight, pw = pick.offsetWidth;
+      if (top + ph > window.innerHeight - 8) top = Math.max(8, r.top - ph - 4);
+      if (left + pw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - pw - 8);
+      pick.style.top = top+'px'; pick.style.left = left+'px';
+      [].forEach.call(pick.querySelectorAll('.stOpt'), function(o){
+        o.onmouseenter=function(){ if(this.getAttribute('data-v')!==cur) this.style.background='rgba(255,255,255,.06)'; };
+        o.onmouseleave=function(){ if(this.getAttribute('data-v')!==cur) this.style.background=''; };
+        o.onclick=function(ev){
+          ev.stopPropagation();
+          var v=this.getAttribute('data-v');
+          closePicker();
+          // опоздание/уход/прогул/больничный/отгул — окно с причиной, минутами и сканом
+          if(NEEDS_DETAIL[v]) return openDetail(el, v);
+          saveCell(el, v, null, '');
+        };
+      });
+      setTimeout(function(){
+        document.addEventListener('click', function onDoc(){ closePicker(); document.removeEventListener('click', onDoc); });
+      }, 0);
     }
 
     function saveCell(el, next, minutes, note){
