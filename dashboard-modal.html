@@ -629,7 +629,11 @@
     fetch(WORKER+'/backup-list').then(function(r){return r.json();}).then(function(j){
       if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
       var rows=(j.backups||[]);
-      var h='<div class="muted" style="margin-bottom:12px">Копии создаются автоматически: <b>каждый день</b> — заказы, маршруты, счета, ремонты с комментариями, табель, снабжение; <b>раз в неделю (воскресенье)</b> — вся система целиком плюс слепок доски Trello (списки, карточки, комментарии, вложения). Хранятся 14 дневных и 8 недельных копий. Сканы и резюме в регулярные копии не входят (только их описания) — чтобы база не разрасталась; для полного архива с файлами нажмите «Полную + файлы» и сохраните файл у себя.</div>';
+      var h='';
+      h+= j.r2
+        ? '<div style="background:#16301f;border:1px solid #2f6b45;border-radius:10px;padding:10px 14px;margin-bottom:12px;color:#9ee6bd">✅ Копии выгружаются в отдельное хранилище R2 — база не разрастается, сканы и резюме входят в копию целиком.</div>'
+        : '<div style="background:#3a2f16;border:1px solid #6b5a2f;border-radius:10px;padding:10px 14px;margin-bottom:12px;color:#e8d59e">⚠ Хранилище R2 не подключено — копии лежат в самой базе, файлы (сканы, резюме) в них не входят. Подключение занимает пару минут: Cloudflare → R2 → создать бакет → в настройках воркера добавить привязку с именем <b>BACKUPS</b>.</div>';
+      h+='<div class="muted" style="margin-bottom:12px">Копии создаются автоматически: <b>каждый день</b> — заказы, маршруты, счета, ремонты с комментариями, табель, снабжение; <b>раз в неделю (воскресенье)</b> — вся система целиком плюс слепок доски Trello (списки, карточки, комментарии, вложения). Хранятся 14 дневных и 8 недельных копий. Сканы и резюме в регулярные копии не входят (только их описания) — чтобы база не разрасталась; для полного архива с файлами нажмите «Полную + файлы» и сохраните файл у себя.</div>';
       h+='<div style="display:flex;gap:8px;margin-bottom:16px">'+
          '<button class="btn" id="bkNowD" type="button">Сделать дневную копию сейчас</button>'+
          '<button class="btn" id="bkNowF" type="button">Полную копию сейчас</button>'+
@@ -638,11 +642,12 @@
       if(!rows.length){ h+='<div class="muted">Копий пока нет — первая появится по расписанию или по кнопке выше.</div>'; }
       else{
         h+='<table style="width:100%;border-collapse:collapse"><thead><tr>'+
-           '<th style="text-align:left;padding:6px">Когда</th><th style="text-align:left">Тип</th>'+
+           '<th style="text-align:left;padding:6px">Когда</th><th style="text-align:left">Тип</th><th style="text-align:left">Где</th>'+
            '<th style="text-align:right">Записей</th><th style="text-align:right">Размер</th><th></th></tr></thead><tbody>';
         rows.forEach(function(b){
           h+='<tr><td style="padding:6px">'+esc(String(b.at||'').slice(0,16))+'</td>'+
-             '<td>'+(b.kind==='full'?'<b style="color:#4bce97">полная</b>':'дневная')+'</td>'+
+             '<td>'+(b.kind==='full'?'<b style="color:#4bce97">полная</b>':'дневная')+(b.withFiles?' <span class="muted">+файлы</span>':'')+'</td>'+
+             '<td class="muted">'+(b.storage==='r2'?'хранилище':'база')+'</td>'+
              '<td style="text-align:right">'+(b.rows||0).toLocaleString('ru-RU')+'</td>'+
              '<td style="text-align:right">'+(b.sizeKb||0)+' КБ</td>'+
              '<td style="text-align:right"><a href="'+WORKER+'/backup-download?id='+b.id+'" target="_blank" style="color:#579dff;text-decoration:none">скачать</a></td></tr>';
