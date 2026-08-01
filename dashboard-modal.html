@@ -75,6 +75,7 @@
       <button class="btn" id="pricingBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">💲 Цены и коэффициенты</button>
       <button class="btn" id="workers" type="button" style="border-color:#4f7cff;color:#a9c2ff">⚙ Зарплата / Работники</button>
       <button class="btn" id="financeBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">₸ Финансы</button>
+      <button class="btn" id="backupBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff" title="Автоматические резервные копии системы">🗄 Резервные копии</button>
     </div>
     <button class="btn" id="close" type="button">Закрыть</button>
   </div>
@@ -607,6 +608,59 @@
     document.getElementById('finBack').onclick=finClose;
     document.getElementById('finX').onclick=finClose;
   };
+  document.getElementById('backupBtn').onclick=function(){
+    var ov=document.createElement('div');
+    ov.id='bkOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;flex-direction:column';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55)">'+
+      '<button id="bkBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">🗄 Резервные копии</div>'+
+      '<button id="bkX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
+      '<div style="flex:1;overflow:auto;padding:18px 22px" id="bkBody">Загрузка…</div>';
+    document.body.appendChild(ov);
+    var closeBk=function(){ ov.remove(); };
+    document.getElementById('bkBack').onclick=closeBk;
+    document.getElementById('bkX').onclick=closeBk;
+    drawBackups();
+  };
+
+  function drawBackups(){
+    var body=document.getElementById('bkBody'); if(!body) return;
+    fetch(WORKER+'/backup-list').then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+      var rows=(j.backups||[]);
+      var h='<div class="muted" style="margin-bottom:12px">Копии создаются автоматически: <b>каждый день</b> — заказы, маршруты, счета, ремонты с комментариями, табель, снабжение; <b>раз в неделю (воскресенье)</b> — вся система целиком плюс слепок доски Trello (списки, карточки, комментарии, вложения). Хранятся 14 дневных и 8 недельных копий.</div>';
+      h+='<div style="display:flex;gap:8px;margin-bottom:16px">'+
+         '<button class="btn" id="bkNowD" type="button">Сделать дневную копию сейчас</button>'+
+         '<button class="btn" id="bkNowF" type="button">Полную копию сейчас</button>'+
+         '<span id="bkMsg" class="muted" style="align-self:center"></span></div>';
+      if(!rows.length){ h+='<div class="muted">Копий пока нет — первая появится по расписанию или по кнопке выше.</div>'; }
+      else{
+        h+='<table style="width:100%;border-collapse:collapse"><thead><tr>'+
+           '<th style="text-align:left;padding:6px">Когда</th><th style="text-align:left">Тип</th>'+
+           '<th style="text-align:right">Записей</th><th style="text-align:right">Размер</th><th></th></tr></thead><tbody>';
+        rows.forEach(function(b){
+          h+='<tr><td style="padding:6px">'+esc(String(b.at||'').slice(0,16))+'</td>'+
+             '<td>'+(b.kind==='full'?'<b style="color:#4bce97">полная</b>':'дневная')+'</td>'+
+             '<td style="text-align:right">'+(b.rows||0).toLocaleString('ru-RU')+'</td>'+
+             '<td style="text-align:right">'+(b.sizeKb||0)+' КБ</td>'+
+             '<td style="text-align:right"><a href="'+WORKER+'/backup-download?id='+b.id+'" target="_blank" style="color:#579dff;text-decoration:none">скачать</a></td></tr>';
+        });
+        h+='</tbody></table>';
+      }
+      body.innerHTML=h;
+      var run=function(kind){
+        var msg=document.getElementById('bkMsg'); msg.textContent='Создаю копию…';
+        fetch(WORKER+'/backup-run?kind='+kind).then(function(r){return r.json();}).then(function(res){
+          if(!res||!res.ok) throw new Error((res&&res.error)||'ошибка');
+          msg.textContent='Готово ✓'; drawBackups();
+        }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); });
+      };
+      document.getElementById('bkNowD').onclick=function(){ run('daily'); };
+      document.getElementById('bkNowF').onclick=function(){ run('full'); };
+    }).catch(function(e){ body.innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+  }
+
   document.getElementById('pricingBtn').onclick=function(){
     tab='pricing'; render();
   };
