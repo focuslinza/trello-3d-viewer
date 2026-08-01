@@ -629,10 +629,11 @@
     fetch(WORKER+'/backup-list').then(function(r){return r.json();}).then(function(j){
       if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
       var rows=(j.backups||[]);
-      var h='<div class="muted" style="margin-bottom:12px">Копии создаются автоматически: <b>каждый день</b> — заказы, маршруты, счета, ремонты с комментариями, табель, снабжение; <b>раз в неделю (воскресенье)</b> — вся система целиком плюс слепок доски Trello (списки, карточки, комментарии, вложения). Хранятся 14 дневных и 8 недельных копий.</div>';
+      var h='<div class="muted" style="margin-bottom:12px">Копии создаются автоматически: <b>каждый день</b> — заказы, маршруты, счета, ремонты с комментариями, табель, снабжение; <b>раз в неделю (воскресенье)</b> — вся система целиком плюс слепок доски Trello (списки, карточки, комментарии, вложения). Хранятся 14 дневных и 8 недельных копий. Сканы и резюме в регулярные копии не входят (только их описания) — чтобы база не разрасталась; для полного архива с файлами нажмите «Полную + файлы» и сохраните файл у себя.</div>';
       h+='<div style="display:flex;gap:8px;margin-bottom:16px">'+
          '<button class="btn" id="bkNowD" type="button">Сделать дневную копию сейчас</button>'+
          '<button class="btn" id="bkNowF" type="button">Полную копию сейчас</button>'+
+         '<button class="btn" id="bkNowFF" type="button" title="Включая сканы, резюме и чеки — файл получится тяжёлым, скачайте его и храните у себя">Полную + файлы</button>'+
          '<span id="bkMsg" class="muted" style="align-self:center"></span></div>';
       if(!rows.length){ h+='<div class="muted">Копий пока нет — первая появится по расписанию или по кнопке выше.</div>'; }
       else{
@@ -658,6 +659,7 @@
       };
       document.getElementById('bkNowD').onclick=function(){ run('daily'); };
       document.getElementById('bkNowF').onclick=function(){ run('full'); };
+      document.getElementById('bkNowFF').onclick=function(){ run('full&withFiles=1'); };
     }).catch(function(e){ body.innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
   }
 
