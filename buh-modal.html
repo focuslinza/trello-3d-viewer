@@ -102,6 +102,27 @@
       document.getElementById('invOvlClose').onclick=closeInvView;
       document.getElementById('invBack').onclick=closeInvView;
     }
+    // причина архивации: попадёт в журнал и будет видна в списке
+    function post(path, body){
+      return fetch(WORKER+path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+        .then(function(r){ return r.json(); })
+        .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил'); return j; });
+    }
+
+    function askArchiveReason(num, done){
+      var h='<div id="arcOvl" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:97;display:flex;align-items:center;justify-content:center;padding:16px">'+
+        '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;max-width:440px;width:100%;padding:16px">'+
+        '<div style="font-weight:700;margin-bottom:6px">Архивировать счёт №'+esc(num)+'</div>'+
+        '<div class="muted" style="font-size:12px;margin-bottom:10px">Счёт останется в базе, но будет отмечен как отменённый: приглушится в списке и в карточках заказов, перестанет учитываться в суммах. У заказов и заявок снимется отметка «счёт выслан», если других действующих счетов по ним нет.</div>'+
+        '<input id="arcReason" type="text" placeholder="Причина: ошибка в позиции, клиент попросил переделать…" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:12px">'+
+        '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="arcCancel" type="button">Отмена</button>'+
+        '<button class="btn" id="arcOk" type="button" style="background:#1f6ce8;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">В архив</button></div></div></div>';
+      var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host.firstChild);
+      var close=function(){ var o=document.getElementById('arcOvl'); if(o) o.remove(); };
+      document.getElementById('arcCancel').onclick=close;
+      document.getElementById('arcOk').onclick=function(){ var r=document.getElementById('arcReason').value.trim(); close(); done(r); };
+    }
+
     function closeInvView(){ document.getElementById('invOvlHost').innerHTML=''; }
 
     // окно ЗАЯВКИ РЕМОНТА: сверху — счета, в которые она включена, ниже — сама
@@ -133,7 +154,8 @@
         var rows=(j&&j.ok&&(j.rows||j.invoices))||[];
         if(!rows.length){ el.textContent='эта заявка ещё не включена ни в один счёт'; return; }
         el.innerHTML=rows.map(function(iv){
-          return '<a href="#" class="rvInv" data-n="'+esc(iv.number)+'" style="display:inline-block;margin:0 8px 6px 0;padding:5px 11px;border:1px solid #579dff;border-radius:8px;color:#579dff;text-decoration:none">№'+esc(iv.number)+' · '+money(iv.total)+' ₸'+((iv.sent_at||iv.sentAt)?' · выслан':'')+'</a>';
+          var arch = (+iv.archived===1);
+          return '<a href="#" class="rvInv" data-n="'+esc(iv.number)+'" style="display:inline-block;margin:0 8px 6px 0;padding:5px 11px;border:1px solid '+(arch?'#6b4a4a':'#579dff')+';border-radius:8px;color:'+(arch?'#a98a8a':'#579dff')+';text-decoration:'+(arch?'line-through':'none')+';opacity:'+(arch?'.6':'1')+'">№'+esc(iv.number)+' · '+money(iv.total)+' ₸'+(arch?' · в архиве':((iv.sent_at||iv.sentAt)?' · выслан':''))+'</a>';
         }).join('');
         [].forEach.call(el.querySelectorAll('.rvInv'), function(a2){
           a2.onclick=function(e){ e.preventDefault(); openInvView('number='+encodeURIComponent(this.getAttribute('data-n'))); };
@@ -172,7 +194,8 @@
         var rows=(j&&j.ok&&(j.rows||j.invoices))||[];
         if(!rows.length){ el.textContent='счётов пока нет'; return; }
         el.innerHTML=rows.map(function(iv){
-          return '<a href="#" class="ordInv" data-n="'+esc(iv.number)+'" style="display:inline-block;margin:0 8px 8px 0;padding:6px 12px;border:1px solid #579dff;border-radius:8px;color:#579dff;text-decoration:none">№'+esc(iv.number)+' · '+money(iv.total)+' ₸'+((iv.sent_at||iv.sentAt)?' · выслан':'')+'</a>';
+          var arch = (+iv.archived===1);
+          return '<a href="#" class="ordInv" data-n="'+esc(iv.number)+'" title="'+(arch?('Счёт отменён'+(iv.archive_reason?(': '+esc(iv.archive_reason)):'')):'Открыть счёт')+'" style="display:inline-block;margin:0 8px 8px 0;padding:6px 12px;border:1px solid '+(arch?'#6b4a4a':'#579dff')+';border-radius:8px;color:'+(arch?'#a98a8a':'#579dff')+';text-decoration:'+(arch?'line-through':'none')+';opacity:'+(arch?'.6':'1')+'">№'+esc(iv.number)+' · '+money(iv.total)+' ₸'+(arch?' · в архиве':((iv.sent_at||iv.sentAt)?' · выслан':''))+'</a>';
         }).join('');
         [].forEach.call(el.querySelectorAll('.ordInv'), function(a2){
           a2.onclick=function(e){ e.preventDefault(); openInvView('number='+encodeURIComponent(this.getAttribute('data-n'))); };
@@ -610,17 +633,19 @@
              '</tr>';
           return;
         }
-        h+='<tr><td><a href="#" class="invnum" data-num="'+esc(r.number)+'" title="Показать счёт" style="color:#579dff;text-decoration:none"><b>№'+esc(r.number)+'</b></a>'+
+        h+='<tr'+(r.archived?' style="opacity:.45"':'')+'><td><a href="#" class="invnum" data-num="'+esc(r.number)+'" title="Показать счёт" style="color:#579dff;text-decoration:none"><b>№'+esc(r.number)+'</b></a>'+
            (r.sentAt?('<div style="font-size:10.5px;color:var(--green);white-space:nowrap" title="Счёт отправлен клиенту'+(r.sentTo?(' на '+esc(r.sentTo)):'')+'">📤 выслан '+esc((r.sentAt||'').slice(0,10))+'</div>'):
                      ('<div style="font-size:10.5px;color:var(--muted)">не выслан</div>'))+
-           '</td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+((+r.repairs>0)?' <span class="pill" style="background:#2b1f45;color:#c9a8ff">ремонт'+(r.repairs>1?(' ×'+r.repairs):'')+'</span>':'')+'</td>'+
+           '</td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+((+r.repairs>0)?' <span class="pill" style="background:#2b1f45;color:#c9a8ff">ремонт'+(r.repairs>1?(' ×'+r.repairs):'')+'</span>':'')+
+             (r.archived?' <span class="pill" style="background:#3a2226;color:#f3b3b3">в архиве</span>'+(r.archiveReason?(' <span class="muted" style="font-size:11px">'+esc(r.archiveReason)+'</span>'):''):'')+'</td>'+
            '<td class="num">'+(r.cards||0)+(r.repairs?' <span style="color:#c9a8ff" title="ремонтных заявок в счёте">+'+r.repairs+'Р</span>':'')+'</td>'+
            '<td class="num">'+money(r.total)+' ₸</td>'+
            '<td class="num">'+money(r.received)+' ₸</td>'+
            '<td class="num">'+(r.pct!=null?r.pct+'%':'—')+'</td>'+
            '<td style="color:'+st[1]+'">'+esc(st[0])+'</td>'+
            '<td class="muted">'+esc(r.lastPayment||'')+
-           ' <button class="btn iedit" data-id="'+r.id+'" type="button" title="Исправить счёт: номер, дата, покупатель, сумма" style="padding:2px 8px;font-size:11px">✎</button></td>'+
+           ' <button class="btn iedit" data-id="'+r.id+'" type="button" title="Исправить счёт: номер, дата, покупатель, сумма" style="padding:2px 8px;font-size:11px">✎</button>'+
+           ' <button class="btn iarch" data-id="'+r.id+'" data-num="'+esc(r.number)+'" data-on="'+(r.archived?'0':'1')+'" type="button" title="'+(r.archived?'Вернуть счёт из архива':'В архив: счёт отменяется, у заказов снимается отметка «счёт выслан»')+'" style="padding:2px 8px;font-size:11px'+(r.archived?';color:#9ee6bd;border-color:#2e5c44':'')+'">'+(r.archived?'↩':'🗄')+'</button></td>'+
            (IS_ADMIN?('<td><button class="btn idel" data-id="'+r.id+'" data-num="'+esc(r.number)+'" type="button" title="Удалить тестовый счёт из журнала безвозвратно" style="padding:2px 8px;font-size:11px;color:#e9b3b3;border-color:#5a3a3a">✕</button></td>'):'')+
            '</tr>';
       });
@@ -631,6 +656,20 @@
     function bindCommon(){
       [].forEach.call(document.querySelectorAll('[data-view]'), function(el){ el.onclick=function(){ var v=this.getAttribute('data-view'); if(v!==VIEW){ VIEW=v; load(); } }; });
       [].forEach.call(document.querySelectorAll('[data-ik]'), function(el){ el.onclick=function(){ INV_KIND=this.getAttribute('data-ik'); render(); bindCommon(); }; });
+      [].forEach.call(document.querySelectorAll('.iarch'), function(el){
+        el.onclick=function(){
+          var id=this.getAttribute('data-id'), num=this.getAttribute('data-num'), on=this.getAttribute('data-on')==='1';
+          if(!on){
+            post('/invoice-archive',{ id:+id, archived:0, byName:ME.name }).then(load)
+              .catch(function(e){ alert('Не удалось вернуть: '+(e&&e.message||e)); });
+            return;
+          }
+          askArchiveReason(num, function(reason){
+            post('/invoice-archive',{ id:+id, archived:1, reason:reason, byName:ME.name }).then(load)
+              .catch(function(e){ alert('Не удалось архивировать: '+(e&&e.message||e)); });
+          });
+        };
+      });
       [].forEach.call(document.querySelectorAll('.rnum'), function(el){
         el.onclick=function(e){ e.preventDefault(); openRepairView(this.getAttribute('data-rid')); };
       });
