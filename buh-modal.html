@@ -263,6 +263,7 @@
       if(VIEW==='invoices') return loadInvoices();
       if(VIEW==='payroll') return loadPayroll();
       if(VIEW==='repairs') return loadRepairs();
+      if(VIEW==='meals') return loadMeals();
       var b=document.getElementById('boot'); if(b) b.textContent='Загружаю заказы…';
       fetch(WORKER+'/acct-list?from='+RANGE.from+'&to='+RANGE.to)
         .then(function(r){return r.json();})
@@ -286,6 +287,77 @@
           PAY=j; render();
         })
         .catch(function(e){ app.innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+    }
+
+    var MEALS=null, MEALS_YM=(new Date()).toISOString().slice(0,7);
+    function loadMeals(){
+      var b=document.getElementById('boot'); if(b) b.textContent='Загружаю обеды…';
+      fetch(WORKER+'/meals-month?ym='+MEALS_YM).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+        MEALS=j; render();
+      }).catch(function(e){ document.getElementById('app').innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+    }
+
+    function renderMealsBody(){
+      var j=MEALS||{rows:[],totals:{},cost:{}};
+      var T=j.totals||{}, C=j.cost||{};
+      var h='<div class="muted" style="margin:-6px 0 10px">Сверка счёта столовой с табелем. «Ожидается» — сколько человек цеха было на работе в этот день (явка, опоздание, ушёл раньше). Офис и директор обеды не получают. «По счёту» вносите из бумаги или PDF от столовой — расхождения подсветятся.</div>';
+      h+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">'+
+        '<button class="btn" id="mPrev" type="button">←</button><b style="min-width:120px;text-align:center">'+esc(MEALS_YM)+'</b><button class="btn" id="mNext" type="button">→</button>'+
+        '<span class="muted">в цеху: <b style="color:var(--txt)">'+(j.shopCount||0)+'</b> чел.</span>'+
+        '<label class="muted">цена обеда <input id="mPriceMeal" type="number" min="0" step="50" value="'+(j.priceMeal||0)+'" style="width:90px"></label>'+
+        '<label class="muted">цена доставки <input id="mPriceDel" type="number" min="0" step="50" value="'+(j.priceDelivery||0)+'" style="width:90px"></label>'+
+        '<button class="btn" id="mSavePrices" type="button">Сохранить цены</button></div>';
+      h+='<div class="kpis">'+
+        '<div class="kpi"><div class="k">Обедов по табелю</div><div class="v">'+(T.expected||0)+'</div></div>'+
+        '<div class="kpi"><div class="k">По счёту столовой</div><div class="v">'+(T.billedMeals||0)+'</div></div>'+
+        '<div class="kpi'+((T.diff||0)!==0?' red':'')+'"><div class="k">Расхождение</div><div class="v">'+((T.diff||0)>0?'+':'')+(T.diff||0)+
+          ((T.daysWithDiff||0)?(' <span style="font-size:12px">· дней: '+T.daysWithDiff+'</span>'):'')+'</div></div>'+
+        '<div class="kpi"><div class="k">Доставок</div><div class="v">'+(T.billedDelivery||0)+'</div></div>'+
+        '<div class="kpi'+((C.overpay||0)>0?' red':'')+'"><div class="k">Переплата</div><div class="v">'+money(C.overpay||0)+' ₸</div></div>'+
+        '<div class="kpi"><div class="k">Сумма по счёту</div><div class="v">'+money(C.total||0)+' ₸</div></div>'+
+      '</div>';
+      if(!(j.rows||[]).length) return h+'<div class="empty">За этот месяц нет ни отметок в табеле, ни строк счёта.</div>';
+      h+='<table><thead><tr><th>Дата</th><th class="num">Ожидается</th><th class="num">По счёту</th><th class="num">Доставок</th><th class="num">Разница</th><th>Кто был в цеху</th><th>Заметка</th></tr></thead><tbody>';
+      (j.rows||[]).forEach(function(r){
+        var bad=(r.diff!=null && r.diff!==0);
+        h+='<tr'+(bad?' style="background:rgba(242,139,130,.08)"':'')+'>'+
+          '<td>'+esc(r.date.slice(8)+'.'+r.date.slice(5,7))+'</td>'+
+          '<td class="num"><b>'+r.expected+'</b></td>'+
+          '<td class="num"><input class="mMeals" data-d="'+r.date+'" type="number" min="0" style="width:70px" value="'+(r.billedMeals==null?'':r.billedMeals)+'"></td>'+
+          '<td class="num"><input class="mDel" data-d="'+r.date+'" type="number" min="0" style="width:70px" value="'+(r.billedDelivery==null?'':r.billedDelivery)+'"></td>'+
+          '<td class="num"'+(bad?' style="color:var(--red);font-weight:700"':'')+'>'+(r.diff==null?'—':((r.diff>0?'+':'')+r.diff))+'</td>'+
+          '<td class="muted" style="font-size:11.5px">'+esc((r.workers||[]).join(', '))+'</td>'+
+          '<td><input class="mNote" data-d="'+r.date+'" type="text" value="'+esc(r.note||'')+'" style="width:100%;min-width:120px"></td></tr>';
+      });
+      h+='</tbody></table>';
+      return h;
+    }
+
+    function bindMeals(){
+      var p=document.getElementById('mPrev'), n=document.getElementById('mNext');
+      var shift=function(k){ var d=new Date(MEALS_YM+'-01T00:00:00Z'); d.setUTCMonth(d.getUTCMonth()+k); MEALS_YM=d.toISOString().slice(0,7); loadMeals(); };
+      if(p) p.onclick=function(){ shift(-1); }; if(n) n.onclick=function(){ shift(1); };
+      var sp=document.getElementById('mSavePrices');
+      if(sp) sp.onclick=function(){
+        post('/meals-set',{ month:{ ym:MEALS_YM,
+          priceMeal:+document.getElementById('mPriceMeal').value||0,
+          priceDelivery:+document.getElementById('mPriceDel').value||0 }}).then(loadMeals)
+          .catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); });
+      };
+      var saveRow=function(date){
+        var meals=document.querySelector('.mMeals[data-d="'+date+'"]').value;
+        var del=document.querySelector('.mDel[data-d="'+date+'"]').value;
+        var note=document.querySelector('.mNote[data-d="'+date+'"]').value;
+        post('/meals-set',{ date:date, meals:meals===''?null:+meals, delivery:del===''?null:+del, note:note })
+          .then(loadMeals).catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); });
+      };
+      [].forEach.call(document.querySelectorAll('.mMeals,.mDel'), function(el){
+        el.onchange=function(){ saveRow(this.getAttribute('data-d')); };
+      });
+      [].forEach.call(document.querySelectorAll('.mNote'), function(el){
+        el.onblur=function(){ saveRow(this.getAttribute('data-d')); };
+      });
     }
 
     function loadInvoices(){
@@ -334,6 +406,7 @@
          '<div class="tab'+(VIEW==='invoices'?' active':'')+'" data-view="invoices">Счета на оплату</div>'+
          '<div class="tab'+(VIEW==='payroll'?' active':'')+'" data-view="payroll">Зарплаты</div>'+
          '<div class="tab'+(VIEW==='repairs'?' active':'')+'" data-view="repairs">Ремонт</div>'+
+         '<div class="tab'+(VIEW==='meals'?' active':'')+'" data-view="meals">Обеды</div>'+
          '</div>';
       h+='<div class="tabs">';
       [['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].forEach(function(p){
@@ -359,6 +432,7 @@
         bindCommon();
         return;
       }
+      if(VIEW==='meals'){ document.getElementById('app').innerHTML = head + renderMealsBody(); bindCommon(); bindMeals(); return; }
       if(VIEW==='repairs'){
         h+=renderRepairsBody();
         app.innerHTML=h;
