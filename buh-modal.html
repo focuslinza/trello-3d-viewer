@@ -432,7 +432,13 @@
         bindCommon();
         return;
       }
-      if(VIEW==='meals'){ document.getElementById('app').innerHTML = head + renderMealsBody(); bindCommon(); bindMeals(); return; }
+      if(VIEW==='meals'){
+        h+=renderMealsBody();
+        app.innerHTML=h;
+        bindCommon();
+        bindMeals();
+        return;
+      }
       if(VIEW==='repairs'){
         h+=renderRepairsBody();
         app.innerHTML=h;
