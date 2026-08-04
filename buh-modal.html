@@ -575,26 +575,32 @@
          '<label>В выходной <input class="ap" data-k="v" value="'+AP.v+'" style="width:56px;text-align:right"> %</label>'+
          '<button class="btn" id="apSave" type="button">Сохранить правила</button><span id="apMsg" class="muted"></span></div>';
       // --- окладники ---
-      var ss=(PAY.salaried||[]).filter(function(p){ return !f || p.name.toLowerCase().indexOf(f)>=0; });
+      // ведомость на ВСЕХ: сдельщики, окладники и «оклад + сдельная».
+      // paySlip приходит от нового worker.js; старый отдаёт только salaried — тогда работаем по нему
+      var ss=(PAY.paySlip||PAY.salaried||[]).filter(function(p){ return !f || p.name.toLowerCase().indexOf(f)>=0; });
       h+='<h3 style="margin:14px 0 6px">Зарплата к выдаче</h3>';
-      if(!ss.length) h+='<div class="empty">Нет окладников. Чип «Окладник» ставится в «Зарплата / Работники».</div>';
+      if(!ss.length) h+='<div class="empty">Нет начислений за период.</div>';
       else {
         h+='<div class="muted" style="margin-bottom:6px">Оклад начислен = оклад ÷ рабочие дни периода ('+(PAY.workdays||0)+') × оплачиваемые дни. Оплачиваемые дни = Σ(дни статуса × его %). Выход в выходной с отметкой «Я» оплачивается сверх нормы. Сдельная — доля по сданным заказам, та же сумма, что в разделе «Сдельная зарплата» выше (в ФОТ не задваивается). К выдаче = оклад начислен + сдельная.</div>';
         h+='<table><thead><tr><th>Работник</th><th class="num">Оклад/мес</th><th class="num">Явок</th>'+
            '<th class="num">Б/О/Н/В</th><th class="num">Оплач. дней</th>'+
            '<th class="num">Оклад начислен</th><th class="num">Сдельная</th><th class="num">К выдаче</th></tr></thead><tbody>';
         var TS={acc:0,pc:0,pay:0};
+        var TYPE={piece:'сдельная', salary:'оклад', both:'оклад + сдельная'};
         ss.forEach(function(p){
           // старый worker.js полей piece/payTotal не отдаёт — тогда считаем как раньше
           var pc = +p.piece || 0;
           var pay = (p.payTotal != null) ? p.payTotal : (p.accrued + pc);
+          var sal = (p.hasSalary !== undefined) ? p.hasSalary : (+p.salary > 0);
           TS.acc+=p.accrued; TS.pc+=pc; TS.pay+=pay;
-          h+='<tr><td>'+esc(p.name)+(p.noTimesheet?' <span style="font-size:11px;color:#e8c07d" title="В табеле за период нет ни одной отметки — начисление нулевое">⚠ табель пуст</span>':'')+'</td>'+
-             '<td class="num">'+money(p.salary)+' ₸</td>'+
+          h+='<tr><td>'+esc(p.name)+
+             ' <span class="muted" style="font-size:11px">· '+esc(TYPE[p.payType]||'')+'</span>'+
+             (p.noTimesheet&&sal?' <span style="font-size:11px;color:#e8c07d" title="В табеле за период нет ни одной отметки — начисление нулевое">⚠ табель пуст</span>':'')+'</td>'+
+             '<td class="num'+(sal?'':' muted')+'">'+(sal?(money(p.salary)+' ₸'):'—')+'</td>'+
              '<td class="num"><b>'+p.present+'</b> / '+p.workdays+'</td>'+
              '<td class="num muted">'+p.sick+' / '+p.vacation+' / '+p.absent+' / '+(p.dayoff||0)+'</td>'+
-             '<td class="num">'+(p.payDays!=null?p.payDays:p.present)+'</td>'+
-             '<td class="num">'+money(p.accrued)+' ₸</td>'+
+             '<td class="num'+(p.payDays!=null?'':' muted')+'">'+(p.payDays!=null?p.payDays:'—')+'</td>'+
+             '<td class="num'+(sal?'':' muted')+'">'+(sal?(money(p.accrued)+' ₸'):'—')+'</td>'+
              '<td class="num'+(pc?'':' muted')+'">'+(pc?(money(pc)+' ₸'):'—')+'</td>'+
              '<td class="num"><b>'+money(pay)+' ₸</b></td></tr>';
         });
@@ -604,6 +610,10 @@
            '<td class="num">'+money(TS.pc)+' ₸</td>'+
            '<td class="num"><b style="color:var(--green,#4bce97)">'+money(TS.pay)+' ₸</b></td>'+
            '</tr></tfoot></table>';
+        // ведомость обязана сходиться с ФОТ сверху; расхождение — повод разбираться, а не гадать
+        if(PAY.paySlip && T.all!=null && Math.abs(TS.pay-T.all)>1){
+          h+='<div style="color:#f28b82;font-size:12px;margin-top:6px">⚠ Итого к выдаче ('+money(TS.pay)+' ₸) не сходится с ФОТ ('+money(T.all)+' ₸). Сообщите разработчику.</div>';
+        }
       }
       return h;
     }
