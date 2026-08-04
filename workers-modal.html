@@ -80,12 +80,12 @@
           <input type="month" id="month" />
         </div>
         <div class="group">
-          <label for="workdays">Рабочих дней (будни)</label>
+          <label for="workdays">Рабочих дней</label>
           <input type="number" id="workdays" min="1" max="31" step="1" />
         </div>
         <div class="hint" id="autoHint"></div>
       </div>
-      <div class="hint" style="margin-top:8px">Дневная ставка = оклад ÷ рабочие дни. По умолчанию берутся будни месяца (пн–пт); можно поправить вручную.</div>
+      <div class="hint" style="margin-top:8px">Дневная ставка = оклад ÷ рабочие дни. Норма берётся из производственного календаря РК (праздники и переносы учтены). Правка сохраняется на сервере и действует везде: в табеле, в зарплатной ведомости и здесь.</div>
     </div>
 
     <div class="sec">
@@ -148,14 +148,13 @@
     }
 
     function fmt(n){ return (Math.round(n||0)).toLocaleString('ru-RU'); }
-    function workdaysInMonth(y, m){ // m: 1-12
-      var d=new Date(y, m-1, 1), n=0;
-      while(d.getMonth()===m-1){ var wd=d.getDay(); if(wd>=1&&wd<=5)n++; d.setDate(d.getDate()+1); }
-      return n;
-    }
+    // Норма рабочих дней НЕ считается здесь: единственный источник — сервер
+    // (/att-norm), где действует производственный календарь РК с переносами
+    // праздников плюс ручная правка. Иначе панель, табель и ведомость разошлись бы.
+    var NORM = { calendar: 0, override: null, effective: 0 };
     function currentWorkdays(){
       var v=parseInt(document.getElementById('workdays').value,10);
-      return (v && v>0) ? v : 22;
+      return (v && v>0) ? v : (NORM.effective || 22);
     }
     function recalcWages(){
       var wd=currentWorkdays();
@@ -171,6 +170,48 @@
       {key:'weld',label:'Сварка'},{key:'assembly',label:'Сборка'},{key:'montazh',label:'Монтаж'},
       {key:'repair',label:'Ремонт'} // кто чинит: попадает в список «Кто сделал» в заявках ремонта
     ];
+    // Карточка доступа работника: QR для телефона (можно распечатать как бейдж),
+    // ссылка для WhatsApp и ПИН для входа на цеховом компьютере.
+    function showMobileCard(w, url, base){
+      var h='<div id="mobOvl" style="position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto">'+
+        '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:14px;max-width:460px;width:100%;padding:18px">'+
+        '<div style="font-weight:700;font-size:16px;margin-bottom:4px">Доступ для: '+esc(w.name||'работник')+'</div>'+
+        '<div class="muted" style="font-size:12px;margin-bottom:12px">Личный кабинет в телефоне: заработок в реальном времени, отметка смены, ремонтные расчёты. Ссылка персональная.</div>'+
+        '<div style="text-align:center"><div style="background:#fff;display:inline-block;padding:10px;border-radius:12px">'+
+        '<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data='+encodeURIComponent(url)+'" width="200" height="200"></div>'+
+        '<div class="muted" style="font-size:11.5px;margin-top:6px">Наведите камеру телефона · можно распечатать как бейдж</div></div>'+
+        '<div style="margin-top:12px"><input id="mobUrl" type="text" readonly value="'+esc(url)+'" style="width:100%;box-sizing:border-box;font-size:11.5px"></div>'+
+        '<div style="margin-top:6px"><button class="btn" id="mobCopy" type="button">📋 Скопировать ссылку</button> <a class="btn" id="mobWa" target="_blank" style="text-decoration:none">Отправить в WhatsApp</a></div>'+
+        '<hr style="border:none;border-top:1px solid var(--line);margin:16px 0">'+
+        '<div style="font-weight:700;margin-bottom:4px">Запасной вход: логин и пароль</div>'+
+        '<div class="muted" style="font-size:12px;margin-bottom:8px">Основной вход в цеху — по QR (бейдж или телефон). Логин с паролем нужны, если телефон разряжен или бейдж потерян.</div>'+
+        '<input id="mobLogin" type="text" placeholder="логин, напр. daniyar" style="width:170px">'+
+        ' <input id="mobPass" type="text" placeholder="пароль" style="width:150px">'+
+        ' <button class="btn" id="mobPinSave" type="button">Сохранить</button> <span id="mobPinMsg" class="muted"></span>'+
+        '<div style="margin-top:16px;text-align:right"><button class="btn" id="mobClose" type="button">Закрыть</button></div>'+
+        '</div></div>';
+      var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host.firstChild);
+      document.getElementById('mobClose').onclick=function(){ var o=document.getElementById('mobOvl'); if(o) o.remove(); };
+      document.getElementById('mobCopy').onclick=function(){
+        var i=document.getElementById('mobUrl'); i.select();
+        if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(i.value);
+        else document.execCommand('copy');
+        this.textContent='✓ Скопировано';
+      };
+      document.getElementById('mobWa').href='https://wa.me/?text='+encodeURIComponent('Ваш личный кабинет MetalShop: '+url);
+      document.getElementById('mobPinSave').onclick=function(){
+        var lg=document.getElementById('mobLogin').value.trim();
+        var pw=document.getElementById('mobPass').value;
+        var msg=document.getElementById('mobPinMsg');
+        if(!lg){ msg.textContent='Укажите логин'; return; }
+        msg.textContent='Сохраняю…';
+        fetch(WORKER+'/worker-creds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workerId:w.id, login:lg, password:pw||undefined})})
+          .then(function(r){return r.json();})
+          .then(function(j){ msg.textContent = (j&&j.ok) ? ('Сохранено ✓ логин: '+j.login) : ('Ошибка: '+((j&&j.error)||'?')); })
+          .catch(function(e){ msg.textContent='Сеть: '+(e&&e.message||e); });
+      };
+    }
+
     function stagesHtml(sel){
       sel = sel || [];
       return STAGE_GROUPS.map(function(g){
@@ -313,9 +354,9 @@
           .then(function(j){
             btn.disabled=false;
             if(!j||!j.ok){ alert('Не получилось: '+((j&&j.error)||'?')); return; }
-            var url = window.location.href.replace(/[^/]*(\?.*)?$/,'') + 'mobile.html#mt=' + j.token;
-            function done(){ prompt('Ссылка для '+(w.name||'работника')+' — отправьте её в WhatsApp/Telegram. Она персональная, работает в любом браузере телефона:', url); }
-            if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(done, done); } else done();
+            var base = window.location.href.replace(/[^/]*(\?.*)?$/,'');
+            var url = base + 'mobile.html#mt=' + j.token;
+            showMobileCard(w, url, base);
           })
           .catch(function(e){ btn.disabled=false; alert('Сеть: '+(e&&e.message||e)); });
       });
@@ -444,21 +485,59 @@
         }).catch(function(e){ setMsg('Ошибка: '+(e&&e.message||e)); });
     }
 
-    // month / workdays controls
+    // month / workdays controls — норма тянется с сервера и туда же пишется
     (function initMonth(){
       var now=new Date();
       var mEl=document.getElementById('month');
+      var wdEl=document.getElementById('workdays');
+      var hintEl=document.getElementById('autoHint');
+      var saveTimer=null;
       mEl.value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-      function applyAuto(){
-        var parts=mEl.value.split('-'); var y=+parts[0], m=+parts[1];
-        var auto=workdaysInMonth(y,m);
-        document.getElementById('workdays').value = auto;
-        document.getElementById('autoHint').textContent = 'авто: '+auto+' будних дней';
-        recalcWages();
+
+      function drawHint(saving){
+        if(saving){ hintEl.innerHTML='<span style="color:#9fadbc">сохраняю…</span>'; return; }
+        if(NORM.override!=null){
+          hintEl.innerHTML='<span style="color:#e8c07d">изменено вручную</span> · по календарю РК '+NORM.calendar+
+            ' <a href="#" id="normReset" style="color:#4f7cff">вернуть</a>';
+          var rl=document.getElementById('normReset');
+          if(rl) rl.onclick=function(e){ e.preventDefault(); wdEl.value=''; pushNorm(null); };
+        } else {
+          hintEl.innerHTML='по производственному календарю РК: '+NORM.calendar+' раб. дн.';
+        }
       }
-      mEl.addEventListener('change', applyAuto);
-      document.getElementById('workdays').addEventListener('input', recalcWages);
-      applyAuto();
+      function pullNorm(){
+        if(!WORKER){ hintEl.textContent='нет адреса сервера — норма недоступна'; return; }
+        hintEl.textContent='загружаю норму…';
+        fetch(WORKER+'/att-norm?ym='+encodeURIComponent(mEl.value))
+          .then(function(r){return r.json();})
+          .then(function(j){
+            if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+            NORM={calendar:j.calendar, override:j.override, effective:j.effective};
+            wdEl.value=NORM.effective; drawHint(false); recalcWages();
+          })
+          .catch(function(e){ hintEl.textContent='норму получить не удалось: '+(e&&e.message||e); });
+      }
+      function pushNorm(days){
+        if(!WORKER) return;
+        drawHint(true);
+        fetch(WORKER+'/att-norm-set',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({ym:mEl.value, days:days})})
+          .then(function(r){return r.json();})
+          .then(function(j){
+            if(!j||!j.ok) throw new Error((j&&j.error)||'не сохранилось');
+            NORM={calendar:j.calendar, override:j.override, effective:j.effective};
+            wdEl.value=NORM.effective; drawHint(false); recalcWages();
+          })
+          .catch(function(e){ hintEl.innerHTML='<span style="color:#f28b82">не сохранилось: '+esc(e&&e.message||e)+'</span>'; });
+      }
+      mEl.addEventListener('change', pullNorm);
+      wdEl.addEventListener('input', function(){
+        recalcWages();                                  // превью ставки сразу
+        clearTimeout(saveTimer);
+        var v=parseInt(wdEl.value,10);
+        saveTimer=setTimeout(function(){ pushNorm((v&&v>0)?v:null); }, 700);
+      });
+      pullNorm();
     })();
 
     document.getElementById('showDeleted').addEventListener('change', function(){ loadWorkers(); });
