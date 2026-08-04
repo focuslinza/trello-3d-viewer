@@ -208,7 +208,9 @@
   function loadAllOrders(){
     var pOrders = fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
       return ((j&&j.rows)||[]).map(function(row){
-        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'' };
+        // taxIncluded: старые заказы считались С НАЛОГОМ внутри суммы — к ним
+        // множитель поставщика применять нельзя, иначе налог начислится дважды
+        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0) };
       });
     }).catch(function(){ return []; });
     var pRepairs = fetch(WORKER+'/repair-list?full=1').then(function(r){return r.json();}).then(function(j){
@@ -302,7 +304,8 @@
   }); }
   function hiddenOrders(){ return ALL_ORDERS.filter(function(o){ return o.hidden; }); }
   function selectedOrders(){ return clientOrders().filter(function(o){return o.checked;}); }
-  function grandTotal(){ var K=SUP_TAX[supplierKey]||1; return selectedOrders().reduce(function(s,o){return s+Math.ceil(o.total*K-1e-9);},0) + validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)*K-1e-9); },0); }
+  function kFor(o){ return (o && o.taxIncluded) ? 1 : (SUP_TAX[supplierKey]||1); }
+  function grandTotal(){ var K=SUP_TAX[supplierKey]||1; return selectedOrders().reduce(function(s,o){return s+Math.ceil(o.total*kFor(o)-1e-9);},0) + validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)*K-1e-9); },0); }
   function extrasCeilTotal(){ return validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)-1e-9); },0); }
 
   function render(){
@@ -382,7 +385,7 @@
               '<option value="0.5"'+((+o.engCoef||0)===0.5?' selected':'')+'>доработка +50%</option>'+
               '<option value="1"'+((+o.engCoef||0)===1?' selected':'')+'>новый продукт +100%</option>'+
             '</select></td>')+
-          '<td class="num">'+money(o.total*(SUP_TAX[supplierKey]||1))+' ₸</td>'+
+          '<td class="num">'+money(o.total*kFor(o))+(o.taxIncluded?' <span class="muted" title="Этот заказ посчитан со включённым налогом — повторно налог не добавляется">₸ (налог внутри)</span>':' ₸')+'</td>'+
           '<td style="white-space:nowrap"><button class="btn ghost paybtn" data-id="'+esc(o.cardId)+'" type="button" title="Клиент оплатил этот заказ">оплачен</button>'+(o.isRepair?'':' <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" title="Убрать заказ из списка (не оплата)">убрать</button>')+'</td>'+
         '</tr>';
       });
@@ -588,7 +591,7 @@
     var items = selectedOrders().map(function(o){
       var qty=Math.max(1,o.qty||1);
       var nm = o.name + (o.personName ? ' ('+o.personName+')' : '');
-      var c = ceilLine(qty, (o.total/qty) * K);
+      var c = ceilLine(qty, (o.total/qty) * kFor(o));
       return { code:o.number||'', name:nm, qty:qty, unit:'Услуга', price:c.price, cardId:o.cardId };
     });
     validExtras().forEach(function(x){
