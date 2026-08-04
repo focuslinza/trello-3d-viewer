@@ -244,7 +244,12 @@
       ? (sumOps+matSum+compMat+compLabor+K4+L4+SC4+J4)
       : (sumOps+compLabor+K4+L4+SC4+J4);
     var urgency=+inp.urgency||0;
-    var C7=urgency>0 ? (C12/urgency)*1.01*1.01 : 0;
+    // ×1.01×1.01 (+2,01%) из исходного Excel убраны по решению Асхата (08.2026):
+    // формула честная — «работы ÷ дни», без страховочных накруток.
+    // Карточки со старой базой (engBaseMode:'order') сохраняют прежний множитель,
+    // чтобы уже выставленные счета не менялись при серверных пересчётах.
+    var urgMult=(inp.engBaseMode==='order') ? 1.01*1.01 : 1;
+    var C7=urgency>0 ? (C12/urgency)*urgMult : 0;
     if(C7)line.push({group:'urgency',section:'СРОЧНОСТЬ',name:(urgency===1?'Срочность 1 день':'Срочность 2 дня'),lineTotal:C7,worker:null});
 
     // инженерные = (C7 + ops + шлейф + compLabor + монтаж) × coef
