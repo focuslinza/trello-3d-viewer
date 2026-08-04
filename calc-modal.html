@@ -732,20 +732,17 @@
         (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
         SAVED_ENG = (i.engCoef!=null) ? (+i.engCoef||0) : 0;
-        // расчёт без признака режима — значит сделан до перехода на новую базу
+        // расчёт без признака режима — значит сделан до перехода на новую базу.
+        // Режим влияет только на формулы; в интерфейсе о нём не говорим —
+        // техническая справка про базы путала инженеров (решение Асхата, 08.2026).
         ENG_BASE_MODE = (i.engBaseMode==='unit') ? 'unit' : 'order';
-        if(SAVED_ENG>0 || ENG_BASE_MODE==='order'){
+        if(SAVED_ENG>0){
           var badge=document.getElementById('invBadge');
           if(!badge){ badge=document.createElement('div'); badge.id='invBadge';
+            badge.style.cssText='margin:6px 0;padding:6px 10px;background:#2b3a2b;border:1px solid #3d5c3d;border-radius:8px;font-size:12.5px;color:#a8d5a8;display:inline-block';
             var pp=document.querySelector('.params'); if(pp&&pp.parentNode) pp.parentNode.insertBefore(badge, pp);
           }
-          var legacy = (ENG_BASE_MODE==='order');
-          badge.style.cssText='margin:6px 0;padding:6px 10px;border-radius:8px;font-size:12.5px;display:inline-block;'+
-            (legacy?'background:#3a2f1a;border:1px solid #5c4a2e;color:#e8c07d':'background:#2b3a2b;border:1px solid #3d5c3d;color:#a8d5a8');
-          badge.textContent = (SAVED_ENG>0
-              ? 'Степень изобретения: +'+Math.round(SAVED_ENG*100)+'% (назначает руководство в «Счёте на оплату»)'
-              : 'Степень изобретения не назначена')
-            + (legacy ? ' · СТАРАЯ БАЗА: надбавка считалась от всех работ всего тиража. Карточка оставлена как есть — пересчёт изменил бы уже посчитанный счёт.' : '');
+          badge.textContent='Степень изобретения: +'+Math.round(SAVED_ENG*100)+'% (назначает руководство в «Счёте на оплату»)';
         }
         if(i.paintInShop!=null) document.getElementById('paintMode').value = i.paintInShop ? 'shop' : 'outside';
         document.getElementById('noShleifCut').checked = !!i.noShleifCut;
