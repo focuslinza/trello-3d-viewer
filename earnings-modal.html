@@ -128,10 +128,10 @@
       if(!stages.length){
         html+='<div class="muted">В этом заказе нет этапов с работами.</div>';
       } else {
-        html+='<div class="muted" style="margin-bottom:8px">Выберите исполнителя по каждому этапу/работе. «По умолчанию» — закрепить работника для будущих заказов. Доля работника по каждому виду работ настраивается в Панели руководителя → «Цены и коэффициенты». Источник: <b>авто</b> (кто двигал карточку), <b>умолч.</b> (закрепление), <b>вручную</b> (выбрали вы).</div>';
+        html+='<div class="muted" style="margin-bottom:8px">Выберите исполнителя по каждому этапу/работе. «По умолчанию» — закрепить работника для будущих заказов. Доля работника по каждому виду работ настраивается в Панели руководителя → «Цены и коэффициенты». Источник: <b>маршрут</b> (кого выбрали в маршруте на карточке), <b>умолч.</b> (закрепление), <b>вручную</b> (выбрали здесь).</div>';
         html+='<table><thead><tr><th>Этап / работа</th><th class="num">Стоимость</th><th>Исполнитель</th><th class="num">Заработок</th><th class="num">Время / выработка</th></tr></thead><tbody>';
         stages.forEach(function(s){
-          var srcLbl = s.source==='auto'?'<span class="src">авто</span>': s.source==='default'?'<span class="src">умолч.</span>': s.source==='manual'?'<span class="src man">вручную</span>':'<span class="src none">нет</span>';
+          var srcLbl = s.source==='route'?'<span class="src">маршрут</span>': s.source==='default'?'<span class="src">умолч.</span>': s.source==='manual'?'<span class="src man">вручную</span>':'<span class="src none">нет</span>';
           var pool=workersFor(unitGroup(s.key));
           var ids = s.assigneeIds || (s.assigneeId ? [s.assigneeId] : []);
           function optsFor(sel){ return '<option value="">— выбрать —</option>'+pool.map(function(w){ return '<option value="'+w.id+'"'+(w.id===sel?' selected':'')+'>'+esc(w.name)+'</option>'; }).join(''); }
@@ -163,7 +163,7 @@
           var earnCell = s.paintOutside ? '<span class="muted">на стороне</span>'
             : (ids.length ? (fmt(s.earned)+' ₸'+(ids.length>1?('<div class="stages">по '+fmt(s.earned/ids.length)+' ₸ каждому из '+ids.length+'</div>'):'')) : '<span class="muted">—</span>');
           html+='<tr>'+
-            '<td>'+esc(s.label||s.key)+'<div class="stages">'+srcLbl+' · доля '+shareLbl+(s.autoName?(' · двигал: '+esc(s.autoName)):'')+'</div>'+paintToggle+engInfo+'</td>'+
+            '<td>'+esc(s.label||s.key)+'<div class="stages">'+srcLbl+' · доля '+shareLbl+'</div>'+paintToggle+engInfo+'</td>'+
             '<td class="num">'+fmt(s.cost)+' ₸</td>'+
             '<td>'+selects+
               '<label class="chk" style="margin-top:4px"><input type="checkbox" class="def" data-stage="'+s.key+'"'+defChecked+'> по умолчанию</label></td>'+
