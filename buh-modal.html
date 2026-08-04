@@ -19,6 +19,16 @@
     input[type=text]{flex:1;min-width:180px}
     .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 14px;font-size:13px;cursor:pointer}
     .btn:hover{border-color:var(--blue)}
+    .btn.green{background:#1c3329;color:var(--green);border-color:#2e5c44;font-weight:600}
+    .btn.green:hover{border-color:var(--green)}
+    .mnav{display:flex;align-items:center;gap:6px;margin-left:4px}
+    .mnav .arw{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);
+               padding:5px 11px;font-size:15px;line-height:1;cursor:pointer;user-select:none}
+    .mnav .arw:hover{border-color:var(--blue)}
+    .mnav .arw.off{opacity:.35;cursor:default;pointer-events:none}
+    .mnav .lbl{min-width:150px;text-align:center;font-size:13px;font-weight:600;
+               background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+    .mnav .lbl.on{border-color:var(--blue);background:#22304d}
     .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0 14px}
     .kpi{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
     .kpi .k{font-size:11px;color:var(--muted);text-transform:uppercase}
@@ -250,9 +260,30 @@
       });
     }
 
+    var MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    // отдельная навигация по месяцам — как в «Моём заработке».
+    // Хранится своим состоянием, чтобы пресеты «Квартал/Год» её не сбивали.
+    var NAVM={ y:(new Date()).getFullYear(), m:(new Date()).getMonth() };
+    function isThisMonth(){ var n=new Date(); return NAVM.y===n.getFullYear() && NAVM.m===n.getMonth(); }
+    function applyMonth(){
+      var n=new Date();
+      var first=new Date(NAVM.y, NAVM.m, 1);
+      // текущий месяц не показываем «вперёд» — конец периода сегодня
+      var last=isThisMonth() ? n : new Date(NAVM.y, NAVM.m+1, 0);
+      RANGE.from=fmtDate(first); RANGE.to=fmtDate(last); RANGE.preset='month';
+      load();
+    }
+    function shiftMonth(d){
+      if(d>0 && isThisMonth()) return;          // дальше текущего месяца не идём
+      NAVM.m+=d;
+      if(NAVM.m<0){ NAVM.m=11; NAVM.y--; }
+      if(NAVM.m>11){ NAVM.m=0; NAVM.y++; }
+      applyMonth();
+    }
+
     function applyPreset(key){
       var n=new Date(), s;
-      if(key==='month') s=new Date(n.getFullYear(), n.getMonth(), 1);
+      if(key==='month'){ NAVM.y=n.getFullYear(); NAVM.m=n.getMonth(); s=new Date(n.getFullYear(), n.getMonth(), 1); }
       else if(key==='quarter') s=new Date(n.getFullYear(), Math.floor(n.getMonth()/3)*3, 1);
       else if(key==='year') s=new Date(n.getFullYear(), 0, 1);
       else s=new Date(2020,0,1);
@@ -413,11 +444,16 @@
       [['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].forEach(function(p){
         h+='<div class="tab'+(RANGE.preset===p[0]?' active':'')+'" data-preset="'+p[0]+'">'+p[1]+'</div>';
       });
+      h+='<div class="mnav">'+
+         '<div class="arw" id="mPrev" title="Предыдущий месяц">‹</div>'+
+         '<div class="lbl'+(RANGE.preset==='month'?' on':'')+'" id="mLbl" title="Нажмите, чтобы показать этот месяц целиком">'+MONTHS[NAVM.m]+' '+NAVM.y+'</div>'+
+         '<div class="arw'+(isThisMonth()?' off':'')+'" id="mNext" title="'+(isThisMonth()?'Это текущий месяц':'Следующий месяц')+'">›</div>'+
+         '</div>';
       h+='</div>';
       h+='<div class="filters">'+
          '<input type="date" id="fromD" value="'+RANGE.from+'"><span class="muted">—</span>'+
          '<input type="date" id="toD" value="'+RANGE.to+'">'+
-         '<button class="btn" id="applyR" type="button">Применить</button>'+
+         '<button class="btn green" id="applyR" type="button">Применить</button>'+
          '<input type="text" id="q" placeholder="Поиск: №, заказ, клиент…" value="'+esc(FILTER)+'">'+
          '<label class="f"><input type="checkbox" id="onlyOpen"'+(ONLY_OPEN?' checked':'')+'> только незакрытые</label>'+
          '</div>';
@@ -793,6 +829,10 @@
         document.getElementById('riX').onclick=back;
       };
       [].forEach.call(document.querySelectorAll('[data-preset]'), function(el){ el.onclick=function(){ applyPreset(this.getAttribute('data-preset')); }; });
+      var mp=document.getElementById('mPrev'), mn=document.getElementById('mNext'), ml=document.getElementById('mLbl');
+      if(mp) mp.onclick=function(){ shiftMonth(-1); };
+      if(mn) mn.onclick=function(){ shiftMonth(1); };
+      if(ml) ml.onclick=function(){ applyMonth(); };
       var ap=document.getElementById('applyR');
       if(ap) ap.onclick=function(){
         var f=document.getElementById('fromD').value, t2=document.getElementById('toD').value;
