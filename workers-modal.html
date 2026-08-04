@@ -297,6 +297,9 @@
         '<label title="Роялти от работ остального тиража. Пусто = как основной %.">% с тиража (2-й и далее) '+
           '<input class="engTirPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(FIN.engTiragePercent!=null?FIN.engTiragePercent:'')+'" placeholder="= осн.">'+
         '</label>'+
+        '<label title="ЛИЧНЫЙ процент этого инженера от строки «Срочность» заказа. Клиент платит наценку за спешку — часть по решению руководства идёт проектировщику. У каждого инженера свой процент; 0 или пусто — не платить.">Доля инженеру при срочности, % '+
+          '<input class="engUrgPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(w.urgency_percent>0?w.urgency_percent:'')+'" placeholder="0">'+
+        '</label>'+
         '<label title="Сколько процентов от этапа «Степень изобретения» (начисляется клиенту в смете) получает инженер как сдельную. По умолчанию 40%.">от «Степени изобретения», % '+
           '<input class="engInvPct" type="number" min="0" max="100" step="1" style="width:70px" value="'+(FIN.engInventionShare!=null?FIN.engInventionShare:40)+'">'+
         '</label><span class="muted" style="font-size:11.5px">копийность определяется автоматически: Σ деталей резки ÷ число DXF на карточке; все ставки меняются руководством в любой момент</span>';
@@ -436,7 +439,7 @@
       setMsg('Сохранение…');
       return fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })(), urgencyPercent:(function(){ var el=tr.querySelector('.engUrgPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){

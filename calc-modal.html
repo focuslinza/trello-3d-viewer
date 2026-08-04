@@ -5,7 +5,7 @@
   <title>Калькулятор стоимости</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./calc-engine.js?v=19"></script>
+  <script src="./calc-engine.js?v=20"></script>
   <style>
     html[data-color-mode="light"] { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
     html[data-color-mode="dark"]  { --bg:#1d2125; --txt:#c7d1db; --muted:#9fadbc; --chip:#22272b; --line:#3c4149; --card:#22272b; }
@@ -294,6 +294,9 @@
         // степень изобретения назначает РУКОВОДСТВО в «Счёте на оплату»; здесь только
         // сохранённое значение — пересохранение инженером его не сбрасывает
         engCoef:SAVED_ENG,
+        engBaseMode:ENG_BASE_MODE,
+        engUnits:dxfUnits(),
+        dxfFiles:dxfFilesForEngine(),
         // налог добавляется в «Счёте на оплату» при выборе компании; расчёт — без налога
         taxRate:0,
         paintInShop:document.getElementById('paintMode').value==='shop',
@@ -303,6 +306,41 @@
     }
 
     var SAVED_ENG=0; // степень изобретения (назначается в счёте руководством)
+    // Режим базы надбавки: 'unit' — резка+гибка одного изделия (правило с 08.2026),
+    // 'order' — прежняя база (все работы всего тиража). У новой карточки — 'unit';
+    // у ранее посчитанной остаётся 'order', чтобы выставленный счёт не поехал.
+    var ENG_BASE_MODE='unit';
+    // КОПИЙНОСТЬ — сколько раз воспроизведено изделие. Отдельного поля нет:
+    // единственный источник — quantity, проставленное по каждому DXF в «DXF / Раскрой».
+    // Берём наибольший общий делитель количеств, а не среднее: если на изделие идёт
+    // деталь A ×2 и деталь B ×1, при заказе 5 штук количества будут 10 и 5 —
+    // среднее дало бы 8, НОД даёт верные 5.
+    // Случай, когда все детали входят по 2 шт (10 и 10 при заказе 5), из одних
+    // количеств не выводится ничем — там НОД покажет 10. Это завышение делителя,
+    // то есть занижение доли первого изделия; если такие заказы пойдут часто,
+    // придётся вернуть ручное поле количества.
+    // пофайловые данные для движка: копии + объёмы резки/гибки файла (на весь заказ)
+    function dxfFilesForEngine(){
+      var out=[];
+      Object.keys(dxfMetrics||{}).forEach(function(k){
+        var m=dxfMetrics[k]||{}; var q=Math.max(1,Math.round(+m.quantity||1)); var th=+m.thicknessMm||0;
+        var ops=[];
+        if(m.cutLenM>0){
+          if(m.tube){ var thb=nearestTh(th)||th||1.5; ops.push({kind:'cutTube',thickness:thb,qty:m.cutLenM*q}); }
+          else if(th>0){ ops.push({kind:'cut',thickness:nearestTh(th),qty:m.cutLenM*q}); }
+        }
+        if(m.bendCount>0 && th>0){ ops.push({kind:(m.tube?'bendTube':'bend'),thickness:nearestTh(th),qty:m.bendCount*q}); }
+        if(ops.length) out.push({name:(m.fileName||k), copies:q, ops:ops});
+      });
+      return out;
+    }
+    function dxfUnits(){
+      var keys=Object.keys(dxfMetrics||{}); if(!keys.length) return 1;
+      function g2(a,b){ while(b){ var t=a%b; a=b; b=t; } return a; }
+      var acc=0;
+      keys.forEach(function(k){ acc = g2(acc, Math.max(1, Math.round(+(dxfMetrics[k]||{}).quantity||1))); });
+      return Math.max(1, acc);
+    }
     var lastResult=null;
     function recompute(){
       var inp=gather();
@@ -359,13 +397,13 @@
     if(MODE_REPAIR){
       // в ремонтах инженеры обычно не участвуют — по умолчанию 0%
       // (сохранённый расчёт при загрузке всё равно вернёт своё значение)
-      SAVED_ENG=0;
+      SAVED_ENG=0; ENG_BASE_MODE='unit';
       // поля процентов шлейфовки из калькулятора убраны — глобальные ставки в «Ценах и коэффициентах»
     }
     if(MODE_REPAIR){
       // в ремонтах инженеры обычно не участвуют — по умолчанию 0%
       // (сохранённый расчёт с другим значением всё равно восстановится из базы)
-      SAVED_ENG=0;
+      SAVED_ENG=0; ENG_BASE_MODE='unit';
     }
 
     function loadContext(){
@@ -383,7 +421,7 @@
         ctx._src='repair';
         // в ремонтах инженеры почти не участвуют — по умолчанию 0%
         // (если в сохранённом расчёте выбран другой процент, restore() вернёт его)
-        SAVED_ENG=0;
+        SAVED_ENG=0; ENG_BASE_MODE='unit';
         // шлейф и налог в ремонте не показываем — считаются по значениям по умолчанию
         // (шлейф 50% от сварки, налог из «Цены и коэффициенты»); в расчёте они участвуют как обычно
         var sf=document.getElementById('shleifFld'); if(sf) sf.style.display='none';
@@ -694,13 +732,20 @@
         (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
         SAVED_ENG = (i.engCoef!=null) ? (+i.engCoef||0) : 0;
-        if(SAVED_ENG>0){
+        // расчёт без признака режима — значит сделан до перехода на новую базу
+        ENG_BASE_MODE = (i.engBaseMode==='unit') ? 'unit' : 'order';
+        if(SAVED_ENG>0 || ENG_BASE_MODE==='order'){
           var badge=document.getElementById('invBadge');
           if(!badge){ badge=document.createElement('div'); badge.id='invBadge';
-            badge.style.cssText='margin:6px 0;padding:6px 10px;background:#2b3a2b;border:1px solid #3d5c3d;border-radius:8px;font-size:12.5px;color:#a8d5a8;display:inline-block';
             var pp=document.querySelector('.params'); if(pp&&pp.parentNode) pp.parentNode.insertBefore(badge, pp);
           }
-          badge.textContent='Степень изобретения: +'+Math.round(SAVED_ENG*100)+'% (назначает руководство в «Счёте на оплату»)';
+          var legacy = (ENG_BASE_MODE==='order');
+          badge.style.cssText='margin:6px 0;padding:6px 10px;border-radius:8px;font-size:12.5px;display:inline-block;'+
+            (legacy?'background:#3a2f1a;border:1px solid #5c4a2e;color:#e8c07d':'background:#2b3a2b;border:1px solid #3d5c3d;color:#a8d5a8');
+          badge.textContent = (SAVED_ENG>0
+              ? 'Степень изобретения: +'+Math.round(SAVED_ENG*100)+'% (назначает руководство в «Счёте на оплату»)'
+              : 'Степень изобретения не назначена')
+            + (legacy ? ' · СТАРАЯ БАЗА: надбавка считалась от всех работ всего тиража. Карточка оставлена как есть — пересчёт изменил бы уже посчитанный счёт.' : '');
         }
         if(i.paintInShop!=null) document.getElementById('paintMode').value = i.paintInShop ? 'shop' : 'outside';
         document.getElementById('noShleifCut').checked = !!i.noShleifCut;
@@ -769,7 +814,17 @@
           cardId:ctx.cardId, cardName:ctx.cardName, cardNumber:ctx.cardNumber, boardId:ctx.boardId,
           companyId:ctx.companyId, companyName:ctx.companyName, objectName:ctx.objectName, status:ctx.status,
           subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total, currency:'KZT',
-          lineItems:res.lineItems, inputs:inp, stageCosts:stageCosts
+          lineItems:res.lineItems, inputs:(function(){
+            // рядом с исходными данными кладём ГОТОВЫЕ пофайловые цены штук
+            // (по оптовым ставкам этого заказа) и сумму строки «Срочность»:
+            // по ним зарплатный модуль считает долю инженера без пересчёта движком
+            inp.engFilesCalc=(res.engFiles||[]).map(function(x){return {name:x.name,copies:x.copies,unitCost:Math.round(x.unitCost)};});
+            inp.urgencyAmount=Math.round(res.urgency||0);
+            return inp;
+          })(), stageCosts:stageCosts,
+          // копийность считаем здесь: только у калькулятора есть quantity по DXF-файлам.
+          // Сервер сам её не выведет — у него в операциях только метры и штуки.
+          unitsQty:dxfUnits()
         };
         return fetch(WORKER+'/calc-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
           .then(function(r){ return r.json(); });

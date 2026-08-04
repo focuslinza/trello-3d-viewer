@@ -171,7 +171,7 @@
     inp=inp||{};
     var operations=inp.operations||[], materials=inp.materials||[], components=inp.components||[];
     var line=[];
-    var sumOps=0, weldSSsum=0, weldBlackSum=0, cutSum=0;
+    var sumOps=0, weldSSsum=0, weldBlackSum=0, cutSum=0, dxfOpsSum=0, dxfRates={};
 
     operations.forEach(function(op){
       var k=KIND[op.kind]; if(!k)return;
@@ -183,6 +183,7 @@
       var r7=base*(1+opOst)*(1+opRah);
       sumOps+=r7;
       if(k.t==='SS')weldSSsum+=r7; if(k.t==='BL')weldBlackSum+=r7; if(k.sec==='РЕЗКА')cutSum+=r7;
+      if(k.t==='CUT'||k.t==='BEND'){ dxfOpsSum+=r7; dxfRates[k.t+'|'+th]=r7/qty; }  // эффективная ставка уже ОПТОВАЯ: тариф взят от суммарного объёма заказа
       line.push({group:'op',kind:op.kind,section:k.sec,name:k.lbl,thickness:(k.t==='FLAT'?0:th),qty:qty,unit:rate,base:base,ostatki:opOst,rashod:opRah,lineTotal:r7,worker:null});
     });
 
@@ -233,14 +234,47 @@
     if(J4)line.push({group:'montazh',section:'МОНТАЖ',name:'Монтаж',lineTotal:J4,worker:null});
 
     // срочность C : base = everything except urgency; C7 = (base/days)×1.01×1.01
-    var C12=sumOps+matSum+compMat+compLabor+K4+L4+SC4+J4;
+    // База срочности — ТОЛЬКО РАБОТЫ: операции + работа по комплектующим + шлейфовки
+    // + монтаж. Материалы и стоимость самих комплектующих исключены (правило с 08.2026):
+    // спешит цех, а не железо — наценка за скорость не должна расти от цены металла.
+    // Карточки со старой базой (engBaseMode:'order' — посчитаны до перехода) продолжают
+    // считать срочность по-старому, с материалами: их счета уже выставлены и не должны
+    // меняться даже при серверном пересчёте (например, при назначении степени изобретения).
+    var C12=(inp.engBaseMode==='order')
+      ? (sumOps+matSum+compMat+compLabor+K4+L4+SC4+J4)
+      : (sumOps+compLabor+K4+L4+SC4+J4);
     var urgency=+inp.urgency||0;
     var C7=urgency>0 ? (C12/urgency)*1.01*1.01 : 0;
     if(C7)line.push({group:'urgency',section:'СРОЧНОСТЬ',name:(urgency===1?'Срочность 1 день':'Срочность 2 дня'),lineTotal:C7,worker:null});
 
     // инженерные = (C7 + ops + шлейф + compLabor + монтаж) × coef
+    // СТЕПЕНЬ ИЗОБРЕТЕНИЯ. База — работы ОДНОГО изделия и только те, что вытекают
+    // из разбора DXF (резка и гибка). Чертёж делается один раз, поэтому тираж базу
+    // не увеличивает; сварка, шлейфовки, монтаж, срочность и комплектующие к
+    // изобретательской части отношения не имеют — инженер получает с них свои 10%/2%.
+    // engBaseMode:'order' — прежняя база (все работы всего тиража). Оставлена ради
+    // карточек, посчитанных до перехода: их счета не должны поехать задним числом.
     var engCoef=(inp.engCoef!=null?+inp.engCoef:0);
-    var G3=C7+sumOps+K4+L4+SC4+compLabor+J4;
+    var engUnits=Math.max(1,Math.round(+inp.engUnits||1));
+    var engBaseMode=(inp.engBaseMode==='order')?'order':'unit';
+    // ПОФАЙЛОВЫЙ РАСЧЁТ. inp.dxfFiles = [{copies, ops:[{kind,thickness,qty}]}], qty —
+    // суммарный объём файла на весь заказ (метры реза / число гибов, с копиями).
+    // Цена ШТУКИ файла = объём × эффективная ставка (она оптовая: тариф от суммарного
+    // объёма заказа) ÷ копии. Сначала опт удешевляет штуку, потом от неё идут доли.
+    var engFiles=[];
+    (inp.dxfFiles||[]).forEach(function(fx){
+      if(!fx) return;
+      var copies=Math.max(1,Math.round(+fx.copies||1)), tot=0;
+      (fx.ops||[]).forEach(function(o){
+        var k2=KIND[o.kind]; if(!k2||(k2.t!=='CUT'&&k2.t!=='BEND')) return;
+        var rate=dxfRates[k2.t+'|'+(+o.thickness||0)];
+        if(rate>0) tot+=rate*(+o.qty||0);
+      });
+      if(tot>0) engFiles.push({copies:copies, unitCost:tot/copies, name:fx.name||''});
+    });
+    var unitSum=engFiles.reduce(function(a,x){return a+x.unitCost;},0);
+    // База надбавки: сумма цен ШТУК по файлам; без пофайловых данных — резка+гибка÷копийность
+    var G3=(engBaseMode==='order')?(C7+sumOps+K4+L4+SC4+compLabor+J4):(unitSum>0?unitSum:dxfOpsSum/engUnits);
     var E3=G3*engCoef;
     if(E3)line.push({group:'engineering',section:'ИНЖЕНЕРНЫЕ',name:'Степень изобретения '+Math.round(engCoef*100)+'%',base:G3,lineTotal:E3,worker:null});
 
@@ -253,6 +287,7 @@
 
     return {lineItems:line,opsBase:sumOps,materials:matSum,componentsMat:compMat,componentsLabor:compLabor,
             shleif:K4+L4,shleifCut:SC4,montazh:J4,urgency:C7,engineering:E3,subtotal:subtotal,
+            engBaseMode:engBaseMode,engUnits:engUnits,engBase:G3,dxfOpsSum:dxfOpsSum,engFiles:engFiles,
             taxRate:taxRate,taxGrossUp:gross,taxAmount:taxAmount,total:total};
   }
 
