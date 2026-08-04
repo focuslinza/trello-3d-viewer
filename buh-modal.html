@@ -27,7 +27,8 @@
     table{width:100%;border-collapse:collapse}
     th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:middle}
     th{color:var(--muted);font-size:11px;text-transform:uppercase;white-space:nowrap}
-    td.num{text-align:right;white-space:nowrap}
+    td.num, th.num{text-align:right;white-space:nowrap}
+    tfoot td{border-top:2px solid var(--line);border-bottom:none;background:rgba(255,255,255,.03)}
     .chip{display:inline-block;border:1px solid var(--line);background:var(--bg2);color:var(--muted);border-radius:12px;padding:3px 10px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;user-select:none}
     .chip.on{background:#1c3329;color:var(--green);border-color:#2e5c44}
     .chip.busy{opacity:.5;pointer-events:none}
@@ -447,11 +448,11 @@
       }
       var T=TOTALS;
       h+='<div class="kpis">';
-      h+='<div class="kpi"><div class="k">Заказов</div><div class="v">'+(T.orders||0)+'</div></div>';
-      h+='<div class="kpi"><div class="k">На сумму</div><div class="v">'+money(T.revenue)+' ₸</div></div>';
-      h+='<div class="kpi green"><div class="k">Оплачено</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
-      h+='<div class="kpi red"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
-      h+='<div class="kpi amber"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
+      h+='<div class="kpi" title="Сколько заказов посчитано в калькуляторе за выбранный период (по дате расчёта)"><div class="k">Заказов</div><div class="v">'+(T.orders||0)+'</div></div>';
+      h+='<div class="kpi" title="Общая сумма этих заказов — объём взятой работы, а не деньги в кассе"><div class="k">На сумму</div><div class="v">'+money(T.revenue)+' ₸</div></div>';
+      h+='<div class="kpi green" title="Из заказов этого периода — какие уже оплачены клиентом (флажок «оплачен»)"><div class="k">Оплачено</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
+      h+='<div class="kpi red" title="Дебиторка по заказам периода: работа отдана, деньги не пришли"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
+      h+='<div class="kpi amber" title="Заказы, где проставлены все четыре отметки: счёт выслан, оплачен, сдали, акт подписан"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
       h+='</div>';
       var rows=visibleRows();
       if(!rows.length){ h+='<div class="empty">Нет заказов по выбранным условиям.</div>'; }
@@ -535,7 +536,7 @@
         '<div class="kpi"><div class="k">Сдельная за период</div><div class="v">'+money(T.piece)+' ₸</div></div>'+
         '<div class="kpi"><div class="k">Окладникам начислено</div><div class="v">'+money(T.salaried)+' ₸</div></div>'+
         '<div class="kpi green"><div class="k">Итого ФОТ</div><div class="v">'+money(T.all)+' ₸</div></div>'+
-        '<div class="kpi"><div class="k">Рабочих дней (Пн–Пт)</div><div class="v">'+(PAY.workdays||0)+'</div></div>'+
+        '<div class="kpi" title="Производственный календарь РК с учётом праздников и переносов; правится в табеле"><div class="k">Рабочих дней</div><div class="v">'+(PAY.workdays||0)+'</div></div>'+
         '</div>';
       var f=FILTER.toLowerCase();
       // --- сдельщики ---
@@ -575,20 +576,34 @@
          '<button class="btn" id="apSave" type="button">Сохранить правила</button><span id="apMsg" class="muted"></span></div>';
       // --- окладники ---
       var ss=(PAY.salaried||[]).filter(function(p){ return !f || p.name.toLowerCase().indexOf(f)>=0; });
-      h+='<h3 style="margin:14px 0 6px">Фиксированная зарплата (по табелю)</h3>';
+      h+='<h3 style="margin:14px 0 6px">Зарплата к выдаче</h3>';
       if(!ss.length) h+='<div class="empty">Нет окладников. Чип «Окладник» ставится в «Зарплата / Работники».</div>';
       else {
-        h+='<div class="muted" style="margin-bottom:6px">Начислено = оклад ÷ рабочие дни периода ('+(PAY.workdays||0)+') × оплачиваемые дни. Оплачиваемые дни = Σ(дни статуса × его %). Выход в выходной с отметкой «Я» оплачивается сверх нормы.</div>';
-        h+='<table><thead><tr><th>Работник</th><th class="num">Оклад/мес</th><th class="num">Явок</th><th class="num">Б/О/Н/В</th><th class="num">Оплач. дней</th><th class="num">Начислено</th></tr></thead><tbody>';
+        h+='<div class="muted" style="margin-bottom:6px">Оклад начислен = оклад ÷ рабочие дни периода ('+(PAY.workdays||0)+') × оплачиваемые дни. Оплачиваемые дни = Σ(дни статуса × его %). Выход в выходной с отметкой «Я» оплачивается сверх нормы. Сдельная — доля по сданным заказам, та же сумма, что в разделе «Сдельная зарплата» выше (в ФОТ не задваивается). К выдаче = оклад начислен + сдельная.</div>';
+        h+='<table><thead><tr><th>Работник</th><th class="num">Оклад/мес</th><th class="num">Явок</th>'+
+           '<th class="num">Б/О/Н/В</th><th class="num">Оплач. дней</th>'+
+           '<th class="num">Оклад начислен</th><th class="num">Сдельная</th><th class="num">К выдаче</th></tr></thead><tbody>';
+        var TS={acc:0,pc:0,pay:0};
         ss.forEach(function(p){
+          // старый worker.js полей piece/payTotal не отдаёт — тогда считаем как раньше
+          var pc = +p.piece || 0;
+          var pay = (p.payTotal != null) ? p.payTotal : (p.accrued + pc);
+          TS.acc+=p.accrued; TS.pc+=pc; TS.pay+=pay;
           h+='<tr><td>'+esc(p.name)+(p.noTimesheet?' <span style="font-size:11px;color:#e8c07d" title="В табеле за период нет ни одной отметки — начисление нулевое">⚠ табель пуст</span>':'')+'</td>'+
              '<td class="num">'+money(p.salary)+' ₸</td>'+
              '<td class="num"><b>'+p.present+'</b> / '+p.workdays+'</td>'+
              '<td class="num muted">'+p.sick+' / '+p.vacation+' / '+p.absent+' / '+(p.dayoff||0)+'</td>'+
              '<td class="num">'+(p.payDays!=null?p.payDays:p.present)+'</td>'+
-             '<td class="num"><b>'+money(p.accrued)+' ₸</b></td></tr>';
+             '<td class="num">'+money(p.accrued)+' ₸</td>'+
+             '<td class="num'+(pc?'':' muted')+'">'+(pc?(money(pc)+' ₸'):'—')+'</td>'+
+             '<td class="num"><b>'+money(pay)+' ₸</b></td></tr>';
         });
-        h+='</tbody></table>';
+        h+='</tbody><tfoot><tr>'+
+           '<td colspan="5" style="font-weight:700">Итого</td>'+
+           '<td class="num">'+money(TS.acc)+' ₸</td>'+
+           '<td class="num">'+money(TS.pc)+' ₸</td>'+
+           '<td class="num"><b style="color:var(--green,#4bce97)">'+money(TS.pay)+' ₸</b></td>'+
+           '</tr></tfoot></table>';
       }
       return h;
     }
@@ -602,10 +617,10 @@
       var T=REP_TOTALS||{};
       var h='<div class="kpis">';
       h+='<div class="kpi"><div class="k">Ремонтов</div><div class="v">'+(T.orders||0)+'</div></div>';
-      h+='<div class="kpi"><div class="k">На сумму</div><div class="v">'+money(T.revenue)+' ₸</div></div>';
-      h+='<div class="kpi green"><div class="k">Оплачено</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
-      h+='<div class="kpi red"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
-      h+='<div class="kpi amber"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
+      h+='<div class="kpi" title="Общая сумма этих заказов — объём взятой работы, а не деньги в кассе"><div class="k">На сумму</div><div class="v">'+money(T.revenue)+' ₸</div></div>';
+      h+='<div class="kpi green" title="Из заказов этого периода — какие уже оплачены клиентом (флажок «оплачен»)"><div class="k">Оплачено</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
+      h+='<div class="kpi red" title="Дебиторка по заказам периода: работа отдана, деньги не пришли"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
+      h+='<div class="kpi amber" title="Заказы, где проставлены все четыре отметки: счёт выслан, оплачен, сдали, акт подписан"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
       h+='</div>';
       h+='<div style="display:flex;align-items:center;gap:10px;margin:-6px 0 10px;flex-wrap:wrap">'+
          '<button class="btn" id="repInvBtn" type="button" style="background:#1f6ce8;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:600">🧾 Счёт на оплату по ремонтам</button>'+
@@ -679,7 +694,7 @@
       h+='<div class="kpi"><div class="k">Не оплачено</div><div class="v">'+(T.unpaid||0)+'</div></div>';
       h+='<div class="kpi amber"><div class="k">Частично</div><div class="v">'+(T.partial||0)+'</div></div>';
       h+='<div class="kpi"><div class="k">Аванс, в работе</div><div class="v" style="color:#579dff">'+(T.launched||0)+'</div></div>';
-      h+='<div class="kpi green"><div class="k">Оплачено</div><div class="v">'+(T.full||0)+'</div></div>';
+      h+='<div class="kpi green" title="Из заказов этого периода — какие уже оплачены клиентом (флажок «оплачен»)"><div class="k">Оплачено</div><div class="v">'+(T.full||0)+'</div></div>';
       h+='</div>';
       h+='<div class="muted" style="margin:-6px 0 10px">Поступления подтягиваются из выписки БЦК автоматически. Порог запуска в производство: '+Math.round((INV_SHARE||0.5)*100)+'% суммы счёта. Статусы счетов не зависят от галочек по заказам.</div>';
       h+='<div style="display:flex;gap:8px;margin-bottom:10px">'+
