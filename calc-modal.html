@@ -851,14 +851,33 @@
     var CAN_SEE_COST = true; // применится в applyCostPermission()
     function applyCostPermission(){
       if(EMBED){
-        // канбан «Ремонт» уже проверил права и передал их в URL
-        var ok = EMBED_QS.get('canSeeCost') === '1';
-        CAN_SEE_COST = ok;
-        if(!ok){
-          document.body.classList.add('nocost');
-          var n0=document.getElementById('nocostNote'); if(n0) n0.style.display='';
+        // ПРАВО СПРАШИВАЕМ У СЕРВЕРА, а не у адреса окна. Параметр canSeeCost в URL
+        // раньше был единственной проверкой — его можно было переписать руками и
+        // открыть цены. Теперь решает /worker-perms по базе работников: для ремонтов
+        // хватает ремонтного ценового права (canSeeRepairCost), общее включает его.
+        // Параметр из URL остаётся только резервом для того, кого нет в базе
+        // работников (директор без карточки): у него и подделывать нечего.
+        var urlSays = EMBED_QS.get('canSeeCost') === '1';
+        var mid = EMBED_QS.get('memberId') || '';
+        function applyOk(ok){
+          CAN_SEE_COST = ok;
+          if(!ok){
+            document.body.classList.add('nocost');
+            var n0=document.getElementById('nocostNote'); if(n0) n0.style.display='';
+          }
+          return ok;
         }
-        return Promise.resolve(ok);
+        if(!mid) return Promise.resolve(applyOk(false));
+        return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(mid))
+          .then(function(r){return r.json();})
+          .then(function(j){
+            if(j && j.found){
+              var isRepair = EMBED_QS.get('mode')==='repair';
+              return applyOk(isRepair ? !!j.canSeeRepairCost : !!j.canSeeCost);
+            }
+            return applyOk(urlSays);   // не работник (директор) — как раньше
+          })
+          .catch(function(){ return applyOk(false); });   // сервер недоступен — цен не показываем
       }
       return isDirector().then(function(admin){
         if(admin) return true;

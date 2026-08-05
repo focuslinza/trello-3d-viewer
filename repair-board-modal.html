@@ -943,7 +943,10 @@
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(ME.id))
         .then(function(r){return r.json();})
         .then(function(j){
-          if(!admin){ PRICED=!!(j&&j.canRepair); CAN_SEE_COST=!!(j&&(j.canSeeCost||j.canRepair)); }
+          // цены — ТОЛЬКО по ценовому праву (ремонтному или общему; сервер отдаёт
+          // производное canSeeRepairCost). Чип «Ремонт» сам по себе цен не открывает:
+          // начальник управляет потоком заявок, не видя денег клиента.
+          if(!admin){ PRICED=!!(j&&j.canRepair); CAN_SEE_COST=!!(j&&(j.canSeeRepairCost||j.canSeeCost)); }
           IS_AGENT=!!(j&&j.isRepairAgent); AGENT_BONUS=(j&&j.agentBonus)||0;
         })
         .catch(function(){ if(!admin){ PRICED=false; CAN_SEE_COST=false; } });
