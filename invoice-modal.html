@@ -9,6 +9,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
   <script src="./invoice-doc.js"></script>
+  <script src="./calc-engine.js?v=20"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc;
            --accent:#4f7cff; --green:#3aa657; --warn:#5a4636; }
@@ -133,6 +134,63 @@
   // произвольные дополнительные строки счёта (монтаж по оплаченному заказу,
   // доставка, упаковка и т.п.) — попадают в PDF и в журнал, к карточкам не привязаны
   var EXTRA_LINES = [];
+  function mzLoadWorkers(){
+    fetch(WORKER+'/workers-list').then(function(r){return r.json();}).then(function(j){
+      MZ_WORKERS=((j&&j.workers)||[]).filter(function(w2){
+        var st=[]; try{ st=typeof w2.stages==='string'? JSON.parse(w2.stages||'[]') : (w2.stages||[]); }catch(e){}
+        return (w2.active===undefined||+w2.active===1) && st.indexOf('montazh')>=0;
+      }).map(function(w2){ return {id:w2.id, name:w2.name}; });
+      render();
+    }).catch(function(){});
+  }
+  // ---- МОНТАЖ ПО ФАКТУ ----
+  // Живёт в окне счёта (решение Асхата, 08.2026): здесь его заполняет тот, кто
+  // вправе выставлять счета, и сумма «в счёт» ГАРАНТИРОВАННО плюсуется в счёт —
+  // раньше блок жил в «Заработке по заказу», и clientValue не попадал в счёт вовсе.
+  // Заработок бригаде считает сервер по сохранённому montazh (объём × ⅓ × 1.5).
+  var MZ = { cardId:'', ops:[], comps:[], crew:[], workValue:0, clientValue:0, shleifWork:0, dirty:false };
+  var MZ_WORKERS = [];          // работники с этапом «Монтаж»
+  var MZ_CACHE = {};            // cardId -> сохранённый монтаж (чтобы не терять при переключении)
+  var MZ_OP_KINDS = [['cut','Резка листа (м)'],['cutTube','Резка трубы/профиля (м)'],
+    ['bend','Гибка листа (кол.)'],['bendTube','Гибка трубы (кол.)'],['bendRod','Гибка прута (кол.)'],
+    ['weldSS','Сварка нерж (см)'],['weldBlack','Сварка черн (см)']];
+  function mzTH(){ return (window.CALC && CALC.TH) || [0.8,1,1.5,2,3,4,5]; }
+  function mzPriceOp(kind,th,qty){ if(!window.CALC||!qty) return 0; var r=CALC.compute({operations:[{kind:kind,thickness:+th,qty:+qty}],engCoef:0,urgency:0,montazh:0,taxRate:0,shleifRate:0}); return r.opsBase||0; }
+  function mzPriceComp(code,qty){ if(!window.CALC||!code||!qty) return {full:0,work:0}; var r=CALC.compute({components:[{code:code,qty:+qty}],engCoef:0,urgency:0,montazh:0,taxRate:0}); var li=(r.lineItems||[]).filter(function(l){return l.group==='component';})[0]||{}; var mat=li.material||0,lab=li.labor||0,p=!!li.isPaint; return {full:p?mat:(mat+lab),work:p?mat:lab}; }
+  function mzCompute(){
+    var weld=0, weldIn=0, work=0, client=0;
+    MZ.ops.forEach(function(o){ var w=mzPriceOp(o.kind,o.thickness,o.qty); o._price=w; work+=w; if(o.inClient)client+=w; if(o.kind==='weldSS'||o.kind==='weldBlack'){weld+=w; if(o.inClient)weldIn+=w;} });
+    var shW=0.5*weld, shC=0.5*weldIn;                     // шлейфовка на монтаже: 50% от сварки
+    work+=shW; client+=shC;
+    MZ.comps.forEach(function(c){ var p=mzPriceComp(c.code,c.qty); c._price=p.full; work+=p.work; if(c.inClient)client+=p.full; });
+    MZ.workValue=work; MZ.clientValue=client; MZ.shleifWork=shW;
+  }
+  function mzValid(){ mzCompute(); return MZ.cardId && MZ.clientValue>0; }
+  function mzPayload(){
+    return { crew:MZ.crew.slice(),
+      operations:MZ.ops.filter(function(o){return o.qty>0;}).map(function(o){return {kind:o.kind,thickness:o.thickness,qty:o.qty,inClient:o.inClient};}),
+      components:MZ.comps.filter(function(c){return c.code&&c.qty>0;}).map(function(c){return {code:c.code,qty:c.qty,inClient:c.inClient};}),
+      workValue:MZ.workValue, clientValue:MZ.clientValue, shleifWork:MZ.shleifWork };
+  }
+  function mzCards(){
+    // монтаж можно привязать и к оплаченному заказу — случай «основное оплатили,
+    // монтаж попросили постфактум»
+    var list=[]; clientOrders().forEach(function(o){ if(!o.isRepair) list.push(o); });
+    clientPaid().forEach(function(o){ if(!o.isRepair) list.push({cardId:o.cardId,number:o.number,name:o.name,paid:true}); });
+    return list;
+  }
+  function mzLoadFor(cardId){
+    if(!cardId){ MZ.ops=[]; MZ.comps=[]; MZ.crew=[]; return; }
+    if(MZ_CACHE[cardId]){ var c=MZ_CACHE[cardId]; MZ.ops=(c.operations||[]).map(function(o){return {kind:o.kind,thickness:o.thickness,qty:o.qty,inClient:o.inClient!==false};}); MZ.comps=(c.components||[]).map(function(x){return {code:x.code,qty:x.qty,inClient:x.inClient!==false};}); MZ.crew=(c.crew||[]).slice(); render(); return; }
+    fetch(WORKER+'/montazh-get?cardId='+encodeURIComponent(cardId)).then(function(r){return r.json();}).then(function(j){
+      var m=(j&&j.montazh)||{operations:[],components:[],crew:[]};
+      MZ_CACHE[cardId]=m;
+      MZ.ops=(m.operations||[]).map(function(o){return {kind:o.kind,thickness:o.thickness,qty:o.qty,inClient:o.inClient!==false};});
+      MZ.comps=(m.components||[]).map(function(x){return {code:x.code,qty:x.qty,inClient:x.inClient!==false};});
+      MZ.crew=(m.crew||[]).slice();
+      render();
+    }).catch(function(){ MZ.ops=[]; MZ.comps=[]; MZ.crew=[]; render(); });
+  }
   function validExtras(){ return EXTRA_LINES.filter(function(x){ return (x.name||'').trim() && (+x.qty>0) && (+x.price>0); }); }
   function extrasTotal(){ return validExtras().reduce(function(s,x){ return s + (+x.qty)*(+x.price); },0); }
   var showHidden = false;
@@ -231,7 +289,7 @@
       });
       BILLED = map;
     }).catch(function(){ BILLED = {}; });
-    return Promise.all([pOrders, pRepairs, pBilled]).then(function(res){ ALL_ORDERS = res[0].concat(res[1]); });
+    return Promise.all([pOrders, pRepairs, pBilled]).then(function(res){ ALL_ORDERS = res[0].concat(res[1]); mzLoadWorkers(); });
   }
 
   // Имя заказчика-человека (контакт, отмеченный на карточке в «Компания и контакты»):
@@ -305,7 +363,10 @@
   function hiddenOrders(){ return ALL_ORDERS.filter(function(o){ return o.hidden; }); }
   function selectedOrders(){ return clientOrders().filter(function(o){return o.checked;}); }
   function kFor(o){ return (o && o.taxIncluded) ? 1 : (SUP_TAX[supplierKey]||1); }
-  function grandTotal(){ var K=SUP_TAX[supplierKey]||1; return selectedOrders().reduce(function(s,o){return s+Math.ceil(o.total*kFor(o)-1e-9);},0) + validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)*K-1e-9); },0); }
+  function grandTotal(){ var K=SUP_TAX[supplierKey]||1; mzCompute();
+    return selectedOrders().reduce(function(s,o){return s+Math.ceil(o.total*kFor(o)-1e-9);},0)
+      + validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)*K-1e-9); },0)
+      + (mzValid()? Math.ceil(MZ.clientValue*K-1e-9) : 0); }   // монтаж «в счёт» — с налогом поставщика, как все строки
   function extrasCeilTotal(){ return validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)-1e-9); },0); }
 
   function render(){
@@ -427,9 +488,55 @@
     }
     html+='</div>';
 
-    // --- дополнительные строки (доп. работы: монтаж, доставка и т.п.) ---
+    // --- МОНТАЖ ПО ФАКТУ (над доп. строками; заполняет тот, кто выставляет счёт) ---
+    html+='<div class="sec"><h3>Монтаж по факту (заполняется после выезда)</h3>';
+    html+='<div class="small muted" style="margin-bottom:6px">Работы на объекте по тарифам: резка/гибка/сварка + компоненты/краска. Шлейфовка добавляется автоматически (50% от сварки). Отмеченное флажком «в счёт» попадает строкой в этот счёт и плюсуется к итогу. Заработок бригаде (объём × ⅓ × 1,5, поровну между «кто ездил») начислится после сдачи заказа.</div>';
+    var mzcards=mzCards();
+    if(!mzcards.length){
+      html+='<div class="muted">Выберите клиента — монтаж привязывается к его заказу (включая уже оплаченные).</div>';
+    } else {
+      html+='<div class="row" style="margin-bottom:8px"><div class="fld"><label>К какому заказу относится монтаж</label><select id="mzCard" style="min-width:320px"><option value="">— выбрать заказ —</option>'+
+        mzcards.map(function(o){ return '<option value="'+esc(o.cardId)+'"'+(MZ.cardId===o.cardId?' selected':'')+'>№'+esc(o.number||'—')+' · '+esc(String(o.name||'').slice(0,50))+(o.paid?' · оплачен':'')+'</option>'; }).join('')+
+        '</select></div></div>';
+      if(MZ.cardId){
+        mzCompute();
+        html+='<div class="small muted" style="margin:4px 0 2px">Работы</div>';
+        MZ.ops.forEach(function(o,i){
+          html+='<div class="row" style="align-items:center;gap:6px;margin-bottom:4px">'+
+            '<select class="mzKind" data-i="'+i+'">'+MZ_OP_KINDS.map(function(k){return '<option value="'+k[0]+'"'+(o.kind===k[0]?' selected':'')+'>'+k[1]+'</option>';}).join('')+'</select>'+
+            '<select class="mzTh" data-i="'+i+'" style="width:84px">'+mzTH().map(function(t){return '<option value="'+t+'"'+(+o.thickness===t?' selected':'')+'>'+t+' мм</option>';}).join('')+'</select>'+
+            '<input type="number" class="mzQty" data-i="'+i+'" min="0" step="any" value="'+(o.qty||'')+'" placeholder="кол-во" style="width:90px">'+
+            '<label class="small" style="white-space:nowrap"><input type="checkbox" class="mzInc" data-i="'+i+'"'+(o.inClient?' checked':'')+'> в счёт</label>'+
+            '<span class="small" style="min-width:80px;text-align:right">'+money(o._price||0)+' ₸</span>'+
+            '<button class="btn ghost mzDelOp" data-i="'+i+'" type="button">✕</button></div>';
+        });
+        html+='<button class="btn ghost" id="mzAddOp" type="button">+ работа</button>';
+        html+='<div class="small muted" style="margin:10px 0 2px">Компоненты / Краска</div>';
+        MZ.comps.forEach(function(c,i){
+          var g=(window.CALC&&CALC.CMP)||{};
+          var opts='<option value="">— выбрать —</option>'+Object.keys(g).map(function(code){return '<option value="'+code+'"'+(c.code===code?' selected':'')+'>'+esc(g[code].lbl||code)+'</option>';}).join('');
+          html+='<div class="row" style="align-items:center;gap:6px;margin-bottom:4px">'+
+            '<select class="mzCCode" data-i="'+i+'" style="min-width:220px">'+opts+'</select>'+
+            '<input type="number" class="mzCQty" data-i="'+i+'" min="0" step="any" value="'+(c.qty||'')+'" placeholder="кол-во" style="width:90px">'+
+            '<label class="small" style="white-space:nowrap"><input type="checkbox" class="mzCInc" data-i="'+i+'"'+(c.inClient?' checked':'')+'> в счёт</label>'+
+            '<span class="small" style="min-width:80px;text-align:right">'+money(c._price||0)+' ₸</span>'+
+            '<button class="btn ghost mzDelC" data-i="'+i+'" type="button">✕</button></div>';
+        });
+        html+='<button class="btn ghost" id="mzAddC" type="button">+ компонент</button>';
+        html+='<div style="margin-top:10px"><b class="small">Кто ездил:</b> '+
+          (MZ_WORKERS.length? MZ_WORKERS.map(function(w2){ return '<label class="small" style="margin-right:10px;white-space:nowrap"><input type="checkbox" class="mzCrew" value="'+esc(w2.id)+'"'+(MZ.crew.indexOf(w2.id)>=0?' checked':'')+'> '+esc(w2.name)+'</label>'; }).join('')
+           : '<span class="muted small">нет работников с этапом «Монтаж»</span>')+'</div>';
+        html+='<div class="small" style="margin-top:8px">'+
+          (MZ.shleifWork>0?('в т.ч. шлейфовка (авто): <b>'+money(MZ.shleifWork)+' ₸</b> · '):'')+
+          'объём работ: <b>'+money(MZ.workValue)+' ₸</b> · <span style="color:var(--green)">в счёт клиенту: <b>'+money(MZ.clientValue)+' ₸</b></span></div>';
+        html+='<div style="margin-top:8px"><button class="btn ghost" id="mzOnly" type="button" title="Снимает галочки с заказов: в счёте останется только монтаж (и доп. строки, если есть). Для случая «основное оплатили, монтаж попросили потом»">Счёт только по доп. работам</button></div>';
+      }
+    }
+    html+='</div>';
+
+    // --- дополнительные строки (доп. работы: доставка и т.п.) ---
     html+='<div class="sec"><h3>Дополнительные строки счёта</h3>';
-    html+='<div class="small muted" style="margin-bottom:6px">Для доп. работ, которых нет в заказах: монтаж по уже оплаченному заказу, доставка, упаковка. Строка попадает в PDF и в журнал счетов; к карточке заказа она не привязывается (двигать её не нужно), оплата по номеру счёта отобразится в журнале платежей.</div>';
+    html+='<div class="small muted" style="margin-bottom:6px">Для позиций, которых нет ни в заказах, ни в тарифах монтажа: доставка, упаковка, аренда техники. Строка попадает в PDF и в журнал счетов; к карточке заказа она не привязывается, оплата по номеру счёта отобразится в журнале платежей.</div>';
     if(EXTRA_LINES.length){
       html+='<table><thead><tr><th>Наименование</th><th class="num">Кол-во</th><th class="num">Цена за ед., ₸</th><th class="num">Сумма</th><th></th></tr></thead><tbody>';
       EXTRA_LINES.forEach(function(x,i){
@@ -515,6 +622,42 @@
     });
     var exAdd=document.getElementById('exAdd');
     if(exAdd) exAdd.addEventListener('click', function(){ EXTRA_LINES.push({ name:'', qty:1, price:'' }); render(); });
+    // --- монтаж ---
+    var mzSel=document.getElementById('mzCard');
+    if(mzSel) mzSel.addEventListener('change', function(){ MZ.cardId=this.value; mzLoadFor(MZ.cardId); });
+    var mzAddOp=document.getElementById('mzAddOp');
+    if(mzAddOp) mzAddOp.addEventListener('click', function(){ MZ.ops.push({kind:'weldSS',thickness:mzTH()[2],qty:'',inClient:true}); render(); });
+    var mzAddC=document.getElementById('mzAddC');
+    if(mzAddC) mzAddC.addEventListener('click', function(){ MZ.comps.push({code:'',qty:'',inClient:true}); render(); });
+    [].forEach.call(document.querySelectorAll('.mzDelOp'), function(b){ b.addEventListener('click', function(){ MZ.ops.splice(+this.getAttribute('data-i'),1); MZ.dirty=true; render(); }); });
+    [].forEach.call(document.querySelectorAll('.mzDelC'), function(b){ b.addEventListener('click', function(){ MZ.comps.splice(+this.getAttribute('data-i'),1); MZ.dirty=true; render(); }); });
+    function mzWire(cls, apply){
+      [].forEach.call(document.querySelectorAll(cls), function(el){
+        el.addEventListener('change', function(){ apply(this); MZ.dirty=true; render(); });
+      });
+    }
+    mzWire('.mzKind', function(el){ MZ.ops[+el.getAttribute('data-i')].kind=el.value; });
+    mzWire('.mzTh',   function(el){ MZ.ops[+el.getAttribute('data-i')].thickness=+el.value; });
+    mzWire('.mzInc',  function(el){ MZ.ops[+el.getAttribute('data-i')].inClient=el.checked; });
+    mzWire('.mzCCode',function(el){ MZ.comps[+el.getAttribute('data-i')].code=el.value; });
+    mzWire('.mzCInc', function(el){ MZ.comps[+el.getAttribute('data-i')].inClient=el.checked; });
+    mzWire('.mzCrew', function(el){ var v=el.value,i=MZ.crew.indexOf(v); if(el.checked&&i<0)MZ.crew.push(v); if(!el.checked&&i>=0)MZ.crew.splice(i,1); });
+    // количество — по input, с сохранением фокуса (перерисовка убивала бы набор)
+    [].forEach.call(document.querySelectorAll('.mzQty'), function(el){
+      el.addEventListener('input', function(){ MZ.ops[+this.getAttribute('data-i')].qty=+this.value||0; MZ.dirty=true; updateGrand(); });
+      el.addEventListener('change', function(){ render(); });
+    });
+    [].forEach.call(document.querySelectorAll('.mzCQty'), function(el){
+      el.addEventListener('input', function(){ MZ.comps[+this.getAttribute('data-i')].qty=+this.value||0; MZ.dirty=true; updateGrand(); });
+      el.addEventListener('change', function(){ render(); });
+    });
+    var mzOnly=document.getElementById('mzOnly');
+    if(mzOnly) mzOnly.addEventListener('click', function(){
+      // «Счёт только по доп. работам»: основные заказы из счёта убираем,
+      // остаются монтаж и доп. строки. Привязка монтажа к заказу сохраняется.
+      clientOrders().forEach(function(o){ o.checked=false; });
+      render();
+    });
     function exSync(i){
       var cell=document.querySelector('.exsum[data-i="'+i+'"]');
       if(cell){ var x=EXTRA_LINES[i]; cell.textContent=money((+x.qty||0)*(+x.price||0))+' ₸'; }
@@ -574,7 +717,7 @@
   function updateGrand(){
     var g=grandTotal();
     document.getElementById('grand').textContent='Итого по счёту: '+money(g)+' ₸';
-    var ok = !!ctx.buyer && (selectedOrders().length>0 || validExtras().length>0);
+    var ok = !!ctx.buyer && (selectedOrders().length>0 || validExtras().length>0 || mzValid());
     document.getElementById('gen').disabled=!ok;
   }
 
@@ -599,6 +742,13 @@
       var c=ceilLine(q, (+x.price||0) * K);
       items.push({ code:'', name:String(x.name).trim(), qty:q, unit:'Услуга', price:c.price });
     });
+    if(mzValid()){
+      // монтаж — отдельной строкой, привязанной к карточке: оплата по счёту
+      // подсветит и её, а заработок бригаде посчитается по сохранённому montazh
+      var mo=mzCards().filter(function(o){return o.cardId===MZ.cardId;})[0];
+      var cM=ceilLine(1, MZ.clientValue * K);
+      items.push({ code:(mo&&mo.number)||'', name:'Монтажные работы по факту'+(mo&&mo.number?(' (заказ №'+mo.number+')'):''), qty:1, unit:'Услуга', price:cM.price, cardId:MZ.cardId });
+    }
     return {
       supplier:sup, buyer:ctx.buyer,
       number:(numEl.value||'').trim(), date:ruDate(fromIso(dEl.value)), contract:(cEl.value||'Без договора').trim(),
@@ -629,7 +779,15 @@
     var waWin = phone ? window.open('', '_blank') : null;
     var gen=document.getElementById('gen'); gen.disabled=true; gen.textContent='Готовлю…';
     // commit the invoice number (locks it so the next one is +1)
-    fetch(WORKER+'/invoice-commit').then(function(r){return r.json();}).then(function(j){
+    // монтаж сначала сохраняем в карточку: заработок бригаде считается по нему
+    var mzSave = mzValid()
+      ? fetch(WORKER+'/montazh-save',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({cardId:MZ.cardId, montazh:mzPayload()})})
+          .then(function(r){return r.json();})
+          .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'монтаж не сохранился'); MZ_CACHE[MZ.cardId]=mzPayload(); })
+      : Promise.resolve();
+    mzSave.catch(function(e){ alert('Монтаж не сохранился: '+(e&&e.message||e)+'\nСчёт не выпущен.'); gen.disabled=false; gen.textContent='Сформировать счёт'; if(waWin)waWin.close(); throw e; })
+    .then(function(){ return fetch(WORKER+'/invoice-commit'); }).then(function(r){return r.json();}).then(function(j){
       var data=buildData();
       if(j&&j.ok && (!document.getElementById('inum').value || +document.getElementById('inum').value===invNumber)){
         data.number=String(j.number); // use committed number unless user typed a custom one
@@ -650,7 +808,9 @@
           buyer:data.buyer||null,
           items:data.items||[],
           total:grandTotal(),
-          cardIds:selectedOrders().filter(function(o){ return !o.isRepair; }).map(function(o){ return o.cardId; }),
+          cardIds:(function(){ var ids=selectedOrders().filter(function(o){ return !o.isRepair; }).map(function(o){ return o.cardId; });
+            if(mzValid() && ids.indexOf(MZ.cardId)<0) ids.push(MZ.cardId);   // счёт «только монтаж» тоже привязан к заказу
+            return ids; })(),
           repairIds:selectedOrders().filter(function(o){ return o.isRepair; }).map(function(o){ return o.repairId; })
         })
       }).then(function(r){return r.json();}).catch(function(){return {};})

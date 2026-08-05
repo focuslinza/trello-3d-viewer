@@ -193,15 +193,11 @@
         html+='</tbody></table></div>';
       }
 
-      // 3) montazh-by-fact editor (mini-calculator)
-      html+='<div class="sec"><h3>Монтаж по факту (заполняется после выезда)</h3>';
-      html+='<div class="muted" style="margin-bottom:10px">Внесите работы, выполненные на объекте — как в калькуляторе (резка/гибка/сварка + компоненты/краска). Заработок бригады = объём работ × ⅓ × 1.5, делится поровну между отмеченными. Флажок «в счёт» — попадает ли работа в счёт клиенту. Шлейфовка добавляется автоматически (50% от сварки на монтаже).</div>';
-      html+='<div class="msub">Работы</div><div id="mops"></div><button class="btn add" id="addMOp" type="button">+ работа</button>';
-      html+='<div class="msub" style="margin-top:12px">Компоненты / Краска</div><div id="mcomps"></div><button class="btn add" id="addMComp" type="button">+ компонент</button>';
-      html+='<div style="margin-top:12px"><b>Кто ездил:</b><div class="crew" id="crew"></div></div>';
-      html+='<div id="msums"></div>';
-      html+='<div style="margin-top:10px"><button class="btn save" id="saveM" type="button">Сохранить монтаж</button> <span class="msg" id="mmsg" style="display:inline"></span></div>';
-      html+='</div>';
+      // Монтаж по факту переехал в окно «Счёт на оплату» (решение Асхата, 08.2026):
+      // там его заполняет тот, кто выставляет счёт, и сумма «в счёт» гарантированно
+      // плюсуется в счёт. Здесь монтаж показывается только как начисление (сводка выше).
+      html+='<div class="sec"><h3>Монтаж по факту</h3>'+
+        '<div class="muted">Заполняется в окне <b>«Счёт на оплату»</b> (кнопка на карточке или в бухгалтерии) — раздел «Монтаж по факту» над дополнительными строками. Начисление бригаде появится в сводке выше после сохранения монтажа и сдачи заказа.</div></div>';
 
       b.innerHTML=html;
 
@@ -217,16 +213,7 @@
       });
       [].forEach.call(document.querySelectorAll('.def'), function(cb){ cb.addEventListener('change', saveDefaults); });
 
-      // fill montazh editor from raw
-      var raw = data.montazhRaw || { crew:[], operations:[], components:[] };
-      var mops=document.getElementById('mops'), mcomps=document.getElementById('mcomps');
-      (raw.operations||[]).forEach(function(o){ mops.appendChild(makeMOpRow(o)); });
-      (raw.components||[]).forEach(function(c){ mcomps.appendChild(makeMCompRow(c)); });
-      renderCrew(raw.crew||[]);
-      document.getElementById('addMOp').onclick=function(){ mops.appendChild(makeMOpRow()); recalcM(); };
-      document.getElementById('addMComp').onclick=function(){ mcomps.appendChild(makeMCompRow()); recalcM(); };
-      document.getElementById('saveM').onclick=saveMontazh;
-      recalcM();
+      // редактор монтажа переехал в окно «Счёт на оплату» — здесь только сводка
     }
 
     // ---- montazh mini-calculator (engine-backed) ----
