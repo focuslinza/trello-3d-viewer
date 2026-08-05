@@ -223,10 +223,12 @@
       {cls:'canhr',     fld:'can_hr',        label:'HR кабинет',          hint:'личные дела сотрудников; собственное дело недоступно'},
       {cls:'candash',   fld:'can_dashboard', label:'Панель руководителя', hint:'выручка, прибыль, этапы, заработки, оплаты'},
       {cls:'cansup',    fld:'can_supply',    label:'Снабжение',           hint:'заявки, инструмент, наличные'},
-      {cls:'canissue',  fld:'can_issue_invoice', label:'Выставлять счета', hint:'кнопка «Выставить счёт» на карточке заказа'},
+      {cls:'canissue',  fld:'can_issue_invoice', label:'Выставлять счета', hint:'счета по ЛЮБЫМ заказам: производство и ремонт. Открывает суммы заказов в окне счёта — давайте только доверенным'},
+      {cls:'canissuerep', fld:'can_issue_repair_invoice', label:'Счета по ремонтам', hint:'выставлять счета ТОЛЬКО по ремонтным заявкам. Производственные заказы в счёт не включить, их суммы не видны. Для ответственного за ремонты'},
       {cls:'caninv',    fld:'can_invoice',   label:'Бухгалтерия',         hint:'панель бухгалтера: статусы, счета на оплату, поступления из банка — только бухгалтеру'},
       {cls:'cancrm',    fld:'can_crm',       label:'CRM',                 hint:'клиенты, выручка, долги'},
-      {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены в калькуляторе'},
+      {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены ВЕЗДЕ: калькуляторы производства и ремонта, материалы, суммы. Включает и «Видит стоимость ремонтов»'},
+      {cls:'cancostrep', fld:'can_see_repair_cost', label:'Видит стоимость ремонтов', hint:'цены ТОЛЬКО в ремонтном контуре: калькулятор заявки, цена клиенту, суммы счетов по ремонтам. Производственные цены остаются закрыты. Можно называть клиенту цену ремонта до приёма изделия'},
       {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true},
       {cls:'agent',     fld:'is_repair_agent', label:'Агент ремонта',      hint:'бонус за каждую полностью оформленную заявку на ремонт (описание, фирма, контактное лицо, фото) — виден агенту в «Моём заработке»'}
     ];
@@ -417,6 +419,8 @@
       var stages=[].map.call(tr.querySelectorAll('.stgcb:checked'), function(c){ return c.value; });
       var canInvoice=tr.querySelector('.caninv')?tr.querySelector('.caninv').checked:false;
       var canIssueInvoice=tr.querySelector('.canissue')?tr.querySelector('.canissue').checked:false;
+      var canIssueRepairInvoice=tr.querySelector('.canissuerep')?tr.querySelector('.canissuerep').checked:false;
+      var canSeeRepairCost=tr.querySelector('.cancostrep')?tr.querySelector('.cancostrep').checked:false;
       var canSupply=tr.querySelector('.cansup')?tr.querySelector('.cansup').checked:false;
       var canCrm=tr.querySelector('.cancrm')?tr.querySelector('.cancrm').checked:false;
       var canSeeCost=tr.querySelector('.cancost')?tr.querySelector('.cancost').checked:false;
@@ -439,7 +443,7 @@
       setMsg('Сохранение…');
       return fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })(), urgencyPercent:(function(){ var el=tr.querySelector('.engUrgPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, canIssueRepairInvoice:canIssueRepairInvoice, canSeeRepairCost:canSeeRepairCost, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })(), urgencyPercent:(function(){ var el=tr.querySelector('.engUrgPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){
