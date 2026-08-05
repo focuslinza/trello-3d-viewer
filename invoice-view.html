@@ -27,6 +27,18 @@
     .doc .num{text-align:right}
     .doc .tot{ text-align:right;font-weight:700;font-size:14px;margin-top:8px }
     .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+    .otbl{width:100%;border-collapse:collapse;margin:6px 0 4px;font-size:12.5px}
+    .otbl th{color:var(--muted);font-weight:600;text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);font-size:11.5px}
+    .otbl td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+    .otbl td.num{text-align:right;white-space:nowrap}
+    .onum{color:#8fb4ff;cursor:pointer;text-decoration:none;font-weight:600;white-space:nowrap}
+    .onum:hover{text-decoration:underline}
+    .chip{display:inline-block;border-radius:8px;padding:3px 9px;font-size:11px;font-weight:600;
+          background:var(--bg2);border:1px solid var(--line);color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
+    .chip:hover{border-color:var(--blue)}
+    .chip.on{background:#1c3329;color:var(--green);border-color:#2e5c44}
+    .chip.busy{opacity:.5;pointer-events:none}
+    .warn12{font-size:11.5px;color:var(--amber);margin:2px 0 6px}
     .tabbtn{border:1px solid var(--line);background:var(--bg2);color:var(--txt);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12.5px}
     .tabbtn.active{border-color:var(--blue);color:#cfe1ff}
     .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end;gap:10px}
@@ -74,22 +86,10 @@
       h+='<div class="pillrow">'+
          (r.sent_at?('<span class="pill g">📤 выслан '+esc(String(r.sent_at).slice(0,16).replace('T',' '))+(r.sent_to?(' → '+esc(r.sent_to)):'')+'</span>'):'<span class="pill">не выслан</span>')+
          statusPill(p)+'</div>';
-      // заказы в счёте: клик открывает карточку Trello в новой вкладке —
-      // посмотрели заказ, закрыли вкладку, вернулись сюда
-      var items0=parse(r.items_json,[])||[], cardIds0=parse(r.card_ids_json,[])||[];
-      var orderChips=[];
-      items0.forEach(function(it){
-        if(it && it.cardId) orderChips.push({ cardId:it.cardId, code:it.code||'', name:it.name||'' });
-      });
-      if(!orderChips.length && cardIds0.length) cardIds0.forEach(function(id){ orderChips.push({ cardId:id, code:'', name:'карточка заказа' }); });
-      if(orderChips.length){
-        h+='<div class="pillrow" style="margin-top:2px">'+orderChips.map(function(o){
-          var lbl=(o.code?('№'+esc(o.code)+' · '):'')+esc(String(o.name).slice(0,48))+(String(o.name).length>48?'…':'');
-          return '<a href="https://trello.com/c/'+esc(o.cardId)+'" target="_blank" class="pill" '+
-            'style="text-decoration:none;color:#cfe1ff;border-color:var(--blue);cursor:pointer" '+
-            'title="Открыть карточку заказа в новой вкладке (закройте её, чтобы вернуться к счёту)">📋 '+lbl+' ↗</a>';
-        }).join('')+'</div>';
-      }
+      // ЗАКАЗЫ СЧЁТА — как во вкладке «Заказы»: статусы правятся прямо здесь,
+      // теми же серверными вызовами (/acct-set, /calc-paid), что и раздел «Заказы».
+      // Источник данных один (calculations + acct_flags), рассинхрон невозможен.
+      h+=renderOrders(r);
       // сам счёт показываем HTML-копией PDF (браузеры блокируют PDF во вложенном
       // окне Trello); скачивание отдаёт настоящий PDF тем же генератором
       h+=renderDocHtml(r);
@@ -97,8 +97,87 @@
       [].forEach.call(document.querySelectorAll('.tabbtn'), function(b){
         b.onclick=function(){ CUR=ROWS[+this.getAttribute('data-i')]; render(); };
       });
+      bindOrderChips();
       document.getElementById('pdf').style.display='';
       document.getElementById('xls1c').style.display='';
+    }
+
+    // ---- заказы счёта со статусами ----
+    var ORD = {};        // cardId -> строка статусов с сервера
+    function invCardIds(r){
+      var ids=[], seen={};
+      (parse(r.items_json,[])||[]).forEach(function(it){ if(it&&it.cardId&&!seen[it.cardId]){ seen[it.cardId]=1; ids.push(it.cardId); } });
+      (parse(r.card_ids_json,[])||[]).forEach(function(id){ if(id&&!seen[id]){ seen[id]=1; ids.push(id); } });
+      return ids;
+    }
+    function ochip(o, field, label){
+      var on=o[field];
+      return '<span class="chip'+(on?' on':'')+'" data-card="'+esc(o.cardId)+'" data-f="'+field+'">'+(on?'✓ ':'')+label+'</span>';
+    }
+    function renderOrders(r){
+      var ids=invCardIds(r);
+      if(!ids.length) return '';
+      var h='<table class="otbl"><thead><tr><th>№</th><th>Заказ</th><th class="num">Сумма</th>'+
+            '<th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th></tr></thead><tbody>';
+      var anyPaidNoMoney=false;
+      var p=PAYINFO[r.number];
+      ids.forEach(function(id){
+        var o=ORD[id];
+        if(!o){ h+='<tr><td colspan="7" class="muted">загружаю статусы…</td></tr>'; return; }
+        if(o.missing){
+          h+='<tr><td colspan="7" class="muted">заказ '+esc(id)+' не найден в расчётах (возможно, карточка удалена)</td></tr>'; return;
+        }
+        if(o.paid && p && (+p.received||0)<=0) anyPaidNoMoney=true;
+        h+='<tr>'+
+           '<td><a class="onum" href="https://trello.com/c/'+esc(o.cardId)+'" target="_blank" title="Открыть карточку заказа в новой вкладке">'+esc(o.number||'—')+' ↗</a></td>'+
+           '<td>'+esc(String(o.name||'').slice(0,70))+(String(o.name||'').length>70?'…':'')+'</td>'+
+           '<td class="num">'+money(o.total)+' ₸</td>'+
+           '<td>'+ochip(o,'invoiceSent','выслан')+'</td>'+
+           '<td>'+ochip(o,'paid','оплачен')+'</td>'+
+           '<td>'+ochip(o,'delivered','сдали')+'</td>'+
+           '<td>'+ochip(o,'actSigned','акт')+'</td>'+
+           '</tr>';
+      });
+      h+='</tbody></table>';
+      h+='<div class="muted" style="margin-bottom:4px">Статусы общие с разделом «Заказы» в бухгалтерии и карточками — правка здесь видна везде.</div>';
+      if(anyPaidNoMoney) h+='<div class="warn12">⚠ Заказ помечен оплаченным, но по выписке на этот счёт денег не поступало. Галочка «оплачен» — ручная отметка; проверьте, тем ли счётом оплачено.</div>';
+      return h;
+    }
+    function loadOrders(){
+      var ids={};
+      ROWS.forEach(function(r){ invCardIds(r).forEach(function(id){ ids[id]=1; }); });
+      var list=Object.keys(ids);
+      if(!list.length) return;
+      fetch(WORKER+'/acct-status?cards='+encodeURIComponent(list.join(',')))
+        .then(function(x){return x.json();})
+        .then(function(j){
+          if(!j||!j.ok) return;
+          (j.rows||[]).forEach(function(o){ ORD[o.cardId]=o; });
+          render();
+        }).catch(function(){});
+    }
+    function bindOrderChips(){
+      [].forEach.call(document.querySelectorAll('.chip[data-card]'), function(c){
+        c.onclick=function(){
+          var cardId=this.getAttribute('data-card'), field=this.getAttribute('data-f');
+          var o=ORD[cardId]; if(!o||o.missing) return;
+          var newVal=!o[field]; this.classList.add('busy');
+          // те же вызовы, что во вкладке «Заказы»: «оплачен» идёт через /calc-paid
+          // (авто-перемещение карточки, дата оплаты), остальное через /acct-set
+          var p=(field==='paid')
+            ? fetch(WORKER+'/calc-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cardId:cardId,paid:newVal})})
+            : fetch(WORKER+'/acct-set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cardId:cardId,field:field,value:newVal?1:0})});
+          p.then(function(x){return x.json();}).then(function(j){
+            if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+            o[field]=newVal;
+            if(field==='paid') o.paidAt=newVal?new Date().toISOString():null;
+            render();
+          }).catch(function(e){
+            render();
+            alert('Не сохранилось: '+(e&&e.message||e));
+          });
+        };
+      });
     }
 
     // HTML-копия макета PDF: предупреждение, банковская шапка, стороны, позиции,
@@ -236,6 +315,7 @@
       ((res[1]&&res[1].rows)||[]).forEach(function(p){ PAYINFO[p.number]=p; });
       CUR=ROWS[0]||null;
       render();
+      loadOrders();
     });
   </script>
 </body>
