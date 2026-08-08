@@ -295,25 +295,11 @@
           var on = (w[p.fld]==1||w[p.fld]===true);
           return chipCb(p.cls, p.label, p.hint, on, p.warn?' warn':'');
         }).join('')+'</div>';
-      // мотивация: премия — ТОЛЬКО у её держателя (обычно начальник цеха);
-      // у остальных лишь незаметная ссылка «назначить», чтобы можно было передать
-      var isBonusHolder = FIN.bonusName && w.name && FIN.bonusName===w.name;
+      // «Премия от чистой прибыли» убрана (решение Асхата, 08.2026): прибыль
+      // сложно считать однозначно, а деньги через неё никогда и не выплачивались —
+      // это была только справочная строка на «Финансах», не заходившая в ведомость.
       var isEng = stagesSel.indexOf('eng')>=0;
       var mot = '';
-      if (isBonusHolder) {
-        mot += '<label title="Премия от чистой прибыли компании — одна на компанию, у начальника цеха/зама. Считается в «Финансах» после налогов. Чтобы передать другому: поставьте здесь 0, сохраните — ссылка назначения появится у остальных.">Премия от чистой прибыли, % '+
-          '<input class="bonusPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+FIN.bonusPercent+'">'+
-        '</label>';
-      } else if (w.id && !FIN.bonusName) {
-        // премия сейчас никому не назначена — только в этом случае показываем ссылку
-        mot += '<a href="#" class="mkBonus" style="font-size:11px;color:var(--muted);text-decoration:none" title="Премия от чистой прибыли — одна на компанию (для начальника цеха/зама). Нажмите, чтобы назначить этому работнику.">⋯ назначить премию от прибыли</a>'+
-          '<span class="bonusWrap" style="display:none"><label>Премия от чистой прибыли, % <input class="bonusPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="0" disabled></label></span>';
-      }
-      // премия от чистой прибыли — инструмент ОДНОГО человека (начальника цеха);
-      // у остальных не показываем даже ссылку, чтобы не путать с новой системой
-      // «% от работ». Передать премию другому: впишите процент в карточке нового
-      // держателя не получится — сначала обнулите у текущего, затем поле появится
-      // у всех офисных... нет: передача делается здесь же — см. подсказку у держателя.
       if (isEng) {
         mot += '<label title="Базовый процент инженера от СТОИМОСТИ РАБОТ заказа (не от прибыли). Гибрид тиража: полный % с работ первого изделия. Общий для всех инженеров; ставку определяет директор.">Инженер: % от работ (первое изделие) '+
           '<input class="engPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(FIN.engPercent||'')+'" placeholder="0">'+
@@ -356,15 +342,6 @@
           var cb=card.querySelector('.'+cls); if(cb){ cb.checked=true; cb.parentNode.classList.add('on'); }
         });
       });
-      var mkB=card.querySelector('.mkBonus');
-      if(mkB) mkB.addEventListener('click', function(e){
-        e.preventDefault();
-        this.style.display='none';
-        var wrap=card.querySelector('.bonusWrap');
-        wrap.style.display='';
-        var inp=wrap.querySelector('.bonusPct');
-        inp.disabled=false; inp.focus();
-      });
       var pt=card.querySelector('.ptype');
       if(pt) pt.addEventListener('change', function(){
         var sal=card.querySelector('.sal');
@@ -397,14 +374,14 @@
 
     function setMsg(s){ msgEl.textContent = s||''; }
 
-    var FIN = { bonusPercent:0, bonusName:'', engPercent:0 }; // премия и инженерный % (settings 'fin')
+    var FIN = { engPercent:0 }; // инженерный % (settings 'fin')
     function loadWorkers(){
       if(!WORKER){ setMsg('Не задан адрес сервера (config.js).'); return; }
       setMsg('Загрузка…');
       var showDel = document.getElementById('showDeleted') && document.getElementById('showDeleted').checked;
       return fetch(WORKER+'/fin-get').then(function(r){return r.json();}).then(function(j){
         var f=(j&&j.fin)||j||{};
-        FIN={ bonusPercent:+f.bonusPercent||0, bonusName:f.bonusName||'', engPercent:+f.engPercent||0, engTiragePercent:(f.engTiragePercent!==undefined&&f.engTiragePercent!==null&&f.engTiragePercent!=='')?+f.engTiragePercent:null, engInventionShare:(f.engInventionShare!==undefined&&f.engInventionShare!==null&&f.engInventionShare!=='')?+f.engInventionShare:40 };
+        FIN={ engPercent:+f.engPercent||0, engTiragePercent:(f.engTiragePercent!==undefined&&f.engTiragePercent!==null&&f.engTiragePercent!=='')?+f.engTiragePercent:null, engInventionShare:(f.engInventionShare!==undefined&&f.engInventionShare!==null&&f.engInventionShare!=='')?+f.engInventionShare:40 };
       }).catch(function(){}).then(function(){
         // доли работников (цех/сборка/монтаж) из настроек цен
         return fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
@@ -531,19 +508,6 @@
     document.getElementById('saveAll').addEventListener('click', function(){
       var btn=this, msg=document.getElementById('saveAllMsg');
       var cards=[].slice.call(rowsEl.querySelectorAll('.wcard'));
-      // премия: не больше одного работника с процентом > 0
-      var bonusHolders=[];
-      cards.forEach(function(c){
-        var el=c.querySelector('.bonusPct');
-        if(!el || el.disabled) return;
-        var v=parseFloat(el.value)||0;
-        if(v>0) bonusHolders.push({ name:(c.querySelector('.nm').value||'').trim(), pct:v });
-      });
-      if(bonusHolders.length>1){
-        msg.textContent='⚠ Премия от чистой прибыли может быть только у одного работника — сейчас указана у: '+bonusHolders.map(function(b){return b.name;}).join(', ')+'. Оставьте процент одному.';
-        msg.style.color='#e8c07d';
-        return;
-      }
       // инженерный %: берём первое заполненное поле
       var engVal=null, engTirVal, engInvVal;
       cards.some(function(c){ var el=c.querySelector('.engPct'); if(el && el.value!==''){ engVal=parseFloat(el.value)||0; return true; } return false; });
@@ -561,8 +525,6 @@
       });
       chain.then(function(){
         var fin={};
-        if(bonusHolders.length===1){ fin.bonusPercent=bonusHolders[0].pct; fin.bonusName=bonusHolders[0].name; }
-        else { fin.bonusPercent=0; fin.bonusName=''; }
         if(engVal!==null) fin.engPercent=engVal;
         if(engTirVal!==undefined) fin.engTiragePercent=engTirVal;
         if(engInvVal!==undefined) fin.engInventionShare=engInvVal;
