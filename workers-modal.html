@@ -96,9 +96,19 @@
         <label style="font-size:12.5px">Сборка (шлейфовка, компоненты), % <input id="shareAssembly" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
         <label style="font-size:12.5px">Монтажная бригада, % <input id="shareMontazh" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
       </div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:10px">
-        <label style="font-size:12.5px" title="Защита от «пира и голода»: на гигантском заказе один человек не заработает ×8 оклада. До порога — полная доля, сверх — пониженный процент. Пусто = порога нет.">Порог сдельной с одного заказа, ₸ <input id="capPerOrder" type="number" min="0" step="10000" style="width:110px" placeholder="нет"></label>
-        <label style="font-size:12.5px" title="Сверх порога работник получает этот процент от СТОИМОСТИ РАБОТ (не от своей доли). Пример: доля цеха 25%, порог 500 000; резка на 15 млн → до порога полностью, сверх — 1% от соответствующих работ. Ставку меняет руководство.">Сверх порога, % от работ <input id="capOverWorksPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="1"></label>
+      <div class="hint" style="margin-top:14px;font-weight:600">Порог сдельной с одного заказа — отдельно по ролям</div>
+      <div class="hint" style="margin-bottom:4px">У каждой роли своя структура заработка, единый порог действовал на них по-разному. До порога — полная доля, сверх — пониженный %. Пусто = для этой роли порога нет.</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:6px">
+        <label style="font-size:12.5px" title="Для резки/гибки/сварки/краски/сборки/монтажа. Защита от «пира и голода»: на гигантском заказе один человек не заработает ×8 оклада.">Цеховой: порог, ₸ <input id="capPerOrder" type="number" min="0" step="10000" style="width:110px" placeholder="нет"></label>
+        <label style="font-size:12.5px" title="Сверх порога работник получает этот процент от СТОИМОСТИ РАБОТ (не от своей доли). Ставку меняет руководство.">сверх порога, % <input id="capOverWorksPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="1"></label>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:8px">
+        <label style="font-size:12.5px" title="Для инженера: его заработок складывается по-другому (работы по файлам + степень изобретения), поэтому порог у него отдельный от цехового.">Инженерный: порог, ₸ <input id="engCapPerOrder" type="number" min="0" step="10000" style="width:110px" placeholder="нет"></label>
+        <label style="font-size:12.5px" title="Сверх порога — этот % от «работ» инженера (работы по файлам + степень изобретения).">сверх порога, % <input id="engCapOverWorksPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="1"></label>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:8px">
+        <label style="font-size:12.5px" title="Для личного «% от работ сданных заказов» (начальник цеха и подобные должности) — см. поле в карточке работника ниже.">«% от работ»: порог, ₸ <input id="officeCapPerOrder" type="number" min="0" step="10000" style="width:110px" placeholder="нет"></label>
+        <label style="font-size:12.5px" title="Сверх порога — этот % от стоимости работ заказа.">сверх порога, % <input id="officeCapOverWorksPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="1"></label>
       </div>
       <div class="hint" style="margin-top:6px">Сверх порога платится указанный %, срезанный остаток фиксируется по каждому работнику — сумма видна только руководству во вкладке «Зарплаты». Работнику порог, процент и удержания не показываются.</div>
       <div class="savebar" style="margin-top:10px">
@@ -397,6 +407,10 @@
           put('shareMontazh', c.shareMontazh, 50);
           var cap=document.getElementById('capPerOrder'); if(cap) cap.value = (c.pieceCapPerOrder>0) ? c.pieceCapPerOrder : '';
           var cov=document.getElementById('capOverWorksPct'); if(cov) cov.value = (c.pieceCapOverWorks!=null&&c.pieceCapOverWorks!=='') ? c.pieceCapOverWorks : '';
+          var ecap=document.getElementById('engCapPerOrder'); if(ecap) ecap.value = (c.engCapPerOrder>0) ? c.engCapPerOrder : '';
+          var ecov=document.getElementById('engCapOverWorksPct'); if(ecov) ecov.value = (c.engCapOverWorks!=null&&c.engCapOverWorks!=='') ? c.engCapOverWorks : '';
+          var ocap=document.getElementById('officeCapPerOrder'); if(ocap) ocap.value = (c.officeCapPerOrder>0) ? c.officeCapPerOrder : '';
+          var ocov=document.getElementById('officeCapOverWorksPct'); if(ocov) ocov.value = (c.officeCapOverWorks!=null&&c.officeCapOverWorks!=='') ? c.officeCapOverWorks : '';
 
         }).catch(function(){});
       }).then(function(){
@@ -544,7 +558,11 @@
                        shareAssembly:+document.getElementById('shareAssembly').value||0,
                        shareMontazh:+document.getElementById('shareMontazh').value||0,
                        capPerOrder:+document.getElementById('capPerOrder').value||0,
-                       capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0) };
+                       capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
+                       engCapPerOrder:+document.getElementById('engCapPerOrder').value||0,
+                       engCapOverWorksPct:(document.getElementById('engCapOverWorksPct').value==='')?1:(+document.getElementById('engCapOverWorksPct').value||0),
+                       officeCapPerOrder:+document.getElementById('officeCapPerOrder').value||0,
+                       officeCapOverWorksPct:(document.getElementById('officeCapOverWorksPct').value==='')?1:(+document.getElementById('officeCapOverWorksPct').value||0) };
             } catch (e) {
               errs.push('доли работников: поля раздела не найдены на странице ('+(e&&e.message||e)+')');
               return;
@@ -576,7 +594,11 @@
                  shareAssembly:+document.getElementById('shareAssembly').value||0,
                  shareMontazh:+document.getElementById('shareMontazh').value||0,
                  capPerOrder:+document.getElementById('capPerOrder').value||0,
-                 capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0) };
+                 capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
+                 engCapPerOrder:+document.getElementById('engCapPerOrder').value||0,
+                 engCapOverWorksPct:(document.getElementById('engCapOverWorksPct').value==='')?1:(+document.getElementById('engCapOverWorksPct').value||0),
+                 officeCapPerOrder:+document.getElementById('officeCapPerOrder').value||0,
+                 officeCapOverWorksPct:(document.getElementById('officeCapOverWorksPct').value==='')?1:(+document.getElementById('officeCapOverWorksPct').value||0) };
         fetch(WORKER+'/shares-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sh)})
           .then(function(r){return r.json();})
           .then(function(j){
