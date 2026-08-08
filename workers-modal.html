@@ -194,10 +194,16 @@
       var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host.firstChild);
       document.getElementById('mobClose').onclick=function(){ var o=document.getElementById('mobOvl'); if(o) o.remove(); };
       document.getElementById('mobCopy').onclick=function(){
-        var i=document.getElementById('mobUrl'); i.select();
-        if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(i.value);
-        else document.execCommand('copy');
-        this.textContent='✓ Скопировано';
+        // окно живёт в iframe Trello: navigator.clipboard там запрещён и падает молча.
+        // Порядок: пробуем современный способ -> при отказе старый execCommand ->
+        // если и он не смог, оставляем текст выделенным с подсказкой Ctrl+C.
+        var i=document.getElementById('mobUrl'), btn=this;
+        i.focus(); i.select(); i.setSelectionRange(0, i.value.length);
+        function done(okc){ btn.textContent = okc ? '✓ Скопировано' : 'Выделено — нажмите Ctrl+C'; }
+        function legacy(){ var okc=false; try{ okc=document.execCommand('copy'); }catch(e){} done(okc); }
+        if(navigator.clipboard&&navigator.clipboard.writeText)
+          navigator.clipboard.writeText(i.value).then(function(){done(true);},legacy);
+        else legacy();
       };
       document.getElementById('mobWa').href='https://wa.me/?text='+encodeURIComponent('Ваш личный кабинет MetalShop: '+url);
       document.getElementById('mobPinSave').onclick=function(){
