@@ -80,12 +80,12 @@
           <input type="month" id="month" />
         </div>
         <div class="group">
-          <label for="workdays">Рабочих дней</label>
+          <label for="workdays">Рабочих дней (будни)</label>
           <input type="number" id="workdays" min="1" max="31" step="1" />
         </div>
         <div class="hint" id="autoHint"></div>
       </div>
-      <div class="hint" style="margin-top:8px">Дневная ставка = оклад ÷ рабочие дни. Норма берётся из производственного календаря РК (праздники и переносы учтены). Правка сохраняется на сервере и действует везде: в табеле, в зарплатной ведомости и здесь.</div>
+      <div class="hint" style="margin-top:8px">Дневная ставка = оклад ÷ рабочие дни. По умолчанию берутся будни месяца (пн–пт); можно поправить вручную.</div>
     </div>
 
     <div class="sec">
@@ -148,13 +148,14 @@
     }
 
     function fmt(n){ return (Math.round(n||0)).toLocaleString('ru-RU'); }
-    // Норма рабочих дней НЕ считается здесь: единственный источник — сервер
-    // (/att-norm), где действует производственный календарь РК с переносами
-    // праздников плюс ручная правка. Иначе панель, табель и ведомость разошлись бы.
-    var NORM = { calendar: 0, override: null, effective: 0 };
+    function workdaysInMonth(y, m){ // m: 1-12
+      var d=new Date(y, m-1, 1), n=0;
+      while(d.getMonth()===m-1){ var wd=d.getDay(); if(wd>=1&&wd<=5)n++; d.setDate(d.getDate()+1); }
+      return n;
+    }
     function currentWorkdays(){
       var v=parseInt(document.getElementById('workdays').value,10);
-      return (v && v>0) ? v : (NORM.effective || 22);
+      return (v && v>0) ? v : 22;
     }
     function recalcWages(){
       var wd=currentWorkdays();
@@ -223,12 +224,10 @@
       {cls:'canhr',     fld:'can_hr',        label:'HR кабинет',          hint:'личные дела сотрудников; собственное дело недоступно'},
       {cls:'candash',   fld:'can_dashboard', label:'Панель руководителя', hint:'выручка, прибыль, этапы, заработки, оплаты'},
       {cls:'cansup',    fld:'can_supply',    label:'Снабжение',           hint:'заявки, инструмент, наличные'},
-      {cls:'canissue',  fld:'can_issue_invoice', label:'Выставлять счета', hint:'счета по ЛЮБЫМ заказам: производство и ремонт. Открывает суммы заказов в окне счёта — давайте только доверенным'},
-      {cls:'canissuerep', fld:'can_issue_repair_invoice', label:'Счета по ремонтам', hint:'выставлять счета ТОЛЬКО по ремонтным заявкам. Производственные заказы в счёт не включить, их суммы не видны. Для ответственного за ремонты'},
+      {cls:'canissue',  fld:'can_issue_invoice', label:'Выставлять счета', hint:'кнопка «Выставить счёт» на карточке заказа'},
       {cls:'caninv',    fld:'can_invoice',   label:'Бухгалтерия',         hint:'панель бухгалтера: статусы, счета на оплату, поступления из банка — только бухгалтеру'},
       {cls:'cancrm',    fld:'can_crm',       label:'CRM',                 hint:'клиенты, выручка, долги'},
-      {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены ВЕЗДЕ: калькуляторы производства и ремонта, материалы, суммы. Включает и «Видит стоимость ремонтов»'},
-      {cls:'cancostrep', fld:'can_see_repair_cost', label:'Видит стоимость ремонтов', hint:'цены ТОЛЬКО в ремонтном контуре: калькулятор заявки, цена клиенту, суммы счетов по ремонтам. Производственные цены остаются закрыты. Можно называть клиенту цену ремонта до приёма изделия'},
+      {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены в калькуляторе'},
       {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true},
       {cls:'agent',     fld:'is_repair_agent', label:'Агент ремонта',      hint:'бонус за каждую полностью оформленную заявку на ремонт (описание, фирма, контактное лицо, фото) — виден агенту в «Моём заработке»'}
     ];
@@ -299,9 +298,6 @@
         '<label title="Роялти от работ остального тиража. Пусто = как основной %.">% с тиража (2-й и далее) '+
           '<input class="engTirPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(FIN.engTiragePercent!=null?FIN.engTiragePercent:'')+'" placeholder="= осн.">'+
         '</label>'+
-        '<label title="ЛИЧНЫЙ процент этого инженера от строки «Срочность» заказа. Клиент платит наценку за спешку — часть по решению руководства идёт проектировщику. У каждого инженера свой процент; 0 или пусто — не платить.">Доля инженеру при срочности, % '+
-          '<input class="engUrgPct" type="number" min="0" max="100" step="0.5" style="width:70px" value="'+(w.urgency_percent>0?w.urgency_percent:'')+'" placeholder="0">'+
-        '</label>'+
         '<label title="Сколько процентов от этапа «Степень изобретения» (начисляется клиенту в смете) получает инженер как сдельную. По умолчанию 40%.">от «Степени изобретения», % '+
           '<input class="engInvPct" type="number" min="0" max="100" step="1" style="width:70px" value="'+(FIN.engInventionShare!=null?FIN.engInventionShare:40)+'">'+
         '</label><span class="muted" style="font-size:11.5px">копийность определяется автоматически: Σ деталей резки ÷ число DXF на карточке; все ставки меняются руководством в любой момент</span>';
@@ -359,8 +355,9 @@
           .then(function(j){
             btn.disabled=false;
             if(!j||!j.ok){ alert('Не получилось: '+((j&&j.error)||'?')); return; }
-            var base = window.location.href.replace(/[^/]*(\?.*)?$/,'');
-            var url = base + 'mobile.html#mt=' + j.token;
+            // приложение живёт на воркере (/app), файла mobile.html на GitHub нет —
+            // персональная ссылка ведёт на /app, токен в #mt= привязывает телефон сразу
+            var url = WORKER + '/app#mt=' + j.token;
             showMobileCard(w, url, base);
           })
           .catch(function(e){ btn.disabled=false; alert('Сеть: '+(e&&e.message||e)); });
@@ -419,8 +416,6 @@
       var stages=[].map.call(tr.querySelectorAll('.stgcb:checked'), function(c){ return c.value; });
       var canInvoice=tr.querySelector('.caninv')?tr.querySelector('.caninv').checked:false;
       var canIssueInvoice=tr.querySelector('.canissue')?tr.querySelector('.canissue').checked:false;
-      var canIssueRepairInvoice=tr.querySelector('.canissuerep')?tr.querySelector('.canissuerep').checked:false;
-      var canSeeRepairCost=tr.querySelector('.cancostrep')?tr.querySelector('.cancostrep').checked:false;
       var canSupply=tr.querySelector('.cansup')?tr.querySelector('.cansup').checked:false;
       var canCrm=tr.querySelector('.cancrm')?tr.querySelector('.cancrm').checked:false;
       var canSeeCost=tr.querySelector('.cancost')?tr.querySelector('.cancost').checked:false;
@@ -443,7 +438,7 @@
       setMsg('Сохранение…');
       return fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, canIssueRepairInvoice:canIssueRepairInvoice, canSeeRepairCost:canSeeRepairCost, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })(), urgencyPercent:(function(){ var el=tr.querySelector('.engUrgPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){
@@ -492,59 +487,21 @@
         }).catch(function(e){ setMsg('Ошибка: '+(e&&e.message||e)); });
     }
 
-    // month / workdays controls — норма тянется с сервера и туда же пишется
+    // month / workdays controls
     (function initMonth(){
       var now=new Date();
       var mEl=document.getElementById('month');
-      var wdEl=document.getElementById('workdays');
-      var hintEl=document.getElementById('autoHint');
-      var saveTimer=null;
       mEl.value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-
-      function drawHint(saving){
-        if(saving){ hintEl.innerHTML='<span style="color:#9fadbc">сохраняю…</span>'; return; }
-        if(NORM.override!=null){
-          hintEl.innerHTML='<span style="color:#e8c07d">изменено вручную</span> · по календарю РК '+NORM.calendar+
-            ' <a href="#" id="normReset" style="color:#4f7cff">вернуть</a>';
-          var rl=document.getElementById('normReset');
-          if(rl) rl.onclick=function(e){ e.preventDefault(); wdEl.value=''; pushNorm(null); };
-        } else {
-          hintEl.innerHTML='по производственному календарю РК: '+NORM.calendar+' раб. дн.';
-        }
+      function applyAuto(){
+        var parts=mEl.value.split('-'); var y=+parts[0], m=+parts[1];
+        var auto=workdaysInMonth(y,m);
+        document.getElementById('workdays').value = auto;
+        document.getElementById('autoHint').textContent = 'авто: '+auto+' будних дней';
+        recalcWages();
       }
-      function pullNorm(){
-        if(!WORKER){ hintEl.textContent='нет адреса сервера — норма недоступна'; return; }
-        hintEl.textContent='загружаю норму…';
-        fetch(WORKER+'/att-norm?ym='+encodeURIComponent(mEl.value))
-          .then(function(r){return r.json();})
-          .then(function(j){
-            if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
-            NORM={calendar:j.calendar, override:j.override, effective:j.effective};
-            wdEl.value=NORM.effective; drawHint(false); recalcWages();
-          })
-          .catch(function(e){ hintEl.textContent='норму получить не удалось: '+(e&&e.message||e); });
-      }
-      function pushNorm(days){
-        if(!WORKER) return;
-        drawHint(true);
-        fetch(WORKER+'/att-norm-set',{method:'POST',headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({ym:mEl.value, days:days})})
-          .then(function(r){return r.json();})
-          .then(function(j){
-            if(!j||!j.ok) throw new Error((j&&j.error)||'не сохранилось');
-            NORM={calendar:j.calendar, override:j.override, effective:j.effective};
-            wdEl.value=NORM.effective; drawHint(false); recalcWages();
-          })
-          .catch(function(e){ hintEl.innerHTML='<span style="color:#f28b82">не сохранилось: '+esc(e&&e.message||e)+'</span>'; });
-      }
-      mEl.addEventListener('change', pullNorm);
-      wdEl.addEventListener('input', function(){
-        recalcWages();                                  // превью ставки сразу
-        clearTimeout(saveTimer);
-        var v=parseInt(wdEl.value,10);
-        saveTimer=setTimeout(function(){ pushNorm((v&&v>0)?v:null); }, 700);
-      });
-      pullNorm();
+      mEl.addEventListener('change', applyAuto);
+      document.getElementById('workdays').addEventListener('input', recalcWages);
+      applyAuto();
     })();
 
     document.getElementById('showDeleted').addEventListener('change', function(){ loadWorkers(); });
