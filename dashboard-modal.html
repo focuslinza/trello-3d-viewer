@@ -427,6 +427,56 @@
       .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ PRICING_EDIT={mat:{},cmp:{},coef:{},matOstBySec:{},matRahBySec:{},cmpOstBySec:{},cmpRahBySec:{},opOstBySec:{},opRahBySec:{},rates:{}}; render(); } });
   }
 
+  // ---- ЖУРНАЛ ДЕЙСТВИЙ ----
+  // Кто и что делал на цеховых ПК: сервер пишет каждое действие MES с именем
+  // вошедшего по QR-заслону. Действия БЕЗ входа — подсвечены красным: это работа
+  // в обход заслона, повод спросить. Вход/выход — приглушённо, для контекста.
+  var ACTLOG=null, ACTLOG_KEY='', ACT_WORKER='';
+  function loadActLog(){
+    var key=RANGE.from+'|'+RANGE.to;
+    if(ACTLOG && ACTLOG_KEY===key) return;
+    ACTLOG_KEY=key; ACTLOG=null;
+    fetch(WORKER+'/action-log?from='+RANGE.from+'&to='+RANGE.to)
+      .then(function(r){return r.json();})
+      .then(function(j){ ACTLOG=(j&&j.rows)||[]; if(tab==='actlog') render(); })
+      .catch(function(){ ACTLOG=[]; if(tab==='actlog') render(); });
+  }
+  function renderActLog(){
+    loadActLog();
+    if(ACTLOG===null) return '<div class="muted">Загружаю журнал…</div>';
+    var names={};
+    ACTLOG.forEach(function(r){ if(r.worker_name) names[r.worker_name]=1; });
+    var h='<div style="margin-bottom:8px"><select id="actWho" style="background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px 8px">'+
+      '<option value="">— все люди —</option>'+
+      Object.keys(names).sort().map(function(n){ return '<option'+(ACT_WORKER===n?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+
+      '<option value="__anon__"'+(ACT_WORKER==='__anon__'?' selected':'')+'>только без входа (обход)</option>'+
+      '</select></div>';
+    var rows=ACTLOG.filter(function(r){
+      if(ACT_WORKER==='__anon__') return !r.worker_name && r.action!=='вход' && r.action!=='выход';
+      if(ACT_WORKER) return r.worker_name===ACT_WORKER;
+      return true;
+    });
+    if(!rows.length) return h+'<div class="muted">Записей за период нет. Журнал наполняется, когда на цеховых ПК работают через QR-заслон.</div>';
+    h+='<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr>'+
+       '<th style="text-align:left;padding:6px;color:var(--muted)">Время</th>'+
+       '<th style="text-align:left;padding:6px;color:var(--muted)">Компьютер</th>'+
+       '<th style="text-align:left;padding:6px;color:var(--muted)">Кто</th>'+
+       '<th style="text-align:left;padding:6px;color:var(--muted)">Действие</th></tr></thead><tbody>';
+    rows.slice(0,500).forEach(function(r){
+      var sys=(r.action==='вход'||r.action==='выход');
+      var anon=!r.worker_name && !sys;
+      var st=anon?'color:#e5534b':'';
+      if(sys) st='color:var(--muted)';
+      h+='<tr style="border-top:1px solid var(--line);'+st+'">'+
+         '<td style="padding:5px 6px;white-space:nowrap">'+esc(String(r.at||'').slice(5,16))+'</td>'+
+         '<td style="padding:5px 6px">'+esc(r.pc_name||'—')+'</td>'+
+         '<td style="padding:5px 6px">'+(r.worker_name?esc(r.worker_name):(sys?'':'<b>без входа</b>'))+'</td>'+
+         '<td style="padding:5px 6px">'+esc(r.action||'')+(r.detail&&r.detail!==r.action?' <span class="muted">'+esc(String(r.detail).slice(0,60))+'</span>':'')+'</td></tr>';
+    });
+    h+='</tbody></table>';
+    if(rows.length>500) h+='<div class="muted" style="margin-top:6px">Показаны первые 500 — сузьте период.</div>';
+    return h;
+  }
   function render(){
     var h='';
     if(tab==='pricing'){
@@ -484,7 +534,7 @@
       }
 
       h+='<div class="tabs">';
-      [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам']].forEach(function(x){
+      [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам'],['actlog','Журнал']].forEach(function(x){
         h+='<div class="tab'+(tab===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
       });
       h+='</div>';
@@ -496,10 +546,11 @@
         var f=document.getElementById('fromD').value, t2=document.getElementById('toD').value;
         if(!f||!t2) return;
         if(f>t2){ var tmp=f; f=t2; t2=tmp; }
-        RANGE.from=f; RANGE.to=t2; RANGE.presetKey='custom'; load();
+        RANGE.from=f; RANGE.to=t2; RANGE.presetKey='custom'; ACTLOG=null; ACTLOG_KEY=''; load();
       };
       var ew=document.getElementById('exclWeekends'); if(ew) ew.onchange=function(){ EXCL_WEEKENDS=this.checked; render(); };
       [].forEach.call(document.querySelectorAll('.tab[data-tab]'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
+      var aw=document.getElementById('actWho'); if(aw) aw.onchange=function(){ ACT_WORKER=this.value; render(); };
       renderCharts();
     }
     var ps=document.getElementById('prSave'); if(ps) ps.onclick=savePricing;
@@ -544,6 +595,7 @@
   }
 
   function renderTab(){
+    if(tab==='actlog') return renderActLog();
     if(tab==='people'){
       var a=DATA.byWorker||[]; if(!a.length) return '<div class="muted">Нет начислений за период.</div>';
       var max=a[0].earned||1;
