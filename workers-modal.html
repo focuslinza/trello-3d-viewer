@@ -186,6 +186,7 @@
         '<hr style="border:none;border-top:1px solid var(--line);margin:16px 0">'+
         '<div style="font-weight:700;margin-bottom:4px">Запасной вход: логин и пароль</div>'+
         '<div class="muted" style="font-size:12px;margin-bottom:8px">Основной вход в цеху — по QR (бейдж или телефон). Логин с паролем нужны, если телефон разряжен или бейдж потерян.</div>'+
+        '<div id="mobCredNow" class="muted" style="margin-bottom:4px"></div>'+
         '<input id="mobLogin" type="text" placeholder="логин, напр. daniyar" style="width:170px">'+
         ' <input id="mobPass" type="text" placeholder="пароль" style="width:150px">'+
         ' <button class="btn" id="mobPinSave" type="button">Сохранить</button> <span id="mobPinMsg" class="muted"></span>'+
@@ -206,6 +207,12 @@
         else legacy();
       };
       document.getElementById('mobWa').href='https://wa.me/?text='+encodeURIComponent('Ваш личный кабинет MetalShop: '+url);
+      // показываем, что уже задано: сам пароль не хранится (только хэш) — потому
+      // поля пустые; но статус обязан говорить, есть ли он, иначе кажется, что не сохранилось
+      (function(){ var el=document.getElementById('mobCredNow');
+        if(w.login) el.innerHTML='Сейчас задано: логин <b>'+esc(String(w.login))+'</b> · пароль '+(w.pass_hash?'установлен ✓':'не задан')+'. Новые значения заменят старые.';
+        else el.textContent='Логин и пароль пока не заданы.';
+      })();
       document.getElementById('mobPinSave').onclick=function(){
         var lg=document.getElementById('mobLogin').value.trim();
         var pw=document.getElementById('mobPass').value;
@@ -214,7 +221,13 @@
         msg.textContent='Сохраняю…';
         fetch(WORKER+'/worker-creds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workerId:w.id, login:lg, password:pw||undefined})})
           .then(function(r){return r.json();})
-          .then(function(j){ msg.textContent = (j&&j.ok) ? ('Сохранено ✓ логин: '+j.login) : ('Ошибка: '+((j&&j.error)||'?')); })
+          .then(function(j){
+            if(j&&j.ok){ msg.textContent='Сохранено ✓';
+              w.login=j.login; if(pw) w.pass_hash='set';
+              document.getElementById('mobCredNow').innerHTML='Сейчас задано: логин <b>'+esc(String(j.login))+'</b> · пароль '+(w.pass_hash?'установлен ✓':'не задан')+'. Новые значения заменят старые.';
+              document.getElementById('mobPass').value='';
+            } else msg.textContent='Ошибка: '+((j&&j.error)||'?');
+          })
           .catch(function(e){ msg.textContent='Сеть: '+(e&&e.message||e); });
       };
     }
