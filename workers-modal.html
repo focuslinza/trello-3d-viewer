@@ -277,6 +277,11 @@
           '<input class="sal" type="number" min="0" step="1000" placeholder="оклад ₸/мес" value="'+(w.salary!=null&&+w.salary>0?w.salary:'')+'" title="Оклад, ₸/мес — действует при типе «Оклад» и «Оклад + сдельная»; при «Сдельной» игнорируется"'+(((w.pay_type||(w.is_salaried==1?'both':'piece'))==='piece')?' style="display:none"':'')+'>'+
           '<span class="wage" title="Ставка в день = оклад ÷ рабочие дни">—</span>'+
           '<select class="mem" title="Trello-аккаунт">'+memberOptionsHtml(w.trello_member_id||'')+'</select>'+
+          // без привязки к Trello сдельная/офисный % никогда не дойдёт до «Моего заработка» —
+          // показываем это сразу в панели, а не оставляем руководителя гадать по нулям
+          (((w.pay_type||(w.is_salaried==1?'both':'piece'))!=='salary' && !w.trello_member_id)
+            ? '<span style="color:#e8c07d;font-size:11.5px;margin-left:6px" title="Без Trello-аккаунта сдельная и % от работ не попадут в «Мой заработок» — выберите человека в списке слева">⚠ не привязан — сдельная не начислится</span>'
+            : '') +
           (inactive?'<span class="delbadge">удалён</span>':'')+
           '<span class="actions">'+
             '<button class="btn save" type="button">Сохранить</button>'+
