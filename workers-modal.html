@@ -101,6 +101,10 @@
         <label style="font-size:12.5px" title="Сверх порога работник получает этот процент от СТОИМОСТИ РАБОТ (не от своей доли). Пример: доля цеха 25%, порог 500 000; резка на 15 млн → до порога полностью, сверх — 1% от соответствующих работ. Ставку меняет руководство.">Сверх порога, % от работ <input id="capOverWorksPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="1"></label>
       </div>
       <div class="hint" style="margin-top:6px">Сверх порога платится указанный %, срезанный остаток фиксируется по каждому работнику — сумма видна только руководству во вкладке «Зарплаты». Работнику порог, процент и удержания не показываются.</div>
+      <div class="savebar" style="margin-top:10px">
+        <button class="btn" id="saveShares" type="button" style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff;font-weight:700;padding:8px 18px">💾 Сохранить</button>
+        <span id="saveSharesMsg" style="font-size:13px"></span>
+      </div>
     </div>
 
     <div class="sec">
@@ -566,15 +570,25 @@
           .then(function(r){return r.json();})
           .then(function(j){ if(!j||!j.ok) errs.push('настройки мотивации: '+((j&&j.error)||'не сохранились')); })
           .then(function(){
-            var sh={ shareShop:+document.getElementById('shareShop').value||0,
-                     shareAssembly:+document.getElementById('shareAssembly').value||0,
-                     shareMontazh:+document.getElementById('shareMontazh').value||0,
-                     capPerOrder:+document.getElementById('capPerOrder').value||0,
-                     capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0) };
+            // защита от тихого срыва: если поля вдруг не найдены (например, раздел
+            // ещё не отрисован), ошибка попадает в общий список, а не роняет всю цепочку
+            try {
+              var sh={ shareShop:+document.getElementById('shareShop').value||0,
+                       shareAssembly:+document.getElementById('shareAssembly').value||0,
+                       shareMontazh:+document.getElementById('shareMontazh').value||0,
+                       capPerOrder:+document.getElementById('capPerOrder').value||0,
+                       capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0) };
+            } catch (e) {
+              errs.push('доли работников: поля раздела не найдены на странице ('+(e&&e.message||e)+')');
+              return;
+            }
             return fetch(WORKER+'/shares-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sh)})
               .then(function(r){return r.json();})
-              .then(function(j){ if(!j||!j.ok) errs.push('доли работников: '+((j&&j.error)||'не сохранились')); });
+              .then(function(j){ if(!j||!j.ok) errs.push('доли работников: '+((j&&j.error)||'не сохранились')); })
+              .catch(function(e){ errs.push('доли работников: ошибка сети — '+(e&&e.message||e)); });
           });
+      }).catch(function(e){
+        errs.push('сбой при сохранении: '+(e&&e.message||e));
       }).then(function(){
         btn.disabled=false; btn.textContent=t0;
         if(errs.length){
@@ -585,6 +599,32 @@
           msg.style.color='#4bce97';
         }
       });
+    });
+    document.getElementById('saveShares').addEventListener('click', function(){
+      var btn=this, msg=document.getElementById('saveSharesMsg');
+      btn.disabled=true; var t0=btn.textContent; btn.textContent='Сохраняю…';
+      msg.textContent=''; msg.style.color='';
+      try {
+        var sh={ shareShop:+document.getElementById('shareShop').value||0,
+                 shareAssembly:+document.getElementById('shareAssembly').value||0,
+                 shareMontazh:+document.getElementById('shareMontazh').value||0,
+                 capPerOrder:+document.getElementById('capPerOrder').value||0,
+                 capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0) };
+        fetch(WORKER+'/shares-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sh)})
+          .then(function(r){return r.json();})
+          .then(function(j){
+            btn.disabled=false; btn.textContent=t0;
+            if(j&&j.ok){ msg.textContent='✅ Сохранено ('+new Date().toLocaleTimeString().slice(0,5)+')'; msg.style.color='#4bce97'; }
+            else { msg.textContent='Ошибка: '+((j&&j.error)||'сервер не подтвердил'); msg.style.color='#f28b82'; }
+          })
+          .catch(function(e){
+            btn.disabled=false; btn.textContent=t0;
+            msg.textContent='Ошибка сети: '+(e&&e.message||e); msg.style.color='#f28b82';
+          });
+      } catch(e) {
+        btn.disabled=false; btn.textContent=t0;
+        msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='#f28b82';
+      }
     });
     document.getElementById('addBtn').addEventListener('click', function(){
       var card=makeRow(); rowsEl.appendChild(card); document.getElementById('emptyHint').style.display='none';
