@@ -100,6 +100,7 @@
     function fmtDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
     var RANGE={ from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now), preset:'month' };
     var ROWS=[], TOTALS={}, FILTER='', ONLY_OPEN=false;
+    var WIDE_RESULTS=null, WIDE_QUERY='', WIDE_TIMER=null;
     var VIEW='orders'; // orders | invoices | payroll | repairs
     // просмотр счёта в поп-апе (iframe поверх бухгалтерии)
     function openInvView(qs){
@@ -491,7 +492,33 @@
       h+='<div class="kpi amber" title="Заказы, где проставлены все четыре отметки: счёт выслан, оплачен, сдали, акт подписан"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
       h+='</div>';
       var rows=visibleRows();
-      if(!rows.length){ h+='<div class="empty">Нет заказов по выбранным условиям.</div>'; }
+      if(!rows.length){
+        h+='<div class="empty">Нет заказов по выбранным условиям'+(FILTER?' в этом периоде':'')+'.</div>';
+        // если что-то искали и не нашли — ищем по ВСЕЙ базе, без ограничения по дате:
+        // «Заказы» подгружаются по дате пересчёта калькулятора, а не по дате счёта/движения
+        // карточки, так что заказ, который давно не трогали в калькуляторе, здесь не
+        // всплывёт, даже если по нему были счета и он уже дошёл до «Готово».
+        if(FILTER && FILTER.trim().length>=2){
+          if(WIDE_RESULTS===null){
+            h+='<div class="muted" style="margin-top:8px">Ищу по всей базе, вне периода…</div>';
+          } else if(!WIDE_RESULTS.length){
+            h+='<div class="muted" style="margin-top:8px">По всей базе тоже ничего не нашлось.</div>';
+          } else {
+            h+='<div class="muted" style="margin-top:10px;margin-bottom:4px">Найдено вне выбранного периода (заказ давно не пересчитывали в калькуляторе):</div>';
+            h+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Обновлён</th></tr></thead><tbody>';
+            WIDE_RESULTS.forEach(function(r){
+              h+='<tr class="wideRow" data-card="'+esc(r.cardId)+'" style="cursor:pointer">'+
+                 '<td>'+esc(r.number||'—')+'</td>'+
+                 '<td>'+esc(String(r.name||'').slice(0,60))+'</td>'+
+                 '<td>'+esc(r.client||'')+'</td>'+
+                 '<td class="num">'+money(r.total)+' ₸</td>'+
+                 '<td class="muted">'+esc(String(r.updatedAt||'').slice(0,10))+'</td>'+
+                 '</tr>';
+            });
+            h+='</tbody></table>';
+          }
+        } else WIDE_RESULTS=null;
+      }
       else{
         h+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
         rows.forEach(function(r){
@@ -840,7 +867,23 @@
         RANGE.from=f; RANGE.to=t2; RANGE.preset='custom'; load();
       };
       var q=document.getElementById('q');
-      if(q) q.oninput=function(){ FILTER=this.value; render(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v; };
+      if(q) q.oninput=function(){
+        FILTER=this.value; render(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v;
+        clearTimeout(WIDE_TIMER);
+        var query=FILTER.trim();
+        if(query.length<2){ WIDE_RESULTS=null; return; }
+        WIDE_TIMER=setTimeout(function(){
+          WIDE_QUERY=query;
+          fetch(WORKER+'/calc-search?q='+encodeURIComponent(query)).then(function(r){return r.json();}).then(function(j){
+            if(WIDE_QUERY!==query) return;   // пока ждали ответ, ввод уже изменился
+            WIDE_RESULTS=(j&&j.rows)||[];
+            render();
+          }).catch(function(){});
+        },350);
+      };
+      [].forEach.call(document.querySelectorAll('.wideRow'), function(tr){
+        tr.onclick=function(){ window.open('https://trello.com/c/'+this.getAttribute('data-card'), '_blank'); };
+      });
       var oo=document.getElementById('onlyOpen');
       if(oo) oo.onchange=function(){ ONLY_OPEN=this.checked; render(); };
       var apBtn=document.getElementById('apSave');
