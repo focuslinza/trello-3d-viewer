@@ -151,8 +151,10 @@
     }
     html+='</div>';
 
-    // by day
+    // by day — детализацию сервер отдаёт только руководящему составу
+    // («Панель руководителя» / «Бухгалтерия»); работник видит итоги месяца
     var days=j.days||[];
+    if(!j.detailHidden){
     html+='<div class="sec"><h3>По дням</h3>';
     if(!days.length){ html+='<div class="muted">В этом месяце начислений пока нет.</div>'; }
     else {
@@ -175,6 +177,7 @@
       html+='</tbody></table>';
     }
     html+='</div>';
+    }
 
     // бонус агента ремонта (если аккаунт помечен агентом)
     var ab=j.agentBonus;
@@ -195,6 +198,7 @@
 
     // by order (my share only — no order cost)
     var orders=j.orders||[];
+    if(!j.detailHidden){
     html+='<div class="sec"><h3>По заказам (моя доля)</h3>';
     if(!orders.length){ html+='<div class="muted">Нет заказов с вашим участием в этом месяце.</div>'; }
     else {
@@ -209,6 +213,7 @@
       html+='</tbody></table>';
     }
     html+='</div>';
+    }
 
     document.getElementById('app').innerHTML=html;
     var vs=document.getElementById('viewAs');
