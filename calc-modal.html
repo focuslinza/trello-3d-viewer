@@ -445,7 +445,7 @@
         }
       }).then(function(){
         if(!ctx.cardId){ ctx._diag='Не удалось получить cardId (ни из args, ни из t.card).'; return; }
-        return fetchBridge().then(applyBridge).then(checkPaidStatus);
+        return fetchBridge().then(applyBridge).then(filterStaleDxf).then(checkPaidStatus);
       }).then(finishMeta).catch(function(e){
         ctx._diag='loadContext: '+(e&&e.message||e); finishMeta();
       });
@@ -478,6 +478,26 @@
           '. Изменения здесь пересчитают и уже начисленный заработок работников по этому заказу задним числом. Меняйте, только если это исправление ошибки в данных, а не обычная правка.</div>';
       } else { pw.innerHTML=''; }
       renderDxfHint();
+    }
+
+    // DXF-метрики хранятся в базе по id вложения и НЕ исчезают при удалении файла с
+    // карточки. Без сверки «Загрузить из DXF» суммировал удалённые файлы с новыми —
+    // старые данные «воскресали». Сверяем с живыми вложениями; при недоступности
+    // Trello ведём себя как раньше (ничего не отсеиваем).
+    function filterStaleDxf(){
+      ctx.staleDxf = 0;
+      if(MODE_REPAIR || !ctx.cardId || !Object.keys(dxfMetrics).length) return Promise.resolve();
+      return fetch(WORKER+'/card-attachment-ids?cardId='+encodeURIComponent(ctx.cardId))
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if(!j || !j.ok || !Array.isArray(j.ids)) return;
+          var live = {}; j.ids.forEach(function(id){ live[String(id)] = 1; });
+          var removed = 0;
+          Object.keys(dxfMetrics).forEach(function(k){
+            if(!live[String(k)]){ delete dxfMetrics[k]; removed++; }
+          });
+          ctx.staleDxf = removed;
+        }).catch(function(){ /* сеть/Trello недоступны — работаем по-старому */ });
     }
 
     function fetchBridge(){
@@ -535,8 +555,10 @@
       document.getElementById('dxfHint').textContent = ctx._diag
         ? ctx._diag
         : (n
-          ? ('найдено DXF-расчётов: '+n+' — нажмите «Загрузить из DXF»')
-          : 'Нет сохранённого DXF-расчёта на этой карточке. Сначала сохраните его в разделе «DXF / Раскрой» («Открыть / Расчёт» → толщина → «Сохранить расчёт»).');
+          ? ('найдено DXF-расчётов: '+n+' — нажмите «Загрузить из DXF»'+(ctx.staleDxf?(' (ещё '+ctx.staleDxf+' — от удалённых с карточки файлов, пропущены)'):''))
+          : (ctx.staleDxf
+            ? ('Все сохранённые DXF-расчёты ('+ctx.staleDxf+') относятся к файлам, удалённым с карточки, — они пропущены. Загрузите новые DXF и сохраните расчёт в «DXF / Раскрой».')
+            : 'Нет сохранённого DXF-расчёта на этой карточке. Сначала сохраните его в разделе «DXF / Раскрой» («Открыть / Расчёт» → толщина → «Сохранить расчёт»).'));
     }
 
     // best-effort map DXF material+thickness -> sheet catalog code
@@ -692,7 +714,7 @@
       document.getElementById('dxfHint').textContent='Читаю DXF-данные…';
       if(Object.keys(dxfMetrics).length){ doPullFromMetrics(); return; }
       // empty: re-fetch the bridge (handles first-load race / stale cache)
-      fetchBridge().then(applyBridge).then(doPullFromMetrics);
+      fetchBridge().then(applyBridge).then(filterStaleDxf).then(doPullFromMetrics);
     };
     document.getElementById('resetAll').onclick=function(){
       var n = opLines.children.length + matLines.children.length + cmpLines.children.length;
