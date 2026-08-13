@@ -78,9 +78,13 @@
   .spec-price{max-width:96px}
 .ln.spec{border:1px solid #e8873a;border-radius:8px;background:rgba(232,135,58,.06)}
 .ln.spec .spec-price{border-color:#e8873a;color:#e8a35c;font-weight:600}
+/* спеццена видна только руководящему составу: до подтверждения права поле
+   спрятано, а спец-строки выглядят как обычные — сотрудник видит просто цифры */
+body.no-spec .spec-price{display:none}
+body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
 </style>
 </head>
-<body>
+<body class="no-spec">
 
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
@@ -889,7 +893,29 @@
       }).catch(function(){ return false; });
     }
     var CAN_SEE_COST = true; // применится в applyCostPermission()
+    // спеццена для постоянных клиентов: видит и назначает только руководящий состав
+    // («Панель руководителя» / «Бухгалтерия» / «Выставлять счета») или админ доски.
+    // Остальным поле не показывается, но сохранённое значение переживает их пересохранение.
+    function applySpecPermission(){
+      function allow(){ document.body.classList.remove('no-spec'); }
+      if(EMBED){
+        var mid = EMBED_QS.get('memberId') || '';
+        if(!mid) return;
+        fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(mid)).then(function(r){return r.json();})
+          .then(function(j){ if(j && (j.canDashboard || j.canInvoice || j.canIssueInvoice)) allow(); })
+          .catch(function(){});
+        return;
+      }
+      isDirector().then(function(admin){
+        if(admin){ allow(); return; }
+        return t.member('id').then(function(m){
+          return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((m&&m.id)||'')).then(function(r){return r.json();})
+            .then(function(j){ if(j && (j.canDashboard || j.canInvoice || j.canIssueInvoice)) allow(); });
+        });
+      }).catch(function(){});
+    }
     function applyCostPermission(){
+      applySpecPermission();  // право на спеццену проверяется в обоих режимах
       if(EMBED){
         // ПРАВО СПРАШИВАЕМ У СЕРВЕРА, а не у адреса окна. Параметр canSeeCost в URL
         // раньше был единственной проверкой — его можно было переписать руками и
