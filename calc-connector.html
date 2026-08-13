@@ -108,6 +108,17 @@
             });
           }
         };
+        var salesBtn = {
+          icon: { dark: ICON_BASE + 'ic-sales-w.png', light: ICON_BASE + 'ic-sales-b.png' },
+          text: 'Продажи',
+          callback: function (t) {
+            return t.modal({
+              url: './sales-board-modal.html?t=' + Date.now(),
+            title: 'Продажи', accentColor: '#1f6ce8',
+              fullscreen: true,
+            });
+          }
+        };
         var supBtn = {
           icon: { dark: ICON_BASE + 'ic-supply-w.png', light: ICON_BASE + 'ic-supply-b.png' },
           text: 'Снабжение',
@@ -164,7 +175,7 @@
           };
         }
         return isAdmin().then(function(admin){
-          if (admin) return [earnBtn, repairBtn, supBtn, tabelBtn, mgmtBtn([dashBtn, buhBtn, crmBtn])];
+          if (admin) return [earnBtn, repairBtn, supBtn, tabelBtn, salesBtn, mgmtBtn([dashBtn, buhBtn, crmBtn])];
           return perms().then(function(p){
             var out = [earnBtn, repairBtn, supBtn]; // ремонт и снабжение (канбан заявок) — любой работник;
             // внутри «Снабжения» инструмент/наличные/цены видят только снабженец и руководство
@@ -172,7 +183,7 @@
             var mgmt = [];
             if (p.canDashboard) mgmt.push(dashBtn);
             if (p.canInvoice) mgmt.push(buhBtn);
-            if (p.canCrm) mgmt.push(crmBtn);
+            if (p.canCrm) { out.push(salesBtn); mgmt.push(crmBtn); }
             if (mgmt.length === 1) out.push(mgmt[0]);           // одна привилегия — прямой кнопкой
             else if (mgmt.length > 1) out.push(mgmtBtn(mgmt));  // несколько — единым меню
             return out;

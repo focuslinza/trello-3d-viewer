@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Продажи</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./trello-shim.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --bg3:#282e33; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; --purple:#c9a8ff; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #wrap{padding:14px 14px 64px;max-width:1400px;margin:0 auto}
+    h2{margin:0;font-size:18px}
+    .muted{color:var(--muted);font-size:12.5px}
+    .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    input[type=text],input[type=number],input[type=date],select,textarea{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:13.5px}
+    .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 13px;font-size:13px;cursor:pointer}
+    .btn:hover{border-color:var(--blue)}
+    .btn.primary{background:#274469;border-color:var(--blue);color:#cfe1ff;font-weight:600}
+    .btn.green{background:#1c3329;border-color:#2e5c44;color:var(--green)}
+    .btn.danger{border-color:#7a3a32;color:#e8a59d}
+    .board{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:start}
+    @media (max-width:1100px){ .board{grid-template-columns:repeat(2,1fr)} }
+    @media (max-width:640px){ .board{grid-template-columns:1fr} }
+    .col{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:10px;min-height:120px}
+    .col.dragover{border-color:var(--blue);background:#232c3a}
+    .colhd{display:flex;justify-content:space-between;align-items:center;margin:2px 4px 10px}
+    .colhd .t{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700}
+    .colhd .n{background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:1px 9px;font-size:11.5px;color:var(--muted)}
+    .kcard{background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;cursor:pointer;user-select:none}
+    .kcard:hover{border-color:#4f5b68}
+    .kcard.dragging{opacity:.45}
+    .kcard .nm{font-weight:600;line-height:1.35}
+    .kcard .sub{font-size:11.5px;color:var(--muted);margin-top:3px}
+    .kcard .row2{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:6px}
+    .pill{display:inline-block;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap}
+    .pill.due{background:#42221f;color:var(--red)}
+    .pill.next{background:#243447;color:#9dc1ff}
+    .pill.won{background:#1c3329;color:var(--green)}
+    .price{font-size:12.5px;font-weight:700;color:var(--green)}
+    .mv{background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:12px;padding:1px 7px;cursor:pointer}
+    .mv:hover{border-color:var(--blue);color:#cfe1ff}
+    .ovl{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 12px;z-index:85;overflow:auto}
+    .pop{background:var(--bg2);border:1px solid var(--line);border-radius:14px;max-width:640px;width:100%;padding:18px 20px 20px}
+    .pop h3{margin:0 0 2px;font-size:16px}
+    .pop .popbar{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
+    .fld{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+    .fld label{font-size:11.5px;color:var(--muted);text-transform:uppercase}
+    .fld input,.fld select,.fld textarea{width:100%;box-sizing:border-box}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+    @media (max-width:560px){ .grid2{grid-template-columns:1fr} }
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:11px 16px;display:flex;justify-content:space-between;align-items:center;z-index:50}
+    .empty{color:var(--muted);padding:8px 4px;font-size:12.5px}
+    .msg{font-size:12.5px;margin-left:8px}
+  </style>
+</head>
+<body>
+
+  <div id="wrap">
+    <div class="top">
+      <h2>Продажи</h2>
+      <input type="text" id="q" placeholder="Поиск: клиент, тема, контакт, телефон…" style="flex:1;min-width:180px">
+      <button class="btn primary" id="newBtn" type="button">+ Новый лид</button>
+      <button class="btn" id="crmBtn" type="button" title="Открыть базу клиентов (CRM)">👥 Клиенты</button>
+    </div>
+    <div id="board"><div class="empty">Загрузка…</div></div>
+  </div>
+  <div class="bar">
+    <span class="muted">Карточки двигаются вручную: перетащите или используйте стрелки ‹ ›. Даты следующего контакта подсвечиваются, когда пора звонить.</span>
+    <button class="btn" id="close" type="button">Закрыть</button>
+  </div>
+  <div id="ovlHost"></div>
+
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    document.getElementById('close').onclick=function(){ t.closeModal(); };
+    // кнопка сверху справа: существующий CRM-раздел (позже — коммерческие CRM)
+    document.getElementById('crmBtn').onclick=function(){
+      t.modal({ url:'./crm-modal.html?t='+Date.now(), title:'CRM — клиенты', accentColor:'#1f6ce8', fullscreen:true });
+    };
+
+    var ROWS=[], COMPANIES=[], FILTER='', dragId=null, MYNAME='';
+    var COLS=[
+      {key:'new', title:'Новые лиды'},
+      {key:'talk', title:'Переговоры'},
+      {key:'kp',  title:'КП отправлено'},
+      {key:'deal',title:'Сделка'},
+      {key:'lost',title:'Отказ'}
+    ];
+
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
+    function post(u,b){ return fetch(WORKER+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+    function today(){ return new Date().toISOString().slice(0,10); }
+
+    function loadAll(){
+      Promise.all([
+        fetch(WORKER+'/sales-list').then(function(r){return r.json();}).catch(function(){return {};}),
+        fetch(WORKER+'/companies-list').then(function(r){return r.json();}).catch(function(){return {};}),
+        t.member('id','fullName').catch(function(){return {};})
+      ]).then(function(res){
+        ROWS=(res[0]&&res[0].rows)||[];
+        COMPANIES=(res[1]&&res[1].companies)||[];
+        MYNAME=(res[2]&&res[2].fullName)||'';
+        renderBoard();
+      });
+    }
+
+    function visible(){
+      var f=FILTER.trim().toLowerCase();
+      if(!f) return ROWS;
+      return ROWS.filter(function(r){
+        return [r.title,r.company_name,r.contact,r.phone,r.note].join(' ').toLowerCase().indexOf(f)>=0;
+      });
+    }
+
+    function renderBoard(){
+      var v=visible();
+      var h='<div class="board">';
+      COLS.forEach(function(c,ci){
+        var cards=v.filter(function(r){ return (r.status||'new')===c.key; });
+        var colSum=cards.reduce(function(s,r){ return s+(+r.amount||0); },0);
+        h+='<div class="col" data-col="'+c.key+'"><div class="colhd"><span class="t">'+c.title+'</span><span class="n">'+cards.length+(colSum>0?(' · '+money(colSum)+' ₸'):'')+'</span></div>';
+        if(c.key==='new') h+='<button class="btn" data-newin="1" type="button" style="width:100%;margin-bottom:8px">+ Лид</button>';
+        if(!cards.length) h+='<div class="empty">Пусто</div>';
+        cards.forEach(function(r){
+          h+='<div class="kcard" draggable="true" data-id="'+esc(r.id)+'">';
+          h+='<div class="nm">'+esc(r.title||'(без темы)')+(c.key==='deal'?' <span class="pill won">✓</span>':'')+'</div>';
+          var sub=[];
+          if(r.company_name) sub.push(esc(r.company_name));
+          if(r.contact) sub.push(esc(r.contact));
+          if(r.phone) sub.push(esc(r.phone));
+          if(sub.length) h+='<div class="sub">'+sub.join(' · ')+'</div>';
+          h+='<div class="row2"><span>';
+          if(+r.amount>0) h+='<span class="price">'+money(r.amount)+' ₸</span> ';
+          if(r.next_at && c.key!=='deal' && c.key!=='lost'){
+            var due = r.next_at<=today();
+            h+='<span class="pill '+(due?'due':'next')+'">'+(due?'📞 пора: ':'')+esc(r.next_at.slice(5))+'</span>';
+          }
+          h+='</span><span>';
+          if(ci>0) h+='<button class="mv" data-mv="'+esc(r.id)+'" data-to="'+COLS[ci-1].key+'" title="В колонку «'+COLS[ci-1].title+'»">‹</button> ';
+          if(ci<COLS.length-1) h+='<button class="mv" data-mv="'+esc(r.id)+'" data-to="'+COLS[ci+1].key+'" title="В колонку «'+COLS[ci+1].title+'»">›</button>';
+          h+='</span></div></div>';
+        });
+        h+='</div>';
+      });
+      h+='</div>';
+      document.getElementById('board').innerHTML=h;
+      wireBoard();
+    }
+
+    function wireBoard(){
+      [].forEach.call(document.querySelectorAll('[data-newin]'), function(b){ b.onclick=function(){ openEdit(null); }; });
+      [].forEach.call(document.querySelectorAll('.kcard'), function(c){
+        c.onclick=function(e){ if(e.target.classList.contains('mv'))return; openEdit(this.getAttribute('data-id')); };
+        c.ondragstart=function(e){ dragId=this.getAttribute('data-id'); this.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; };
+        c.ondragend=function(){ this.classList.remove('dragging'); };
+      });
+      [].forEach.call(document.querySelectorAll('.col'), function(col){
+        col.ondragover=function(e){ e.preventDefault(); this.classList.add('dragover'); };
+        col.ondragleave=function(){ this.classList.remove('dragover'); };
+        col.ondrop=function(e){ e.preventDefault(); this.classList.remove('dragover');
+          if(dragId!=null) moveTo(dragId, this.getAttribute('data-col')); dragId=null; };
+      });
+      [].forEach.call(document.querySelectorAll('.mv'), function(b){
+        b.onclick=function(e){ e.stopPropagation(); moveTo(this.getAttribute('data-mv'), this.getAttribute('data-to')); };
+      });
+    }
+
+    function findRow(id){ return ROWS.filter(function(r){ return String(r.id)===String(id); })[0]; }
+
+    function moveTo(id, colKey){
+      var r=findRow(id); if(!r || (r.status||'new')===colKey) return;
+      var prev=r.status; r.status=colKey; renderBoard();  // мгновенно на экране
+      post('/sales-save',{ id:r.id, title:r.title, companyId:r.company_id, companyName:r.company_name,
+        contact:r.contact, phone:r.phone, amount:r.amount, note:r.note, status:colKey, nextAt:r.next_at, byName:MYNAME })
+      .then(function(j){ if(j.error){ r.status=prev; renderBoard(); alert('Не сохранилось: '+j.error); } });
+    }
+
+    // ---------- карточка лида ----------
+    function openEdit(id){
+      var r=id?findRow(id):null;
+      var compOpts='<option value="">— не из базы —</option>'+COMPANIES.map(function(c){
+        return '<option value="'+esc(c.id)+'"'+((r&&r.company_id===c.id)?' selected':'')+'>'+esc(c.name||c.id)+'</option>';
+      }).join('');
+      var host=document.getElementById('ovlHost');
+      host.innerHTML='<div class="ovl" id="ovl"><div class="pop">'+
+        '<h3>'+(r?'Лид':'Новый лид')+'</h3>'+
+        '<div class="fld"><label>Тема / что продаём *</label><input type="text" id="fTitle" value="'+esc(r?r.title:'')+'" placeholder="Например: сетки для яйцебитки, 40 шт"></div>'+
+        '<div class="grid2">'+
+        '<div class="fld"><label>Клиент из базы</label><select id="fComp">'+compOpts+'</select></div>'+
+        '<div class="fld"><label>Или название клиента</label><input type="text" id="fCompName" value="'+esc(r?r.company_name:'')+'" placeholder="ТОО …"></div>'+
+        '<div class="fld"><label>Контактное лицо</label><input type="text" id="fContact" value="'+esc(r?r.contact:'')+'"></div>'+
+        '<div class="fld"><label>Телефон</label><input type="text" id="fPhone" value="'+esc(r?r.phone:'')+'"></div>'+
+        '<div class="fld"><label>Потенциальная сумма, ₸</label><input type="number" id="fAmount" min="0" step="any" value="'+esc(r&&+r.amount>0?r.amount:'')+'"></div>'+
+        '<div class="fld"><label>Следующий контакт</label><input type="date" id="fNext" value="'+esc(r&&r.next_at?r.next_at:'')+'"></div>'+
+        '</div>'+
+        '<div class="fld"><label>Заметка</label><textarea id="fNote" rows="3">'+esc(r?r.note:'')+'</textarea></div>'+
+        '<div class="popbar">'+
+        (r?'<button class="btn danger" id="pArch" type="button" style="margin-right:auto">В архив</button>':'')+
+        '<span class="msg" id="pMsg"></span>'+
+        '<button class="btn" id="pClose" type="button">Закрыть</button>'+
+        '<button class="btn green" id="pSave" type="button">Сохранить</button>'+
+        '</div></div></div>';
+      // выбор из базы подставляет название; ручное название живёт отдельно
+      document.getElementById('fComp').onchange=function(){
+        var c=COMPANIES.filter(function(x){return x.id===document.getElementById('fComp').value;})[0];
+        if(c) document.getElementById('fCompName').value=c.name||'';
+      };
+      document.getElementById('pClose').onclick=function(){ host.innerHTML=''; };
+      document.getElementById('ovl').onclick=function(e){ if(e.target===this) host.innerHTML=''; };
+      if(r) document.getElementById('pArch').onclick=function(){
+        if(!confirm('Убрать лид «'+(r.title||'')+'» в архив?')) return;
+        post('/sales-archive',{id:r.id,archived:1}).then(function(j){
+          if(j.error){ alert(j.error); return; }
+          host.innerHTML=''; loadAll();
+        });
+      };
+      document.getElementById('pSave').onclick=function(){
+        var title=document.getElementById('fTitle').value.trim();
+        if(!title){ document.getElementById('pMsg').textContent='Укажите тему'; return; }
+        var body={ id:(r?r.id:undefined), title:title,
+          companyId:document.getElementById('fComp').value,
+          companyName:document.getElementById('fCompName').value.trim(),
+          contact:document.getElementById('fContact').value.trim(),
+          phone:document.getElementById('fPhone').value.trim(),
+          amount:+document.getElementById('fAmount').value||0,
+          note:document.getElementById('fNote').value,
+          status:(r?(r.status||'new'):'new'),
+          nextAt:document.getElementById('fNext').value||null, byName:MYNAME };
+        document.getElementById('pMsg').textContent='Сохранение…';
+        post('/sales-save',body).then(function(j){
+          if(j.error){ document.getElementById('pMsg').textContent=j.error; return; }
+          host.innerHTML=''; loadAll();
+        });
+      };
+    }
+
+    document.getElementById('newBtn').onclick=function(){ openEdit(null); };
+    document.getElementById('q').addEventListener('input',function(){ FILTER=this.value; renderBoard(); });
+    loadAll();
+  </script>
+</body>
+</html>
