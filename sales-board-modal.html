@@ -51,6 +51,13 @@
     @media (max-width:560px){ .grid2{grid-template-columns:1fr} }
     .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:11px 16px;display:flex;justify-content:space-between;align-items:center;z-index:50}
     .empty{color:var(--muted);padding:8px 4px;font-size:12.5px}
+    .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .thumbs .ph{position:relative}
+    .thumbs img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer}
+    .thumbs .doc{display:inline-flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;cursor:pointer;max-width:190px}
+    .thumbs .doc span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .thumbs .rmf{position:absolute;top:-6px;right:-6px;background:#42221f;color:var(--red);border:1px solid #7a3a32;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:18px;text-align:center;cursor:pointer}
+    .thumbs .doc .rmf{position:static;margin-left:4px;flex:none}
     .msg{font-size:12.5px;margin-left:8px}
   </style>
 </head>
@@ -80,7 +87,7 @@
       t.modal({ url:'./crm-modal.html?t='+Date.now(), title:'CRM — клиенты', accentColor:'#1f6ce8', fullscreen:true });
     };
 
-    var ROWS=[], COMPANIES=[], FILTER='', dragId=null, MYNAME='';
+    var ROWS=[], COMPANIES=[], FILTER='', dragId=null, MYNAME='', FILE_COUNTS={};
     var COLS=[
       {key:'new', title:'Новые лиды'},
       {key:'talk', title:'Переговоры'},
@@ -98,11 +105,13 @@
       Promise.all([
         fetch(WORKER+'/sales-list').then(function(r){return r.json();}).catch(function(){return {};}),
         fetch(WORKER+'/companies-list').then(function(r){return r.json();}).catch(function(){return {};}),
+        fetch(WORKER+'/sales-file-counts').then(function(r){return r.json();}).catch(function(){return {};}),
         t.member('id','fullName').catch(function(){return {};})
       ]).then(function(res){
         ROWS=(res[0]&&res[0].rows)||[];
         COMPANIES=(res[1]&&res[1].companies)||[];
-        MYNAME=(res[2]&&res[2].fullName)||'';
+        FILE_COUNTS=(res[2]&&res[2].counts)||{};
+        MYNAME=(res[3]&&res[3].fullName)||'';
         renderBoard();
       });
     }
@@ -134,6 +143,7 @@
           if(sub.length) h+='<div class="sub">'+sub.join(' · ')+'</div>';
           h+='<div class="row2"><span>';
           if(+r.amount>0) h+='<span class="price">'+money(r.amount)+' ₸</span> ';
+          if(FILE_COUNTS[String(r.id)]) h+='<span class="pill next">📎 '+FILE_COUNTS[String(r.id)]+'</span> ';
           if(r.next_at && c.key!=='deal' && c.key!=='lost'){
             var due = r.next_at<=today();
             h+='<span class="pill '+(due?'due':'next')+'">'+(due?'📞 пора: ':'')+esc(r.next_at.slice(5))+'</span>';
@@ -197,6 +207,15 @@
         '<div class="fld"><label>Следующий контакт</label><input type="date" id="fNext" value="'+esc(r&&r.next_at?r.next_at:'')+'"></div>'+
         '</div>'+
         '<div class="fld"><label>Заметка</label><textarea id="fNote" rows="3">'+esc(r?r.note:'')+'</textarea></div>'+
+        (r?('<div class="fld"><label>Файлы (фото, PDF, чертежи)</label>'+
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+          '<button class="btn" id="fCam" type="button">📷 Камера</button>'+
+          '<button class="btn" id="fPick" type="button">📎 Галерея / файл</button>'+
+          '<span class="msg" id="fMsg"></span></div>'+
+          '<input type="file" id="fCamIn" accept="image/*" capture="environment" style="display:none">'+
+          '<input type="file" id="fPickIn" multiple accept="image/*,.pdf,.dxf,.dwg,.step,.stp,.igs,.iges,.xls,.xlsx,.doc,.docx,.csv,.txt" style="display:none">'+
+          '<div class="thumbs" id="fThumbs"><span class="muted">Загрузка…</span></div></div>')
+         :('<div class="muted" style="margin-top:10px">Файлы можно прикрепить после первого сохранения лида.</div>'))+
         '<div class="popbar">'+
         (r?'<button class="btn danger" id="pArch" type="button" style="margin-right:auto">В архив</button>':'')+
         '<span class="msg" id="pMsg"></span>'+
@@ -208,6 +227,79 @@
         var c=COMPANIES.filter(function(x){return x.id===document.getElementById('fComp').value;})[0];
         if(c) document.getElementById('fCompName').value=c.name||'';
       };
+      // ---------- файлы лида ----------
+      if(r){
+        var IMG_RE=/^image\//;
+        function fmsg(s){ var e=document.getElementById('fMsg'); if(e) e.textContent=s||''; }
+        function loadFiles(){
+          fetch(WORKER+'/receipts-list?kind=sales&refId='+encodeURIComponent(r.id)).then(function(x){return x.json();}).then(function(j){
+            var box=document.getElementById('fThumbs'); if(!box) return;
+            var files=(j&&(j.receipts||j.rows))||[];
+            FILE_COUNTS[String(r.id)]=files.length; 
+            if(!files.length){ box.innerHTML='<span class="muted">Файлов нет</span>'; return; }
+            box.innerHTML=files.map(function(f){
+              var u=WORKER+'/receipt-get?id='+f.id;
+              if(IMG_RE.test(f.mime||'')) return '<span class="ph"><img src="'+u+'" loading="lazy" data-open="'+u+'" alt=""><span class="rmf" data-rm="'+f.id+'" title="Удалить">×</span></span>';
+              return '<span class="doc" data-open="'+u+'">📄 <span>'+esc(f.filename||'файл')+'</span><span class="rmf" data-rm="'+f.id+'" title="Удалить">×</span></span>';
+            }).join('');
+            [].forEach.call(box.querySelectorAll('[data-open]'), function(el){
+              el.onclick=function(e){ if(e.target.classList.contains('rmf'))return; window.open(this.getAttribute('data-open'),'_blank'); };
+            });
+            [].forEach.call(box.querySelectorAll('[data-rm]'), function(el){
+              el.onclick=function(e){ e.stopPropagation();
+                if(!confirm('Удалить файл? Это безвозвратно.')) return;
+                post('/receipt-delete',{id:+this.getAttribute('data-rm')}).then(function(){ loadFiles(); renderBoard(); });
+              };
+            });
+          }).catch(function(){});
+        }
+        // фото сжимаются на телефоне до отправки — как в заявках на ремонт
+        function shrinkImage(file){
+          return new Promise(function(res,rej){
+            var img=new Image(), url=URL.createObjectURL(file);
+            img.onload=function(){
+              var MAX=1600, w=img.width, h=img.height;
+              if(w>MAX||h>MAX){ var k=MAX/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
+              var cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+              cv.getContext('2d').drawImage(img,0,0,w,h);
+              URL.revokeObjectURL(url);
+              res({ b64: cv.toDataURL('image/jpeg',0.85).split(',')[1], mime:'image/jpeg',
+                    name: (file.name||'фото').replace(/\.[^.]+$/,'')+'.jpg' });
+            };
+            img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error('не удалось прочитать фото')); };
+            img.src=url;
+          });
+        }
+        function rawFile(file){
+          return new Promise(function(res,rej){
+            var fr=new FileReader();
+            fr.onload=function(){ res({ b64:String(fr.result).split(',')[1], mime:file.type||'application/octet-stream', name:file.name||'файл' }); };
+            fr.onerror=function(){ rej(new Error('не удалось прочитать файл')); };
+            fr.readAsDataURL(file);
+          });
+        }
+        function uploadFiles(list){
+          var files=[].slice.call(list||[]); if(!files.length) return;
+          var chain=Promise.resolve(), done=0;
+          files.forEach(function(f){
+            chain=chain.then(function(){
+              fmsg('Отправка '+(done+1)+' из '+files.length+'…');
+              var prep = IMG_RE.test(f.type||'') ? shrinkImage(f) : rawFile(f);
+              return prep.then(function(p){
+                if(p.b64.length>2800000) throw new Error('«'+p.name+'» слишком большой (макс ~2 МБ)');
+                return post('/receipt-save',{kind:'sales',refId:r.id,filename:p.name,mime:p.mime,dataB64:p.b64,byName:MYNAME});
+              }).then(function(j){ if(j.error) throw new Error(j.error); done++; });
+            });
+          });
+          chain.then(function(){ fmsg('Готово ✓'); loadFiles(); renderBoard(); setTimeout(function(){fmsg('');},1500); })
+               .catch(function(e){ fmsg('Ошибка: '+e.message); loadFiles(); });
+        }
+        document.getElementById('fCam').onclick=function(){ document.getElementById('fCamIn').click(); };
+        document.getElementById('fPick').onclick=function(){ document.getElementById('fPickIn').click(); };
+        document.getElementById('fCamIn').onchange=function(){ uploadFiles(this.files); this.value=''; };
+        document.getElementById('fPickIn').onchange=function(){ uploadFiles(this.files); this.value=''; };
+        loadFiles();
+      }
       document.getElementById('pClose').onclick=function(){ host.innerHTML=''; };
       document.getElementById('ovl').onclick=function(e){ if(e.target===this) host.innerHTML=''; };
       if(r) document.getElementById('pArch').onclick=function(){
