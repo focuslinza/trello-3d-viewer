@@ -135,12 +135,19 @@
           var pool=workersFor(unitGroup(s.key));
           var ids = s.assigneeIds || (s.assigneeId ? [s.assigneeId] : []);
           function optsFor(sel){ return '<option value="">— выбрать —</option>'+pool.map(function(w){ return '<option value="'+w.id+'"'+(w.id===sel?' selected':'')+'>'+esc(w.name)+'</option>'; }).join(''); }
-          // несколько исполнителей на этап: селект на каждого + «+ ещё исполнитель»;
-          // заработок этапа делится между выбранными поровну
+          // несколько исполнителей на этап: селект на каждого + «+ ещё исполнитель».
+          // Доли: поле «%» у каждого; пусто = поровну от остатка. Пример: 70 и пусто
+          // при двух исполнителях = 70/30. Так честно, когда вклад разный.
           var selCount = Math.max(1, ids.length) + (EXTRA_SEL[s.key]||0);
+          var wmap = (data.assignees && data.assignees.weights && data.assignees.weights[s.key]) || {};
           var selects = '';
           for(var si=0; si<selCount; si++){
-            selects += '<select class="asg" data-stage="'+s.key+'"'+(si?' style="margin-top:4px"':'')+'>'+optsFor(ids[si]||null)+'</select>';
+            var wid = ids[si]||null;
+            var wv = (wid && wmap[wid]>0) ? wmap[wid] : '';
+            selects += '<div style="display:flex;gap:6px;align-items:center'+(si?';margin-top:4px':'')+'">'+
+              '<select class="asg" data-stage="'+s.key+'">'+optsFor(wid)+'</select>'+
+              (selCount>1?('<input class="asgw" data-stage="'+s.key+'" type="number" min="0" max="100" step="1" value="'+wv+'" placeholder="%" title="Доля этого исполнителя в процентах. Пусто — поровну от остатка." style="width:52px">'):'')+
+              '</div>';
           }
           selects += '<div><a href="#" class="addAsg" data-stage="'+s.key+'" style="font-size:11.5px">+ ещё исполнитель</a></div>';
           var opts=null;
@@ -313,17 +320,21 @@
     function saveAssignees(){
       // у этапа может быть несколько селектов (два инженера) — собираем в массив,
       // одиночный исполнитель сохраняется строкой как раньше
-      var st={};
+      var st={}, wts={};
       [].forEach.call(document.querySelectorAll('.asg'), function(sel){
         if(!sel.value) return;
         var k=sel.getAttribute('data-stage');
         if(st[k]===undefined) st[k]=sel.value;
         else if(Array.isArray(st[k])){ if(st[k].indexOf(sel.value)<0) st[k].push(sel.value); }
         else if(st[k]!==sel.value) st[k]=[st[k], sel.value];
+        // доля из соседнего поля «%»
+        var wEl = sel.parentNode && sel.parentNode.querySelector('.asgw');
+        var p = wEl ? parseFloat(wEl.value) : 0;
+        if(p>0){ (wts[k]=wts[k]||{})[sel.value]=p; }
       });
       var m=document.getElementById('asgmsg'); if(m) m.textContent='Сохранение…';
       fetch(WORKER+'/order-assignees-save',{ method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ cardId:ctx.cardId, assignees:{ stages:st } }) })
+        body:JSON.stringify({ cardId:ctx.cardId, assignees:{ stages:st, weights:wts } }) })
         .then(function(r){return r.json();})
         .then(function(d){ if(d&&d.ok){ load(); } else if(m){ m.textContent='Ошибка: '+((d&&d.error)||'?'); } })
         .catch(function(e){ if(m) m.textContent='Сеть: '+(e&&e.message||e); });
