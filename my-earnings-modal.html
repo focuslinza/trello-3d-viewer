@@ -141,13 +141,16 @@
     if(j.totalDelivered!=null){
       html+='<div style="display:flex;gap:10px;justify-content:center;margin-top:12px;flex-wrap:wrap">'+
         '<div style="background:#1c3329;border:1px solid #2e5c44;border-radius:12px;padding:8px 16px;min-width:150px">'+
-          '<div class="small" style="color:#7ee2b8;text-transform:uppercase;font-size:10.5px">✅ К выплате — заказ сдан</div>'+
+          '<div class="small" style="color:#7ee2b8;text-transform:uppercase;font-size:10.5px">✅ К выплате — акт подписан</div>'+
           '<div style="font-size:17px;font-weight:700;color:#4bce97">'+money(j.totalDelivered)+' ₸</div></div>'+
-        '<div style="background:#3a2f1a;border:1px solid #5c4a2e;border-radius:12px;padding:8px 16px;min-width:150px">'+
-          '<div class="small" style="color:#e8c07d;text-transform:uppercase;font-size:10.5px">⏳ Заказ ещё в работе</div>'+
-          '<div style="font-size:17px;font-weight:700;color:#e8c07d">'+money(j.totalPending)+' ₸</div></div>'+
+        ((+j.totalAwaitingAct||0)>0?('<div style="background:#3a2f1a;border:1px solid #5c4a2e;border-radius:12px;padding:8px 16px;min-width:150px">'+
+          '<div class="small" style="color:#e8c07d;text-transform:uppercase;font-size:10.5px">📦 Сдан — ждёт акта</div>'+
+          '<div style="font-size:17px;font-weight:700;color:#e8c07d">'+money(j.totalAwaitingAct)+' ₸</div></div>'):'')+
+        '<div style="background:#22272b;border:1px solid #3c444c;border-radius:12px;padding:8px 16px;min-width:150px">'+
+          '<div class="small" style="color:#9fadbc;text-transform:uppercase;font-size:10.5px">⏳ В работе</div>'+
+          '<div style="font-size:17px;font-weight:700;color:#9fadbc">'+money(j.totalPending)+' ₸</div></div>'+
       '</div>';
-      html+='<div class="small muted" style="margin-top:8px;max-width:420px;margin-left:auto;margin-right:auto">Деньги выплачиваются, когда заказ <b>сдан клиенту и претензий нет</b> — ваш этап может быть готов, но заказ ещё идёт по цеху. Помогайте двигать заказ до сдачи: чем быстрее сдан весь заказ, тем быстрее выплата у всех.</div>';
+      html+='<div class="small muted" style="margin-top:8px;max-width:440px;margin-left:auto;margin-right:auto">Деньги выплачиваются, когда клиент <b>подписал акт выполненных работ</b>. «Сдан — ждёт акта» — заказ у клиента, начислится в месяц подписания. Помогайте двигать заказ до сдачи: чем быстрее сдан и подписан весь заказ, тем быстрее выплата у всех.</div>';
     }
     html+='</div>';
 
@@ -196,6 +199,26 @@
       html+='</div>';
     }
 
+    // сдельная менеджера по продажам: оплаченные заказы периода с процентами
+    var sb=j.salesBonus;
+    if(sb && (sb.total>0 || sb.percentFirst>0 || sb.percentRepeat>0)){
+      html+='<div class="sec"><h3>Продажи (моя сдельная)</h3>';
+      html+='<div class="small muted" style="margin-bottom:6px">Начисляется с полностью оплаченных заказов: первичная ставка '+sb.percentFirst+'% (клиент впервые с сайта или заказ из CRM), повторная '+sb.percentRepeat+'% (клиент снова на сайте). Итог уже включён в сумму месяца сверху.</div>';
+      if(!(sb.items||[]).length){ html+='<div class="muted">В этом месяце оплаченных продаж пока нет.</div>'; }
+      else {
+        html+='<div style="margin-bottom:6px">Итого: <b style="color:var(--green,#4bce97)">'+money(sb.total)+' ₸</b></div>';
+        html+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Ставка</th><th class="num">Моё</th></tr></thead><tbody>';
+        (sb.items||[]).forEach(function(x){
+          var k = x.kind==='crm'?'CRM':(x.kind==='first'?'сайт, впервые':'сайт, повторно');
+          html+='<tr><td class="small">'+esc(x.number)+'</td><td>'+esc(x.name||'')+'</td><td class="small">'+esc(x.company||'')+'</td>'+
+            '<td class="num">'+money(x.orderTotal)+'</td><td class="small">'+x.percent+'% · '+k+'</td>'+
+            '<td class="num" style="color:var(--green,#4bce97)"><b>'+money(x.amount)+'</b></td></tr>';
+        });
+        html+='</tbody></table>';
+      }
+      html+='</div>';
+    }
+
     // by order (my share only — no order cost)
     var orders=j.orders||[];
     if(!j.detailHidden){
@@ -205,9 +228,12 @@
       html+='<div class="small muted" style="margin-bottom:6px">Показана только ваша доля по каждому заказу. Стоимость самих заказов здесь не отображается.</div>';
       html+='<table><thead><tr><th>№ карт.</th><th>Заказ</th><th style="width:96px">Статус</th><th class="num">Моя доля</th></tr></thead><tbody>';
       orders.forEach(function(o){
-        var st = o.delivered
-          ? '<span style="color:#4bce97;font-size:11.5px">✅ сдан</span>'
-          : '<span style="color:#e8c07d;font-size:11.5px">⏳ в работе</span>';
+        var state = o.state || (o.delivered ? 'act' : 'work');
+        var st = state==='act'
+          ? '<span style="color:#4bce97;font-size:11.5px">✅ акт подписан</span>'
+          : (state==='delivered'
+            ? '<span style="color:#e8c07d;font-size:11.5px">📦 ждёт акта</span>'
+            : '<span style="color:#9fadbc;font-size:11.5px">⏳ в работе</span>');
         html+='<tr><td class="small">'+esc(o.number||'—')+'</td><td>'+esc(o.name||'(без названия)')+'</td><td>'+st+'</td><td class="num">'+money(o.amount)+' ₸</td></tr>';
       });
       html+='</tbody></table>';

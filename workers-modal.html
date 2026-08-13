@@ -262,7 +262,8 @@
       {cls:'cancrm',    fld:'can_crm',       label:'CRM',                 hint:'клиенты, выручка, долги'},
       {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены в калькуляторе'},
       {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true},
-      {cls:'agent',     fld:'is_repair_agent', label:'Агент ремонта',      hint:'бонус за каждую полностью оформленную заявку на ремонт (описание, фирма, контактное лицо, фото) — виден агенту в «Моём заработке»'}
+      {cls:'agent',     fld:'is_repair_agent', label:'Агент ремонта',      hint:'бонус за каждую полностью оформленную заявку на ремонт (описание, фирма, контактное лицо, фото) — виден агенту в «Моём заработке»'},
+      {cls:'salesmgr',  fld:'is_sales_manager', label:'Менеджер по продажам', hint:'сдельная от суммы продаж: заказы с сайта metalshop.kz и из канбана «Продажи». Начисляется, когда заказ оплачен полностью. Ставки — в блоке «Мотивация» ниже'}
     ];
     function chipCb(cls, label, hint, on, extra){
       return '<label class="chipcb'+(on?' on':'')+(extra||'')+'" title="'+hint.replace(/"/g,'&quot;')+'">'+
@@ -339,6 +340,14 @@
         // с предупреждением, чтобы можно было осознанно обнулить или оставить
         mot += '<label style="color:#e8987d" title="⚠ У этого работника есть производственные этапы (своя доля) И личный % от работ всех заказов — двойная мотивация. Обнулите, если это ошибка.">⚠ % от работ сданных заказов '+
           '<input class="wrkPct" type="number" min="0" max="100" step="0.1" style="width:70px" value="'+w.works_percent+'">'+
+        '</label>';
+      }
+      if (w.id && w.is_sales_manager == 1) {
+        mot += '<label title="Ставка от ВСЕЙ СУММЫ полностью оплаченного заказа. Применяется: клиент с сайта заказывает впервые, либо заказ пришёл через канбан «Продажи» (CRM).">Продажи: первичная, % '+
+          '<input class="salesPct1" type="number" min="0" max="100" step="0.1" style="width:70px" value="'+(w.sales_percent_first>0?w.sales_percent_first:'')+'" placeholder="0">'+
+        '</label>'+
+        '<label title="Ставка, когда тот же клиент заказывает на сайте повторно.">повторная (сайт), % '+
+          '<input class="salesPct2" type="number" min="0" max="100" step="0.1" style="width:70px" value="'+(w.sales_percent_repeat>0?w.sales_percent_repeat:'')+'" placeholder="0">'+
         '</label>';
       }
       if (mot) h+='<div class="wrowlbl">Мотивация</div><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px">'+mot+'</div>';
@@ -457,7 +466,10 @@
       setMsg('Сохранение…');
       return fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })(),
+        isSalesManager:(tr.querySelector('.salesmgr')?tr.querySelector('.salesmgr').checked:undefined),
+        salesPercentFirst:(function(){ var el=tr.querySelector('.salesPct1'); return el ? (parseFloat(el.value)||0) : undefined; })(),
+        salesPercentRepeat:(function(){ var el=tr.querySelector('.salesPct2'); return el ? (parseFloat(el.value)||0) : undefined; })() })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){
