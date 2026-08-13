@@ -126,7 +126,7 @@
         return Promise.all([ isDirector(), t.member('id').catch(function(){return {};}) ]).then(function(r){
           if (myGen !== renderGen) return; // устарело
           var admin=r[0], me=r[1]||{};
-          if(admin){
+          function addEarningsBtn(){
             var row2=document.createElement('div'); row2.className='row'; row2.style.marginTop='8px';
             var lbl=document.createElement('div'); lbl.className='muted'; lbl.textContent='Заработок и эффективность по этому заказу';
             var eb=document.createElement('button'); eb.className='btn'; eb.type='button'; eb.style.background='#5a4a8a';
@@ -134,10 +134,13 @@
             eb.addEventListener('click', openEarnings);
             row2.appendChild(lbl); row2.appendChild(eb); el.appendChild(row2);
           }
-          if(admin){ addInvoiceBtn(); return t.sizeTo('#wrap'); }
-          // not admin: show invoice only if my Trello account is an allowed worker
+          if(admin){ addEarningsBtn(); addInvoiceBtn(); return t.sizeTo('#wrap'); }
+          // не админ: кнопки по правам из базы работников. «Заработок по заказу» —
+          // начальнику цеха (чип «Панель руководителя» или «Видит стоимость»):
+          // именно там расставляются исполнители этапов и их доли.
           return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||'')).then(function(x){return x.json();}).then(function(j){
             if (myGen !== renderGen) return; // устарело
+            if(j&&(j.canDashboard||j.canSeeCost)) addEarningsBtn();
             if(j&&(j.canIssueInvoice||j.canInvoice)) addInvoiceBtn();
           }).catch(function(){}).then(function(){ if (myGen !== renderGen) return; return t.sizeTo('#wrap'); });
         });
