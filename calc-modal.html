@@ -5,7 +5,7 @@
   <title>Калькулятор стоимости</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./calc-engine.js?v=20"></script>
+  <script src="./calc-engine.js?v=21"></script>
   <style>
     html[data-color-mode="light"] { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
     html[data-color-mode="dark"]  { --bg:#1d2125; --txt:#c7d1db; --muted:#9fadbc; --chip:#22272b; --line:#3c4149; --card:#22272b; }
@@ -75,7 +75,10 @@
     .brk { display:flex; flex-direction:column; gap:2px; margin-top:6px; }
     .brk .r { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
     .brk .r b { color:var(--txt); font-weight:600; }
-  </style>
+  .spec-price{max-width:96px}
+.ln.spec{border:1px solid #e8873a;border-radius:8px;background:rgba(232,135,58,.06)}
+.ln.spec .spec-price{border-color:#e8873a;color:#e8a35c;font-weight:600}
+</style>
 </head>
 <body>
 
@@ -246,28 +249,43 @@
       var th=thicknessSelect(data.thickness||TH[2]);
       var qty=document.createElement('input'); qty.type='number'; qty.className='num'; qty.min='0'; qty.step='any';
       qty.placeholder='кол-во'; if(data.qty!=null) qty.value=data.qty;
+      // спеццена (₸/ед) для постоянных клиентов: пусто = обычный тариф.
+      // Честнее, чем «докручивать» количество: метры остаются настоящими.
+      var pu=document.createElement('input'); pu.type='number'; pu.className='num spec-price'; pu.min='0'; pu.step='any';
+      pu.placeholder='спец ₸/ед'; pu.title='Специальная цена за единицу (пусто — обычный тариф)';
+      if(data.customUnit!=null && +data.customUnit>0) pu.value=data.customUnit;
       var lt=document.createElement('span'); lt.className='lt'; lt.textContent='0 ₸';
       var del=document.createElement('button'); del.className='del'; del.type='button'; del.textContent='×';
       del.onclick=function(){ row.remove(); recompute(); };
-      [ks,th,qty].forEach(function(e){ e.addEventListener('input',recompute); e.addEventListener('change',recompute); });
-      row._read=function(){ return {kind:ks.value, thickness:+th.value, qty:+qty.value||0}; };
+      function markSpec(){ row.classList.toggle('spec', !!(+pu.value>0)); }
+      [ks,th,qty,pu].forEach(function(e){ e.addEventListener('input',function(){ markSpec(); recompute(); }); e.addEventListener('change',function(){ markSpec(); recompute(); }); });
+      markSpec();
+      row._read=function(){ var o={kind:ks.value, thickness:+th.value, qty:+qty.value||0}; if(+pu.value>0) o.customUnit=+pu.value; return o; };
       row._lt=lt;
-      row.appendChild(ks); row.appendChild(th); row.appendChild(qty); row.appendChild(lt); row.appendChild(del);
+      row.appendChild(ks); row.appendChild(th); row.appendChild(qty); row.appendChild(pu); row.appendChild(lt); row.appendChild(del);
       return row;
     }
-    function makeCatRow(grouped, data, unitHint){
+    function makeCatRow(grouped, data, unitHint, allowSpec){
       data=data||{};
       var row=document.createElement('div'); row.className='ln';
       var sel=catalogSelect(grouped, data.code||'');
       var qty=document.createElement('input'); qty.type='number'; qty.className='num'; qty.min='0'; qty.step='any';
       qty.placeholder=unitHint||'кол-во'; if(data.qty!=null) qty.value=data.qty;
+      var pu=null;
+      if(allowSpec){
+        pu=document.createElement('input'); pu.type='number'; pu.className='num spec-price'; pu.min='0'; pu.step='any';
+        pu.placeholder='спец ₸/ед'; pu.title='Специальная цена за единицу (пусто — обычный тариф)';
+        if(data.customUnit!=null && +data.customUnit>0) pu.value=data.customUnit;
+      }
       var lt=document.createElement('span'); lt.className='lt'; lt.textContent='0 ₸';
       var del=document.createElement('button'); del.className='del'; del.type='button'; del.textContent='×';
       del.onclick=function(){ row.remove(); recompute(); };
-      [sel,qty].forEach(function(e){ e.addEventListener('input',recompute); e.addEventListener('change',recompute); });
-      row._read=function(){ return {code:sel.value, qty:+qty.value||0}; };
+      function markSpec(){ if(pu) row.classList.toggle('spec', !!(+pu.value>0)); }
+      [sel,qty].concat(pu?[pu]:[]).forEach(function(e){ e.addEventListener('input',function(){ markSpec(); recompute(); }); e.addEventListener('change',function(){ markSpec(); recompute(); }); });
+      markSpec();
+      row._read=function(){ var o={code:sel.value, qty:+qty.value||0}; if(pu&&+pu.value>0) o.customUnit=+pu.value; return o; };
       row._lt=lt;
-      row.appendChild(sel); row.appendChild(qty); row.appendChild(lt); row.appendChild(del);
+      row.appendChild(sel); row.appendChild(qty); if(pu) row.appendChild(pu); row.appendChild(lt); row.appendChild(del);
       return row;
     }
 
@@ -275,7 +293,7 @@
         matLines=document.getElementById('matLines'),
         cmpLines=document.getElementById('cmpLines');
     document.getElementById('addOp').onclick=function(){ opLines.appendChild(makeOpRow()); recompute(); };
-    document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м')); recompute(); };
+    document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м',true)); recompute(); };
     document.getElementById('addCmp').onclick=function(){ cmpLines.appendChild(makeCatRow(CMPG,null,'шт')); recompute(); };
 
     ['urg','paintMode','noShleifCut','noShleifWeld'].forEach(function(id){
@@ -750,7 +768,7 @@
         if(!d || !d.inputs) { return; }
         var i=d.inputs;
         (i.operations||[]).forEach(function(o){ opLines.appendChild(makeOpRow(o)); });
-        (i.materials||[]).forEach(function(m){ matLines.appendChild(makeCatRow(MATG,m,'м²/м')); });
+        (i.materials||[]).forEach(function(m){ matLines.appendChild(makeCatRow(MATG,m,'м²/м',true)); });
         (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
         SAVED_ENG = (i.engCoef!=null) ? (+i.engCoef||0) : 0;

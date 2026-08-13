@@ -178,13 +178,20 @@
       var qty=+op.qty||0, th=+op.thickness||0;
       if(k.t==='FLAT'){ if(qty<=0) return; } else { if(qty<=0||th<=0) return; }
       var rate = (k.t==='FLAT') ? (+k.flatRate||0) : opRate(k.t,th,qty)*k.mult*rateMultFor(k.sec);
+      // спеццена для постоянных клиентов: заменяет ТОЛЬКО тариф за единицу,
+      // остальная формула (остатки, расход, шлейф, инженерка) не меняется.
+      // Обычная цена сохраняется рядом (standardUnit) — для анализа уступок.
+      var stdRate = rate;
+      if (op.customUnit != null && +op.customUnit > 0) rate = +op.customUnit;
       var base=rate*qty;
       var opOst=opSecOst(k.sec,OP_OST), opRah=opSecRah(k.sec,OP_RAH);
       var r7=base*(1+opOst)*(1+opRah);
       sumOps+=r7;
       if(k.t==='SS')weldSSsum+=r7; if(k.t==='BL')weldBlackSum+=r7; if(k.sec==='РЕЗКА')cutSum+=r7;
       if(k.t==='CUT'||k.t==='BEND'){ dxfOpsSum+=r7; dxfRates[k.t+'|'+th]=r7/qty; }  // эффективная ставка уже ОПТОВАЯ: тариф взят от суммарного объёма заказа
-      line.push({group:'op',kind:op.kind,section:k.sec,name:k.lbl,thickness:(k.t==='FLAT'?0:th),qty:qty,unit:rate,base:base,ostatki:opOst,rashod:opRah,lineTotal:r7,worker:null});
+      var opl={group:'op',kind:op.kind,section:k.sec,name:k.lbl,thickness:(k.t==='FLAT'?0:th),qty:qty,unit:rate,base:base,ostatki:opOst,rashod:opRah,lineTotal:r7,worker:null};
+      if (rate !== stdRate) { opl.special = 1; opl.standardUnit = stdRate; }
+      line.push(opl);
     });
 
     // шлейф = shleifRate × weld (sheet: 0.5 of each weld grade)
@@ -206,10 +213,14 @@
     materials.forEach(function(m){
       var M=MAT[m.code], q=+m.qty||0; if(!M||q<=0)return;
       var u=matU(m.code);
+      var stdU = u;
+      if (m.customUnit != null && +m.customUnit > 0) u = +m.customUnit;
       var ost=secOst('matOstBySec',M.sec,M.ost), rah=secRah('matRahBySec',M.sec,M.rah);
       var b=u*q, r7m=b*(1+ost)*(1+rah);
       matSum+=r7m;
-      line.push({group:'material',code:m.code,section:M.sec,name:M.lbl,qty:q,unit:u,base:b,ostatki:ost,rashod:rah,lineTotal:r7m,worker:null});
+      var mln={group:'material',code:m.code,section:M.sec,name:M.lbl,qty:q,unit:u,base:b,ostatki:ost,rashod:rah,lineTotal:r7m,worker:null};
+      if (u !== stdU) { mln.special = 1; mln.standardUnit = stdU; }
+      line.push(mln);
     });
 
     // components AZ..BN : material (row7) + labor (row7 × multiplier)
