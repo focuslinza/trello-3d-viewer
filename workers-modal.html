@@ -201,8 +201,9 @@
         '<div style="font-weight:700;margin-bottom:4px">Запасной вход: логин и пароль</div>'+
         '<div class="muted" style="font-size:12px;margin-bottom:8px">Основной вход в цеху — по QR (бейдж или телефон). Логин с паролем нужны, если телефон разряжен или бейдж потерян.</div>'+
         '<div id="mobCredNow" class="muted" style="margin-bottom:4px"></div>'+
-        '<input id="mobLogin" type="text" placeholder="логин, напр. daniyar" style="width:170px">'+
-        ' <input id="mobPass" type="text" placeholder="пароль" style="width:150px">'+
+        '<input id="mobLogin" type="text" placeholder="логин, напр. daniyar" value="'+esc(String(w.login||''))+'" style="width:170px">'+
+        ' <span style="position:relative;display:inline-block"><input id="mobPass" type="password" placeholder="'+(w.pass_hash?'пусто — оставить прежний':'новый пароль')+'" autocomplete="new-password" style="width:150px;padding-right:30px">'+
+        '<button id="mobPassEye" type="button" title="Показать/скрыть пароль" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;padding:2px">👁</button></span>'+
         ' <button class="btn" id="mobPinSave" type="button">Сохранить</button> <span id="mobPinMsg" class="muted"></span>'+
         '<div style="margin-top:16px;text-align:right"><button class="btn" id="mobClose" type="button">Закрыть</button></div>'+
         '</div></div>';
@@ -224,9 +225,14 @@
       // показываем, что уже задано: сам пароль не хранится (только хэш) — потому
       // поля пустые; но статус обязан говорить, есть ли он, иначе кажется, что не сохранилось
       (function(){ var el=document.getElementById('mobCredNow');
-        if(w.login) el.innerHTML='Сейчас задано: логин <b>'+esc(String(w.login))+'</b> · пароль '+(w.pass_hash?'установлен ✓':'не задан')+'. Новые значения заменят старые.';
+        if(w.login) el.innerHTML='Сейчас задано: логин <b>'+esc(String(w.login))+'</b> · пароль '+(w.pass_hash?'установлен ✓. Менять его не нужно: оставьте поле пустым — прежний пароль продолжит работать. Ввод нового заменит старый.':'не задан.');
         else el.textContent='Логин и пароль пока не заданы.';
       })();
+      document.getElementById('mobPassEye').onclick=function(){
+        var p=document.getElementById('mobPass');
+        p.type = (p.type==='password') ? 'text' : 'password';
+        this.style.opacity = (p.type==='text') ? '1' : '.6';
+      };
       document.getElementById('mobPinSave').onclick=function(){
         var lg=document.getElementById('mobLogin').value.trim();
         var pw=document.getElementById('mobPass').value;
