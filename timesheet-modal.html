@@ -155,7 +155,7 @@
       h+='<th>Итого</th></tr></thead><tbody>';
       ws.forEach(function(w){
         var rec=(DATA.records&&DATA.records[w.id])||{};
-        var c={p:0,n:0,b:0,o:0,v:0,l:0,e:0,t:0}, lateMin=0;
+        var c={p:0,n:0,b:0,o:0,v:0,l:0,e:0,t:0}, lateMin=0, otSum=0;
         h+='<tr><td class="name">'+esc(w.name)+'</td>';
         for(var d=1;d<=days;d++){
           var date=YM+'-'+(d<10?'0':'')+d;
@@ -164,15 +164,19 @@
           if(s==='l'&&r&&r.min) lateMin+=r.min;
           var hasDoc = DATA.docs && DATA.docs[w.id+'|'+date];
           var hnm = holName(YM,d);
+          var otv = r ? (+r.ot||0) : 0; otSum += otv;
           var tip = s ? (SNAME[s]||'') + (r&&r.min?(' '+r.min+' мин'):'') + (r&&r.note?(' · '+r.note):'') : '';
+          if(otv) tip = (tip?tip+' · ':'') + '⏱ внеурочные '+otv+' ч ×2'+(r.otNote?(' ('+r.otNote+')'):'');
           if(hnm) tip = hnm + (tip?' · '+tip:'');
           h+='<td class="cell'+(s?' s-'+s:'')+(isWeekend(YM,d)?' we':(hnm?' hol':''))+(CAN_EDIT?'':' ro')+(date===today?' today':'')+'"'+
              ' data-w="'+esc(w.id)+'" data-d="'+date+'" data-s="'+(s||'')+'"'+
              (tip?' title="'+esc(tip)+'"':'')+'>'+(s?LABEL[s]:'')+
              (r&&r.min?'<div style="font-size:8px;line-height:1">'+r.min+'</div>':'')+
+             (otv?'<div style="font-size:8px;line-height:1;color:#e8c07d" title="внеурочные">⏱'+otv+'</div>':'')+
              (hasDoc?'<span class="clip" title="есть скан">📎</span>':'')+'</td>';
         }
         h+='<td class="sum"><b>'+c.p+'</b> я · '+c.n+' н · '+c.b+' б · '+c.o+' о'+
+           (otSum?(' · <span style="color:#e8c07d">⏱'+otSum+'ч</span>'):'')+
            (c.l?' · <span style="color:#e8c07d">'+c.l+' оп ('+lateMin+'м)</span>':'')+
            (c.e?' · <span style="color:#e8e07d">'+c.e+' уш</span>':'')+
            (c.t?' · '+c.t+' от':'')+
@@ -197,7 +201,8 @@
       var items = [
         ['', '— очистить —'], ['p','Я — явка'], ['v','В — выходной / праздник'],
         ['l','Оп — опоздание'], ['e','Уш — отпросился / ушёл раньше'],
-        ['b','Б — больничный'], ['o','О — отпуск'], ['t','От — отгул'], ['n','Н — не явился']
+        ['b','Б — больничный'], ['o','О — отпуск'], ['t','От — отгул'], ['n','Н — не явился'],
+        ['@ot','⏱ Внеурочные часы (оклад ×2)']
       ];
       // у заполненной клетки первым пунктом — правка причины/времени/скана
       if (cur && NEEDS_DETAIL[cur]) items.unshift(['@edit','✎ изменить причину / время / скан']);
@@ -222,6 +227,7 @@
           var v=this.getAttribute('data-v');
           closePicker();
           if(v==='@edit') return openDetail(el, cur);   // правка существующей записи
+          if(v==='@ot') return openOt(el);              // внеурочные часы дня
           // опоздание/уход/прогул/больничный/отгул — окно с причиной, минутами и сканом
           if(NEEDS_DETAIL[v]) return openDetail(el, v);
           saveCell(el, v, null, '');
@@ -245,6 +251,35 @@
           render();
         })
         .catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); el.classList.remove('busy'); });
+    }
+
+    // окно внеурочных: часы после смены или в выходной, оплата = часовая ставка оклада ×2.
+    // Начисляется только тем, у кого есть оклад; сдельную не трогает.
+    function openOt(el){
+      var wId=el.getAttribute('data-w'), date=el.getAttribute('data-d');
+      var prev=((DATA.records||{})[wId]||{})[date]||{};
+      var h='<div id="otOvl" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:95;display:flex;align-items:center;justify-content:center;padding:16px">'+
+        '<div style="background:var(--bg2,#22272b);border:1px solid var(--line,#3a414a);border-radius:12px;max-width:420px;width:100%;padding:16px">'+
+        '<div style="font-weight:700;margin-bottom:4px">⏱ Внеурочные · '+esc(date)+'</div>'+
+        '<div class="muted" style="font-size:12px;margin-bottom:12px">Работа после смены или в выходной. Оплата: часовая ставка оклада (оклад ÷ раб.дни ÷ 8) × 2 за каждый час. Начисляется только при наличии оклада; к сдельной не относится. 0 часов — убрать отметку.</div>'+
+        '<label style="display:block;font-size:12px;margin-bottom:4px">Часов (шаг 0,5)</label>'+
+        '<input id="otHours" type="number" min="0" max="16" step="0.5" value="'+(+prev.ot||2)+'" style="width:110px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px;margin-bottom:10px">'+
+        '<label style="display:block;font-size:12px;margin-bottom:4px">Что делали (для журнала и бухгалтера)</label>'+
+        '<input id="otNote" type="text" value="'+esc(prev.otNote||'')+'" placeholder="напр.: срочная сварка заказа 3412" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:12px">'+
+        '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="otCancel" type="button">Отмена</button>'+
+        '<button class="btn" id="otOk" type="button" style="background:#1f6ce8;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">Сохранить</button></div></div></div>';
+      var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host.firstChild);
+      function close(){ var o=document.getElementById('otOvl'); if(o) o.remove(); }
+      document.getElementById('otCancel').onclick=close;
+      document.getElementById('otOk').onclick=function(){
+        var hrs=+document.getElementById('otHours').value||0;
+        var nt=document.getElementById('otNote').value.trim();
+        fetch(WORKER+'/att-ot',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({workerId:wId,date:date,hours:hrs,note:nt,byName:ME_NAME})})
+          .then(function(r){return r.json();})
+          .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил'); close(); load(); })
+          .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+      };
     }
 
     // окно отметки: причина, минуты (для опоздания/раннего ухода) и скан документа

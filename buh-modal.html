@@ -644,18 +644,19 @@
       h+='<h3 style="margin:14px 0 6px">Зарплата к выдаче</h3>';
       if(!ss.length) h+='<div class="empty">Нет начислений за период.</div>';
       else {
-        h+='<div class="muted" style="margin-bottom:6px">Оклад начислен = оклад ÷ рабочие дни периода ('+(PAY.workdays||0)+') × оплачиваемые дни. Оплачиваемые дни = Σ(дни статуса × его %). Выход в выходной с отметкой «Я» оплачивается сверх нормы. Сдельная — доля по сданным заказам, та же сумма, что в разделе «Сдельная зарплата» выше (в ФОТ не задваивается). К выдаче = оклад начислен + сдельная.</div>';
+        h+='<div class="muted" style="margin-bottom:6px">Оклад начислен = оклад ÷ рабочие дни периода ('+(PAY.workdays||0)+') × оплачиваемые дни. Оплачиваемые дни = Σ(дни статуса × его %). Выход в выходной с отметкой «Я» оплачивается сверх нормы. Внеурочные (отметка ⏱ в табеле) = часы × (оклад ÷ раб.дни ÷ 8) × 2 — только окладникам, к сдельной не относится. Сдельная — доля по сданным заказам, та же сумма, что в разделе «Сдельная зарплата» выше (в ФОТ не задваивается). К выдаче = оклад начислен + внеурочные + сдельная.</div>';
         h+='<table><thead><tr><th>Работник</th><th class="num">Оклад/мес</th><th class="num">Явок</th>'+
            '<th class="num">Б/О/Н/В</th><th class="num">Оплач. дней</th>'+
-           '<th class="num">Оклад начислен</th><th class="num">Сдельная</th><th class="num">К выдаче</th></tr></thead><tbody>';
-        var TS={acc:0,pc:0,pay:0};
+           '<th class="num">Оклад начислен</th><th class="num">Внеуроч. ×2</th><th class="num">Сдельная</th><th class="num">К выдаче</th></tr></thead><tbody>';
+        var TS={acc:0,ot:0,pc:0,pay:0};
         var TYPE={piece:'сдельная', salary:'оклад', both:'оклад + сдельная'};
         ss.forEach(function(p){
           // старый worker.js полей piece/payTotal не отдаёт — тогда считаем как раньше
           var pc = +p.piece || 0;
           var pay = (p.payTotal != null) ? p.payTotal : (p.accrued + pc);
           var sal = (p.hasSalary !== undefined) ? p.hasSalary : (+p.salary > 0);
-          TS.acc+=p.accrued; TS.pc+=pc; TS.pay+=pay;
+          var otp = +p.otPay || 0;
+          TS.acc+=p.accrued; TS.ot+=otp; TS.pc+=pc; TS.pay+=pay;
           h+='<tr><td>'+esc(p.name)+
              ' <span class="muted" style="font-size:11px">· '+esc(TYPE[p.payType]||'')+'</span>'+
              (p.noTimesheet&&sal?' <span style="font-size:11px;color:#e8c07d" title="В табеле за период нет ни одной отметки — начисление нулевое">⚠ табель пуст</span>':'')+'</td>'+
@@ -664,12 +665,14 @@
              '<td class="num muted">'+p.sick+' / '+p.vacation+' / '+p.absent+' / '+(p.dayoff||0)+'</td>'+
              '<td class="num'+(p.payDays!=null?'':' muted')+'">'+(p.payDays!=null?p.payDays:'—')+'</td>'+
              '<td class="num'+(sal?'':' muted')+'">'+(sal?(money(p.accrued)+' ₸'):'—')+'</td>'+
+             '<td class="num'+(otp?'':' muted')+'"'+(otp?' title="'+(p.otHours||0)+' ч × ставка ×2"':'')+'>'+(otp?((p.otHours||0)+' ч · '+money(otp)+' ₸'):'—')+'</td>'+
              '<td class="num'+(pc?'':' muted')+'">'+(pc?(money(pc)+' ₸'):'—')+'</td>'+
              '<td class="num"><b>'+money(pay)+' ₸</b></td></tr>';
         });
         h+='</tbody><tfoot><tr>'+
            '<td colspan="5" style="font-weight:700">Итого</td>'+
            '<td class="num">'+money(TS.acc)+' ₸</td>'+
+           '<td class="num">'+money(TS.ot)+' ₸</td>'+
            '<td class="num">'+money(TS.pc)+' ₸</td>'+
            '<td class="num"><b style="color:var(--green,#4bce97)">'+money(TS.pay)+' ₸</b></td>'+
            '</tr></tfoot></table>';
