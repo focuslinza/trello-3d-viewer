@@ -282,7 +282,8 @@
       {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены в калькуляторе'},
       {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true},
       {cls:'agent',     fld:'is_repair_agent', label:'Агент ремонта',      hint:'бонус за каждую полностью оформленную заявку на ремонт (описание, фирма, контактное лицо, фото) — виден агенту в «Моём заработке»'},
-      {cls:'salesmgr',  fld:'is_sales_manager', label:'Менеджер по продажам', hint:'сдельная от суммы продаж: заказы с сайта metalshop.kz и из канбана «Продажи». Начисляется, когда заказ оплачен полностью. Ставки — в блоке «Мотивация» ниже'}
+      {cls:'salesmgr',  fld:'is_sales_manager', label:'Менеджер по продажам', hint:'сдельная от суммы продаж: заказы с сайта metalshop.kz и из канбана «Продажи». Начисляется, когда заказ оплачен полностью. Ставки — в блоке «Мотивация» ниже'},
+      {cls:'notimesheet', fld:'no_timesheet', label:'Вне штата — без табеля', hint:'агент или подрядчик: не сотрудник, оплата за результат (например, 300 ₸ за оформленную заявку ремонта). В табеле не показывается; бонусы и сдельная в зарплатах остаются'}
     ];
     function chipCb(cls, label, hint, on, extra){
       return '<label class="chipcb'+(on?' on':'')+(extra||'')+'" title="'+hint.replace(/"/g,'&quot;')+'">'+
@@ -487,6 +488,7 @@
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })(),
         isSalesManager:(tr.querySelector('.salesmgr')?tr.querySelector('.salesmgr').checked:undefined),
+        noTimesheet:(tr.querySelector('.notimesheet')?tr.querySelector('.notimesheet').checked:undefined),
         salesPercentFirst:(function(){ var el=tr.querySelector('.salesPct1'); return el ? (parseFloat(el.value)||0) : undefined; })(),
         salesPercentRepeat:(function(){ var el=tr.querySelector('.salesPct2'); return el ? (parseFloat(el.value)||0) : undefined; })() })
       }).then(function(r){ return r.json(); })
