@@ -297,6 +297,7 @@
       if(VIEW==='payroll') return loadPayroll();
       if(VIEW==='repairs') return loadRepairs();
       if(VIEW==='meals') return loadMeals();
+      if(VIEW==='rework') return loadRework();
       var b=document.getElementById('boot'); if(b) b.textContent='Загружаю заказы…';
       fetch(WORKER+'/acct-list?from='+RANGE.from+'&to='+RANGE.to)
         .then(function(r){return r.json();})
@@ -440,6 +441,7 @@
          '<div class="tab'+(VIEW==='payroll'?' active':'')+'" data-view="payroll">Зарплаты</div>'+
          '<div class="tab'+(VIEW==='repairs'?' active':'')+'" data-view="repairs">Ремонт</div>'+
          '<div class="tab'+(VIEW==='meals'?' active':'')+'" data-view="meals">Обеды</div>'+
+         '<div class="tab'+(VIEW==='rework'?' active':'')+'" data-view="rework">Брак</div>'+
          '</div>';
       h+='<div class="tabs">';
       [['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].forEach(function(p){
@@ -475,6 +477,12 @@
         app.innerHTML=h;
         bindCommon();
         bindMeals();
+        return;
+      }
+      if(VIEW==='rework'){
+        h+='<div id="reworkBody"><div class="muted">Загрузка…</div></div>';
+        app.innerHTML=h;
+        bindCommon();
         return;
       }
       if(VIEW==='repairs'){
@@ -689,6 +697,50 @@
       return '<span class="chip rchip'+(on?' on':'')+'" data-id="'+r.id+'" data-f="'+field+'">'+(on?'✓ ':'')+label+'</span>';
     }
 
+    var REWORK=null;
+    function loadRework(){
+      render();
+      fetch(WORKER+'/rework-report?from='+RANGE.from+'&to='+RANGE.to).then(function(r){return r.json();}).then(function(j){
+        REWORK=j; renderReworkBody();
+      }).catch(function(){ var el=document.getElementById('reworkBody'); if(el) el.innerHTML='<div class="muted">Не удалось загрузить.</div>'; });
+    }
+    function renderReworkBody(){
+      var el=document.getElementById('reworkBody'); if(!el||!REWORK) return;
+      var j=REWORK;
+      if(j.error){ el.innerHTML='<div class="muted">'+esc(j.error)+'</div>'; return; }
+      var T=j.totals||{}, rows=j.rows||[];
+      var FAULT={client:'клиент',worker:'работник',mixed:'смешанная'};
+      var h='<div class="cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">';
+      [['Переделок',T.count||0,''],['Материал',money(T.mat||0)+' ₸',''],['Работа',money(T.work||0)+' ₸',''],
+       ['Потери компании',money(T.company||0)+' ₸','#f28b82'],['Вычтено с работников',money(T.worker||0)+' ₸','#e8c07d'],['Клиентам в счёт',money(T.client||0)+' ₸','#4bce97']]
+      .forEach(function(c){ h+='<div class="card" style="min-width:150px"><div class="muted" style="font-size:11px;text-transform:uppercase">'+c[0]+'</div><div style="font-size:17px;font-weight:700'+(c[2]?(';color:'+c[2]):'')+'">'+c[1]+'</div></div>'; });
+      h+='</div>';
+      h+='<div class="muted" style="margin-bottom:8px;font-size:12px">Материал делится по вине: работник 50/50 с компанией, смешанная 25/25/50, клиент — всё в счёт. Работа (стоимость переоткрытых этапов): при вине клиента — клиенту в счёт, иначе затрата компании (работник переделывает этап без второй сдельной).</div>';
+      if(!rows.length){ el.innerHTML=h+'<div class="muted">Переделок за период нет — отличный знак.</div>'; return; }
+      h+='<table><thead><tr><th>Дата</th><th>Заказ</th><th>Вина</th><th>Виновный</th><th>Причина</th><th class="num">Материал</th><th class="num">Работа</th><th class="num">Компания</th><th class="num">Работник</th><th class="num">Клиенту</th></tr></thead><tbody>';
+      rows.forEach(function(r){
+        h+='<tr><td class="small">'+esc(r.date)+'</td><td>'+(r.number?('№'+esc(r.number)+' · '):'')+esc(r.name||r.id)+'</td>'+
+           '<td class="small">'+(FAULT[r.fault]||esc(r.fault))+'</td><td class="small">'+esc(r.culprit||'—')+'</td>'+
+           '<td class="small" style="max-width:220px">'+esc(r.reason||'')+'</td>'+
+           '<td class="num">'+money(r.material)+'</td><td class="num">'+money(r.work)+'</td>'+
+           '<td class="num" style="color:#f28b82">'+money(r.companyPays)+'</td>'+
+           '<td class="num" style="color:#e8c07d">'+(r.workerPays?money(r.workerPays):'—')+'</td>'+
+           '<td class="num" style="color:#4bce97">'+(r.clientPays?money(r.clientPays):'—')+'</td></tr>';
+      });
+      h+='</tbody><tfoot><tr><td colspan="5" style="font-weight:700">Итого</td>'+
+         '<td class="num">'+money(T.mat)+'</td><td class="num">'+money(T.work)+'</td>'+
+         '<td class="num">'+money(T.company)+'</td><td class="num">'+money(T.worker)+'</td><td class="num">'+money(T.client)+'</td></tr></tfoot></table>';
+      var bc=j.byCulprit||{}, names=Object.keys(bc);
+      if(names.length){
+        h+='<h3 style="margin-top:16px">По виновным</h3><table><thead><tr><th>Работник</th><th class="num">Переделок</th><th class="num">Материал+работа</th><th class="num">Вычтено из сдельной</th></tr></thead><tbody>';
+        names.sort(function(a,b){ return bc[b].deduct-bc[a].deduct; }).forEach(function(n){
+          var b=bc[n];
+          h+='<tr><td>'+esc(n)+'</td><td class="num">'+b.count+'</td><td class="num">'+money(b.mat+b.work)+' ₸</td><td class="num" style="color:#e8c07d">'+money(b.deduct)+' ₸</td></tr>';
+        });
+        h+='</tbody></table>';
+      }
+      el.innerHTML=h;
+    }
     function renderRepairsBody(){
       var T=REP_TOTALS||{};
       var h='<div class="kpis">';
