@@ -441,6 +441,35 @@
       .then(function(j){ ACTLOG=(j&&j.rows)||[]; if(tab==='actlog') render(); })
       .catch(function(){ ACTLOG=[]; if(tab==='actlog') render(); });
   }
+  var MACH=null;
+  function loadMachines(){
+    if(MACH!==null) return;
+    fetch(WORKER+'/machine-activity?from='+RANGE.from+'&to='+RANGE.to)
+      .then(function(r){return r.json();})
+      .then(function(j){ MACH=(j&&j.rows)||[]; if(tab==='machines') render(); })
+      .catch(function(){ MACH=[]; if(tab==='machines') render(); });
+  }
+  function renderMachines(){
+    loadMachines();
+    if(MACH===null) return '<div class="muted">Загружаю события станков…</div>';
+    var un=MACH.filter(function(r){ return !r.matched_card_id; });
+    var h='<h3>Активность станков</h3>';
+    h+='<div class="muted" style="margin-bottom:8px;font-size:12px">Агент на компьютере станка сообщает, какие файлы открывались в CypCut. Файл сверяется с DXF заказов: найден — привязка к заказу, не найден — <b style="color:#f28b82">красный флаг</b>. Левый заказ невозможен без файла на станке.</div>';
+    h+='<div class="cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
+    h+='<div class="card" style="min-width:150px"><div class="muted" style="font-size:11px;text-transform:uppercase">Файлов за период</div><div style="font-size:17px;font-weight:700">'+MACH.length+'</div></div>';
+    h+='<div class="card" style="min-width:150px"><div class="muted" style="font-size:11px;text-transform:uppercase">Не из заказов</div><div style="font-size:17px;font-weight:700;color:'+(un.length?'#f28b82':'#4bce97')+'">'+un.length+'</div></div>';
+    h+='</div>';
+    if(!MACH.length) return h+'<div class="muted">Событий нет. Либо станок молчал, либо агент ещё не установлен на его компьютер (файл stanok-agent — инструкция в переписке).</div>';
+    h+='<table><thead><tr><th>Когда открыт</th><th>Станок</th><th>Файл</th><th>Заказ</th></tr></thead><tbody>';
+    MACH.forEach(function(r){
+      var ok0=!!r.matched_card_id;
+      h+='<tr'+(ok0?'':' style="background:rgba(242,139,130,.07)"')+'><td class="small">'+esc(r.opened_at||'')+'</td><td class="small">'+esc(r.machine||'')+'</td>'+
+         '<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis">'+esc(r.file_name||'')+'</td>'+
+         '<td>'+(ok0?((r.matched_no?('№'+esc(r.matched_no)+' · '):'')+esc(r.matched_name||'')):'<b style="color:#f28b82">НЕ ИЗ ЗАКАЗОВ</b>')+'</td></tr>';
+    });
+    h+='</tbody></table>';
+    return h;
+  }
   function renderActLog(){
     loadActLog();
     if(ACTLOG===null) return '<div class="muted">Загружаю журнал…</div>';
@@ -534,7 +563,7 @@
       }
 
       h+='<div class="tabs">';
-      [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам'],['actlog','Журнал']].forEach(function(x){
+      [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам'],['actlog','Журнал'],['machines','Станки']].forEach(function(x){
         h+='<div class="tab'+(tab===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
       });
       h+='</div>';
@@ -596,6 +625,7 @@
 
   function renderTab(){
     if(tab==='actlog') return renderActLog();
+    if(tab==='machines') return renderMachines();
     if(tab==='people'){
       var a=DATA.byWorker||[]; if(!a.length) return '<div class="muted">Нет начислений за период.</div>';
       var max=a[0].earned||1;
