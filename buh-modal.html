@@ -513,14 +513,20 @@
             h+='<div class="muted" style="margin-top:8px">По всей базе тоже ничего не нашлось.</div>';
           } else {
             h+='<div class="muted" style="margin-top:10px;margin-bottom:4px">Найдено вне выбранного периода (заказ давно не пересчитывали в калькуляторе):</div>';
-            h+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Обновлён</th></tr></thead><tbody>';
+            h+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Обновлён</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
             WIDE_RESULTS.forEach(function(r){
-              h+='<tr class="wideRow" data-card="'+esc(r.cardId)+'" style="cursor:pointer">'+
-                 '<td>'+esc(r.number||'—')+'</td>'+
+              r.date = String(r.updatedAt||'').slice(0,10); // формат основной таблицы
+              h+='<tr>'+
+                 '<td style="white-space:nowrap"><a href="https://trello.com/c/'+esc(r.cardId)+'" target="_blank" rel="noopener" style="color:#579dff;text-decoration:none">'+esc(r.number||'—')+'</a></td>'+
                  '<td>'+esc(String(r.name||'').slice(0,60))+'</td>'+
                  '<td>'+esc(r.client||'')+'</td>'+
                  '<td class="num">'+money(r.total)+' ₸</td>'+
-                 '<td class="muted">'+esc(String(r.updatedAt||'').slice(0,10))+'</td>'+
+                 '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
+                 '<td>'+chip(r,'paid','оплачен')+'</td>'+
+                 '<td>'+chip(r,'delivered','сдали')+'</td>'+
+                 '<td>'+chip(r,'actSigned','акт')+'</td>'+
+                 '<td class="muted">'+esc(r.date)+'</td>'+
+                 (IS_ADMIN?('<td>'+(r.hidden?('<button class="btn ounhide" data-card="'+esc(r.cardId)+'" type="button" title="Вернуть заказ из архива в бухгалтерию" style="padding:2px 8px;font-size:11px">↩ вернуть</button>'):'')+'</td>'):'')+
                  '</tr>';
             });
             h+='</tbody></table>';
@@ -555,7 +561,9 @@
       [].forEach.call(document.querySelectorAll('.chip'), function(c){
         c.onclick=function(){
           var cardId=this.getAttribute('data-card'), field=this.getAttribute('data-f');
-          var r=ROWS.filter(function(x){return x.cardId===cardId;})[0]; if(!r) return;
+          var r=ROWS.filter(function(x){return x.cardId===cardId;})[0]
+               || ((WIDE_RESULTS||[]).filter(function(x){return x.cardId===cardId;})[0]);
+          if(!r) return;
           var newVal=!r[field]; var el=this; el.classList.add('busy');
           var p = (field==='paid')
             ? fetch(WORKER+'/calc-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cardId:cardId,paid:newVal})})
@@ -936,8 +944,15 @@
           }).catch(function(){});
         },350);
       };
-      [].forEach.call(document.querySelectorAll('.wideRow'), function(tr){
-        tr.onclick=function(){ window.open('https://trello.com/c/'+this.getAttribute('data-card'), '_blank'); };
+      [].forEach.call(document.querySelectorAll('.ounhide'), function(b){
+        b.onclick=function(){
+          var cid=this.getAttribute('data-card');
+          if(!confirm('Вернуть заказ из архива? Он снова появится в бухгалтерии и аналитике.')) return;
+          fetch(WORKER+'/calc-hide',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cardId:cid,hidden:0})})
+            .then(function(x){return x.json();})
+            .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил'); load(); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
       });
       var oo=document.getElementById('onlyOpen');
       if(oo) oo.onchange=function(){ ONLY_OPEN=this.checked; render(); };
