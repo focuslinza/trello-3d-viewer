@@ -70,6 +70,7 @@
       <h2>Продажи</h2>
       <input type="text" id="q" placeholder="Поиск: клиент, тема, контакт, телефон…" style="flex:1;min-width:180px">
       <button class="btn primary" id="newBtn" type="button">+ Новый лид</button>
+      <button class="btn" id="anBtn" type="button" title="Лиды, источники, конверсия, клики по ссылкам роликов">📊 Аналитика</button>
       <button class="btn" id="crmBtn" type="button" title="Открыть базу клиентов (CRM)">👥 Клиенты</button>
     </div>
     <div id="board"><div class="empty">Загрузка…</div></div>
@@ -85,11 +86,80 @@
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     document.getElementById('close').onclick=function(){ t.closeModal(); };
     // кнопка сверху справа: существующий CRM-раздел (позже — коммерческие CRM)
+    // ---------- аналитика продаж ----------
+    document.getElementById('anBtn').onclick=function(){ openAnalytics(); };
+    function monthRange(){ var d=new Date(); var f=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; return [f, today()]; }
+    function openAnalytics(){
+      var mr=monthRange();
+      var host=document.getElementById('ovlHost');
+      host.innerHTML='<div class="ovl" id="anOvl"><div class="pop" style="max-width:840px">'+
+        '<h3>📊 Аналитика продаж</h3>'+
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">'+
+        '<input type="date" id="anFrom" value="'+mr[0]+'"> — <input type="date" id="anTo" value="'+mr[1]+'">'+
+        '<button class="btn primary" id="anGo" type="button">Показать</button>'+
+        '<span class="msg" id="anMsg"></span></div>'+
+        '<div id="anBody" class="muted" style="margin-top:12px">Выберите период и нажмите «Показать».</div>'+
+        '<div class="popbar"><button class="btn" id="anClose" type="button">Закрыть</button></div>'+
+        '</div></div>';
+      document.getElementById('anClose').onclick=function(){ host.innerHTML=''; };
+      document.getElementById('anOvl').onclick=function(e){ if(e.target===this) host.innerHTML=''; };
+      document.getElementById('anGo').onclick=loadAnalytics;
+      loadAnalytics();
+    }
+    function kpi(v,l){ return '<div style="background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:110px">'+
+      '<div style="font-size:19px;font-weight:700">'+v+'</div><div class="muted">'+l+'</div></div>'; }
+    function tbl(rows){ return '<table style="width:100%;border-collapse:collapse;font-size:12.5px">'+rows.map(function(r){
+      return '<tr><td style="padding:4px 6px;border-bottom:1px solid var(--line)">'+r[0]+'</td>'+
+             '<td style="padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">'+r[1]+'</td></tr>'; }).join('')+'</table>'; }
+    function sect(t,inner){ return '<div style="margin-top:14px"><div style="font-weight:700;margin-bottom:6px">'+t+'</div>'+inner+'</div>'; }
+    function loadAnalytics(){
+      var f=document.getElementById('anFrom').value, tt=document.getElementById('anTo').value;
+      document.getElementById('anMsg').textContent='Загрузка…';
+      fetch(WORKER+'/sales-analytics?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(tt))
+      .then(function(r){return r.json();}).then(function(j){
+        document.getElementById('anMsg').textContent='';
+        if(j.error){ document.getElementById('anBody').textContent=j.error; return; }
+        var h='<div style="display:flex;gap:10px;flex-wrap:wrap">'+
+          kpi(j.leadsTotal,'лидов создано')+
+          kpi(j.won,'сделок')+
+          kpi(j.conversion+'%','конверсия в сделку')+
+          kpi(money(j.wonSum)+' ₸','сумма сделок')+
+          (j.avgDaysToWin!=null?kpi(j.avgDaysToWin,'дней до сделки'):'')+
+          kpi(j.sentCalc+' / '+j.readyCalc,'на расчёт / готово')+
+          kpi(j.site.count,'заказов с сайта')+
+          kpi(money(j.site.sum)+' ₸','сумма с сайта')+
+        '</div>';
+        h+=sect('Воронка (лиды, созданные в периоде)', tbl([
+          ['Новые', j.byStatus['new']],['Переговоры', j.byStatus['talk']],['КП отправлено', j.byStatus['kp']],
+          ['✅ Сделка', j.byStatus['deal']],['❌ Отказ', j.byStatus['lost']]]));
+        var srcRows=Object.keys(j.bySource).sort(function(a,b){return j.bySource[b]-j.bySource[a];})
+          .map(function(k){ return [esc(srcLabel(k)||k), j.bySource[k]]; });
+        h+=sect('Источники лидов', srcRows.length?tbl(srcRows):'<span class="muted">Источники пока не заполняются — выбирайте «Откуда пришёл» в лиде.</span>');
+        var codeRows=Object.keys(j.byCode).sort(function(a,b){return j.byCode[b]-j.byCode[a];})
+          .map(function(k){ return [esc(k), j.byCode[k]]; });
+        if(codeRows.length) h+=sect('Метки роликов / кампаний (лиды)', tbl(codeRows));
+        var clickRows=(j.clicks||[]).map(function(c){ return [esc(c.code)+' <span class="muted">('+(c.kind==='tel'?'звонок':'WhatsApp')+')</span>', c.n]; });
+        h+=sect('Клики по рекламным ссылкам', clickRows.length?tbl(clickRows):
+          '<span class="muted">Кликов нет. Делайте для каждого ролика свою ссылку:<br>'+
+          'WhatsApp: <code>'+esc(WORKER)+'/go?c=video17&t=wa&p=7701XXXXXXX</code><br>'+
+          'Звонок: <code>'+esc(WORKER)+'/go?c=video17&t=tel&p=7701XXXXXXX</code><br>'+
+          'Клик посчитается, человек попадёт в WhatsApp с кодом ролика — вносите этот код в «Метку» лида.</span>');
+        var mgrRows=Object.keys(j.byManager).map(function(m){
+          var x=j.byManager[m]; return [esc(m), x.leads+' лидов · '+x.won+' сделок · '+money(x.wonSum)+' ₸']; });
+        if(mgrRows.length>1||(mgrRows.length===1&&Object.keys(j.byManager)[0]!=='—')) h+=sect('По менеджерам', tbl(mgrRows));
+        var tagRows=Object.keys(j.site.byTag||{}).map(function(k){ return [esc(k), j.site.byTag[k]]; });
+        if(j.site.count>0) h+=sect('Заказы с сайта по меткам', tbl(tagRows));
+        document.getElementById('anBody').innerHTML=h;
+      }).catch(function(e){ document.getElementById('anMsg').textContent='Ошибка: '+e.message; });
+    }
     document.getElementById('crmBtn').onclick=function(){
       t.modal({ url:'./crm-modal.html?t='+Date.now(), title:'CRM — клиенты', accentColor:'#1f6ce8', fullscreen:true });
     };
 
     var ROWS=[], COMPANIES=[], FILTER='', dragId=null, MYNAME='', FILE_COUNTS={};
+    var SOURCES=[['','— не указан —'],['whatsapp','WhatsApp'],['call','Звонок'],['site','Сайт metalshop.kz'],
+      ['instagram','Instagram'],['tiktok','TikTok'],['2gis','2ГИС'],['referral','Рекомендация'],['other','Другое']];
+    function srcLabel(k){ var f=SOURCES.filter(function(s){return s[0]===k;})[0]; return f?f[1]:(k||''); }
     var COLS=[
       {key:'new', title:'Новые лиды'},
       {key:'talk', title:'Переговоры'},
@@ -142,6 +212,7 @@
           if(r.company_name) sub.push(esc(r.company_name));
           if(r.contact) sub.push(esc(r.contact));
           if(r.phone) sub.push(esc(r.phone));
+          if(r.source) sub.push('из: '+esc(srcLabel(r.source))+(r.source_code?(' ('+esc(r.source_code)+')'):''));
           if(sub.length) h+='<div class="sub">'+sub.join(' · ')+'</div>';
           h+='<div class="row2"><span>';
           if(+r.amount>0) h+='<span class="price">'+money(r.amount)+' ₸</span> ';
@@ -215,6 +286,9 @@
         '<div class="fld"><label>Или название клиента</label><input type="text" id="fCompName" value="'+esc(r?r.company_name:'')+'" placeholder="ТОО …"></div>'+
         '<div class="fld"><label>Контактное лицо</label><input type="text" id="fContact" value="'+esc(r?r.contact:'')+'"></div>'+
         '<div class="fld"><label>Телефон</label><input type="text" id="fPhone" value="'+esc(r?r.phone:'')+'"></div>'+
+        '<div class="fld"><label>Откуда пришёл</label><select id="fSrc">'+SOURCES.map(function(s){
+          return '<option value="'+s[0]+'"'+((r&&(r.source||'')===s[0])?' selected':'')+'>'+s[1]+'</option>'; }).join('')+'</select></div>'+
+        '<div class="fld"><label>Метка ролика / кампании</label><input type="text" id="fSrcCode" value="'+esc(r?(r.source_code||''):'')+'" placeholder="например: video17"></div>'+
         '<div class="fld"><label>Потенциальная сумма, ₸</label><input type="number" id="fAmount" min="0" step="any" value="'+esc(r&&+r.amount>0?r.amount:'')+'"></div>'+
         '<div class="fld"><label>Следующий контакт</label><input type="date" id="fNext" value="'+esc(r&&r.next_at?r.next_at:'')+'"></div>'+
         '</div>'+
@@ -365,6 +439,8 @@
           contact:document.getElementById('fContact').value.trim(),
           phone:document.getElementById('fPhone').value.trim(),
           amount:+document.getElementById('fAmount').value||0,
+          source:document.getElementById('fSrc').value,
+          sourceCode:document.getElementById('fSrcCode').value.trim(),
           note:document.getElementById('fNote').value,
           status:(r?(r.status||'new'):'new'),
           nextAt:document.getElementById('fNext').value||null, byName:MYNAME };
