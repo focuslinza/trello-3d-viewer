@@ -303,9 +303,9 @@
           '<select class="mem" title="Trello-аккаунт">'+memberOptionsHtml(w.trello_member_id||'')+'</select>'+
           // без привязки к Trello сдельная/офисный % никогда не дойдёт до «Моего заработка» —
           // показываем это сразу в панели, а не оставляем руководителя гадать по нулям
-          (((w.pay_type||(w.is_salaried==1?'both':'piece'))!=='salary' && !w.trello_member_id)
-            ? '<span style="color:#e8c07d;font-size:11.5px;margin-left:6px" title="Без Trello-аккаунта сдельная и % от работ не попадут в «Мой заработок» — выберите человека в списке слева">⚠ не привязан — сдельная не начислится</span>'
-            : '') +
+          '<span class="linkwarn" style="color:#e8c07d;font-size:11.5px;margin-left:6px'+
+            ((((w.pay_type||(w.is_salaried==1?'both':'piece'))!=='salary') && !w.trello_member_id)?'':';display:none')+
+            '" title="Без Trello-аккаунта сдельная и % от работ не попадут в «Мой заработок» — выберите человека в списке слева">⚠ не привязан — сдельная не начислится</span>' +
           (inactive?'<span class="delbadge">удалён</span>':'')+
           '<span class="actions">'+
             '<button class="btn save" type="button">Сохранить</button>'+
@@ -371,10 +371,21 @@
           var cb=card.querySelector('.'+cls); if(cb){ cb.checked=true; cb.parentNode.classList.add('on'); }
         });
       });
+      // предупреждение «не привязан» пересчитывается сразу по текущим значениям
+      // формы, а не по снимку из базы — раньше оно висело до переоткрытия панели
+      function updateLinkWarn(){
+        var lw=card.querySelector('.linkwarn'); if(!lw) return;
+        var memSel=card.querySelector('.mem'), ptSel=card.querySelector('.ptype');
+        var need = (ptSel && ptSel.value!=='salary') && !(memSel && memSel.value);
+        lw.style.display = need ? '' : 'none';
+      }
+      var memSel=card.querySelector('.mem');
+      if(memSel) memSel.addEventListener('change', updateLinkWarn);
       var pt=card.querySelector('.ptype');
       if(pt) pt.addEventListener('change', function(){
         var sal=card.querySelector('.sal');
         if(sal) sal.style.display = this.value==='piece' ? 'none' : '';
+        updateLinkWarn();
       });
       var mob=card.querySelector('.mob');
       if(mob) mob.addEventListener('click', function(){
@@ -491,6 +502,10 @@
               tr.style.borderColor='';
             }, 2000);
             document.getElementById('emptyHint').style.display='none'; updateCount();
+            try { var lw=tr.querySelector('.linkwarn'); if(lw){
+              var ms=tr.querySelector('.mem'), ps=tr.querySelector('.ptype');
+              lw.style.display = ((ps && ps.value!=='salary') && !(ms && ms.value)) ? '' : 'none';
+            } } catch(e){}
             if(tr.classList.contains('inactive') && tr.getAttribute('data-active')==='1') loadWorkers();
           } else {
             btn.disabled=false; btn.textContent='⚠ Ошибка';
