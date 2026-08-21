@@ -123,6 +123,44 @@
           });
           row4.appendChild(lbl4); row4.appendChild(sb); el.appendChild(row4);
         }
+        // связь с лидом продаж: если карточка создана кнопкой «На расчёт»,
+        // начальник цеха видит здесь кнопку «Расчёт готов» — цена уедет продажнику
+        function addSalesBtn(lead, me){
+          var row5=document.createElement('div'); row5.className='row'; row5.style.marginTop='8px';
+          var lbl5=document.createElement('div'); lbl5.className='muted';
+          var sb=document.createElement('button'); sb.className='btn'; sb.type='button'; sb.style.background='#a54800';
+          if (lead.calc_status==='ready'){
+            lbl5.textContent='Лид продаж «'+(lead.title||'')+'»: цена '+fmt(lead.calc_price)+' ₸ уже у продажника';
+            sb.textContent='Обновить цену';
+          } else {
+            lbl5.textContent='Заказ пришёл из отдела продаж («'+(lead.title||'')+'»)';
+            sb.textContent='✅ Расчёт готов';
+          }
+          sb.addEventListener('click', function(){
+            var note = prompt('Комментарий для продажника (срок, условия). Можно оставить пустым:', '');
+            if (note === null) return; // передумал
+            sb.disabled = true; sb.textContent = 'Отправка…';
+            fetch(WORKER+'/sales-calc-ready', { method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ cardId: CARD.id, memberId: (me&&me.id)||'', note: note||'' }) })
+            .then(function(x){ return x.json(); })
+            .then(function(j){
+              if (j.error){ alert(j.error); sb.disabled=false; sb.textContent='✅ Расчёт готов'; return; }
+              lbl5.textContent='Цена '+fmt(j.price)+' ₸ отправлена продажнику ✓';
+              sb.textContent='Обновить цену'; sb.disabled=false;
+            })
+            .catch(function(e){ alert('Ошибка сети: '+e.message); sb.disabled=false; sb.textContent='✅ Расчёт готов'; });
+          });
+          row5.appendChild(lbl5); row5.appendChild(sb); el.appendChild(row5);
+        }
+        function checkSalesLink(allowed, me){
+          if (!allowed || !CARD.id) return Promise.resolve();
+          return fetch(WORKER+'/sales-by-card?cardId='+encodeURIComponent(CARD.id))
+            .then(function(x){ return x.json(); })
+            .then(function(j){
+              if (myGen !== renderGen) return;
+              if (j && j.found && j.lead && !j.lead.archived) addSalesBtn(j.lead, me);
+            }).catch(function(){});
+        }
         return Promise.all([ isDirector(), t.member('id').catch(function(){return {};}) ]).then(function(r){
           if (myGen !== renderGen) return; // устарело
           var admin=r[0], me=r[1]||{};
@@ -134,7 +172,7 @@
             eb.addEventListener('click', openEarnings);
             row2.appendChild(lbl); row2.appendChild(eb); el.appendChild(row2);
           }
-          if(admin){ addEarningsBtn(); addInvoiceBtn(); return t.sizeTo('#wrap'); }
+          if(admin){ addEarningsBtn(); addInvoiceBtn(); return checkSalesLink(true, me).then(function(){ return t.sizeTo('#wrap'); }); }
           // не админ: кнопки по правам из базы работников. «Заработок по заказу» —
           // начальнику цеха (чип «Панель руководителя» или «Видит стоимость»):
           // именно там расставляются исполнители этапов и их доли.
@@ -142,6 +180,7 @@
             if (myGen !== renderGen) return; // устарело
             if(j&&(j.canDashboard||j.canSeeCost)) addEarningsBtn();
             if(j&&(j.canIssueInvoice||j.canInvoice)) addInvoiceBtn();
+            return checkSalesLink(!!(j&&(j.canDashboard||j.canSeeCost)), me);
           }).catch(function(){}).then(function(){ if (myGen !== renderGen) return; return t.sizeTo('#wrap'); });
         });
       });

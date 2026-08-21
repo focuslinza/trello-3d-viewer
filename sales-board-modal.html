@@ -37,6 +37,8 @@
     .pill.due{background:#42221f;color:var(--red)}
     .pill.next{background:#243447;color:#9dc1ff}
     .pill.won{background:#1c3329;color:var(--green)}
+    .pill.calc{background:#3a3322;color:var(--amber)}
+    .pill.calcok{background:#1c3329;color:var(--green)}
     .price{font-size:12.5px;font-weight:700;color:var(--green)}
     .mv{background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:12px;padding:1px 7px;cursor:pointer}
     .mv:hover{border-color:var(--blue);color:#cfe1ff}
@@ -144,6 +146,8 @@
           h+='<div class="row2"><span>';
           if(+r.amount>0) h+='<span class="price">'+money(r.amount)+' ₸</span> ';
           if(FILE_COUNTS[String(r.id)]) h+='<span class="pill next">📎 '+FILE_COUNTS[String(r.id)]+'</span> ';
+          if(r.calc_status==='ready') h+='<span class="pill calcok" title="Расчёт производства готов'+(r.calc_note?(': '+esc(r.calc_note)):'')+'">💰 '+money(r.calc_price)+' ₸</span> ';
+          else if(r.calc_status==='sent') h+='<span class="pill calc" title="Отправлено инженеру на расчёт">⏳ расчёт</span> ';
           if(r.next_at && c.key!=='deal' && c.key!=='lost'){
             var due = r.next_at<=today();
             h+='<span class="pill '+(due?'due':'next')+'">'+(due?'📞 пора: ':'')+esc(r.next_at.slice(5))+'</span>';
@@ -185,7 +189,15 @@
       var prev=r.status; r.status=colKey; renderBoard();  // мгновенно на экране
       post('/sales-save',{ id:r.id, title:r.title, companyId:r.company_id, companyName:r.company_name,
         contact:r.contact, phone:r.phone, amount:r.amount, note:r.note, status:colKey, nextAt:r.next_at, byName:MYNAME })
-      .then(function(j){ if(j.error){ r.status=prev; renderBoard(); alert('Не сохранилось: '+j.error); } });
+      .then(function(j){
+        if(j.error){ r.status=prev; renderBoard(); alert('Не сохранилось: '+j.error); return; }
+        // отказ + есть карточка в Trello: предложим убрать её в архив, чтобы не висела в цеху
+        if(colKey==='lost' && r.trello_card_id && confirm('Лид ушёл в отказ. Заархивировать его карточку в Trello, чтобы она не мешала цеху?')){
+          post('/sales-card-archive',{id:r.id}).then(function(x){
+            if(x && x.warning) alert(x.warning);
+          }).catch(function(){});
+        }
+      });
     }
 
     // ---------- карточка лида ----------
@@ -207,7 +219,8 @@
         '<div class="fld"><label>Следующий контакт</label><input type="date" id="fNext" value="'+esc(r&&r.next_at?r.next_at:'')+'"></div>'+
         '</div>'+
         '<div class="fld"><label>Заметка</label><textarea id="fNote" rows="3">'+esc(r?r.note:'')+'</textarea></div>'+
-        (r?('<div class="fld"><label>Файлы (фото, PDF, чертежи)</label>'+
+        (r?('<div class="fld"><label>Расчёт производства</label><div id="calcBox" class="muted">Загрузка…</div></div>'+
+          '<div class="fld"><label>Файлы (фото, PDF, чертежи)</label>'+
           '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
           '<button class="btn" id="fCam" type="button">📷 Камера</button>'+
           '<button class="btn" id="fPick" type="button">📎 Галерея / файл</button>'+
@@ -294,6 +307,40 @@
           chain.then(function(){ fmsg('Готово ✓'); loadFiles(); renderBoard(); setTimeout(function(){fmsg('');},1500); })
                .catch(function(e){ fmsg('Ошибка: '+e.message); loadFiles(); });
         }
+        // ---------- расчёт производства ----------
+        function renderCalcBox(){
+          var box=document.getElementById('calcBox'); if(!box) return;
+          if(r.calc_status==='ready'){
+            box.innerHTML='<span class="pill calcok" style="font-size:13px">💰 Расчёт готов: '+money(r.calc_price)+' ₸</span>'+
+              (r.calc_note?('<div class="muted" style="margin-top:5px">Комментарий цеха: '+esc(r.calc_note)+'</div>'):'')+
+              '<div class="muted" style="margin-top:5px">Эту цену можно отправлять клиенту. Файлы — ниже в лиде.</div>'+
+              (r.trello_card_url?('<div style="margin-top:7px"><button class="btn" type="button" id="calcOpen">Открыть карточку Trello</button></div>'):'');
+          } else if(r.trello_card_id){
+            box.innerHTML='<span class="pill calc" style="font-size:13px">⏳ Отправлено на расчёт</span>'+
+              '<div class="muted" style="margin-top:5px">Инженер считает. Когда начальник цеха нажмёт «Расчёт готов», цена появится здесь сама.</div>'+
+              (r.trello_card_url?('<div style="margin-top:7px"><button class="btn" type="button" id="calcOpen">Открыть карточку Trello</button></div>'):'');
+          } else {
+            box.innerHTML='<div class="muted">Нужна цена от производства? Отправьте лид инженеру: '+
+              'создастся карточка в Trello со всеми файлами лида.</div>'+
+              '<div style="margin-top:7px"><button class="btn primary" type="button" id="calcSend">📐 На расчёт</button>'+
+              '<span class="msg" id="calcMsg"></span></div>';
+          }
+          var op=document.getElementById('calcOpen');
+          if(op) op.onclick=function(){ window.open(r.trello_card_url,'_blank'); };
+          var sb=document.getElementById('calcSend');
+          if(sb) sb.onclick=function(){
+            if(!confirm('Отправить лид «'+(r.title||'')+'» на расчёт производству?\nВ Trello появится карточка с файлами лида.')) return;
+            sb.disabled=true;
+            document.getElementById('calcMsg').textContent='Отправка…';
+            post('/sales-to-calc',{id:r.id, byName:MYNAME}).then(function(j){
+              if(j.error){ sb.disabled=false; document.getElementById('calcMsg').textContent=j.error; return; }
+              r.trello_card_id=j.cardId; r.trello_card_url=j.cardUrl||''; r.calc_status='sent';
+              if(j.attachErrors && j.attachErrors.length) alert('Карточка создана, но часть файлов не прикрепилась:\n'+j.attachErrors.join('\n'));
+              renderCalcBox(); renderBoard();
+            }).catch(function(e){ sb.disabled=false; document.getElementById('calcMsg').textContent='Ошибка сети: '+e.message; });
+          };
+        }
+        renderCalcBox();
         document.getElementById('fCam').onclick=function(){ document.getElementById('fCamIn').click(); };
         document.getElementById('fPick').onclick=function(){ document.getElementById('fPickIn').click(); };
         document.getElementById('fCamIn').onchange=function(){ uploadFiles(this.files); this.value=''; };
