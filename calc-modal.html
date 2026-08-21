@@ -5,7 +5,7 @@
   <title>Калькулятор стоимости</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./calc-engine.js?v=21"></script>
+  <script src="./calc-engine.js?v=20"></script>
   <style>
     html[data-color-mode="light"] { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
     html[data-color-mode="dark"]  { --bg:#1d2125; --txt:#c7d1db; --muted:#9fadbc; --chip:#22272b; --line:#3c4149; --card:#22272b; }
@@ -75,16 +75,9 @@
     .brk { display:flex; flex-direction:column; gap:2px; margin-top:6px; }
     .brk .r { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
     .brk .r b { color:var(--txt); font-weight:600; }
-  .spec-price{max-width:96px}
-.ln.spec{border:1px solid #e8873a;border-radius:8px;background:rgba(232,135,58,.06)}
-.ln.spec .spec-price{border-color:#e8873a;color:#e8a35c;font-weight:600}
-/* спеццена видна только руководящему составу: до подтверждения права поле
-   спрятано, а спец-строки выглядят как обычные — сотрудник видит просто цифры */
-body.no-spec .spec-price{display:none}
-body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
-</style>
+  </style>
 </head>
-<body class="no-spec">
+<body>
 
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
@@ -140,6 +133,7 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
           <div style="display:flex;align-items:center;gap:22px;margin-top:4px">
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="noShleifWeld" style="width:auto"> без шлейфовки сварки</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="noShleifCut" style="width:auto"> без шлейфовки резки</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="electrochem" style="width:auto"> электрохимобработка шва</label>
           </div>
         </div>
       </div>
@@ -253,43 +247,28 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
       var th=thicknessSelect(data.thickness||TH[2]);
       var qty=document.createElement('input'); qty.type='number'; qty.className='num'; qty.min='0'; qty.step='any';
       qty.placeholder='кол-во'; if(data.qty!=null) qty.value=data.qty;
-      // спеццена (₸/ед) для постоянных клиентов: пусто = обычный тариф.
-      // Честнее, чем «докручивать» количество: метры остаются настоящими.
-      var pu=document.createElement('input'); pu.type='number'; pu.className='num spec-price'; pu.min='0'; pu.step='any';
-      pu.placeholder='спец ₸/ед'; pu.title='Специальная цена за единицу (пусто — обычный тариф)';
-      if(data.customUnit!=null && +data.customUnit>0) pu.value=data.customUnit;
       var lt=document.createElement('span'); lt.className='lt'; lt.textContent='0 ₸';
       var del=document.createElement('button'); del.className='del'; del.type='button'; del.textContent='×';
       del.onclick=function(){ row.remove(); recompute(); };
-      function markSpec(){ row.classList.toggle('spec', !!(+pu.value>0)); }
-      [ks,th,qty,pu].forEach(function(e){ e.addEventListener('input',function(){ markSpec(); recompute(); }); e.addEventListener('change',function(){ markSpec(); recompute(); }); });
-      markSpec();
-      row._read=function(){ var o={kind:ks.value, thickness:+th.value, qty:+qty.value||0}; if(+pu.value>0) o.customUnit=+pu.value; return o; };
+      [ks,th,qty].forEach(function(e){ e.addEventListener('input',recompute); e.addEventListener('change',recompute); });
+      row._read=function(){ return {kind:ks.value, thickness:+th.value, qty:+qty.value||0}; };
       row._lt=lt;
-      row.appendChild(ks); row.appendChild(th); row.appendChild(qty); row.appendChild(pu); row.appendChild(lt); row.appendChild(del);
+      row.appendChild(ks); row.appendChild(th); row.appendChild(qty); row.appendChild(lt); row.appendChild(del);
       return row;
     }
-    function makeCatRow(grouped, data, unitHint, allowSpec){
+    function makeCatRow(grouped, data, unitHint){
       data=data||{};
       var row=document.createElement('div'); row.className='ln';
       var sel=catalogSelect(grouped, data.code||'');
       var qty=document.createElement('input'); qty.type='number'; qty.className='num'; qty.min='0'; qty.step='any';
       qty.placeholder=unitHint||'кол-во'; if(data.qty!=null) qty.value=data.qty;
-      var pu=null;
-      if(allowSpec){
-        pu=document.createElement('input'); pu.type='number'; pu.className='num spec-price'; pu.min='0'; pu.step='any';
-        pu.placeholder='спец ₸/ед'; pu.title='Специальная цена за единицу (пусто — обычный тариф)';
-        if(data.customUnit!=null && +data.customUnit>0) pu.value=data.customUnit;
-      }
       var lt=document.createElement('span'); lt.className='lt'; lt.textContent='0 ₸';
       var del=document.createElement('button'); del.className='del'; del.type='button'; del.textContent='×';
       del.onclick=function(){ row.remove(); recompute(); };
-      function markSpec(){ if(pu) row.classList.toggle('spec', !!(+pu.value>0)); }
-      [sel,qty].concat(pu?[pu]:[]).forEach(function(e){ e.addEventListener('input',function(){ markSpec(); recompute(); }); e.addEventListener('change',function(){ markSpec(); recompute(); }); });
-      markSpec();
-      row._read=function(){ var o={code:sel.value, qty:+qty.value||0}; if(pu&&+pu.value>0) o.customUnit=+pu.value; return o; };
+      [sel,qty].forEach(function(e){ e.addEventListener('input',recompute); e.addEventListener('change',recompute); });
+      row._read=function(){ return {code:sel.value, qty:+qty.value||0}; };
       row._lt=lt;
-      row.appendChild(sel); row.appendChild(qty); if(pu) row.appendChild(pu); row.appendChild(lt); row.appendChild(del);
+      row.appendChild(sel); row.appendChild(qty); row.appendChild(lt); row.appendChild(del);
       return row;
     }
 
@@ -297,10 +276,10 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
         matLines=document.getElementById('matLines'),
         cmpLines=document.getElementById('cmpLines');
     document.getElementById('addOp').onclick=function(){ opLines.appendChild(makeOpRow()); recompute(); };
-    document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м',true)); recompute(); };
+    document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м')); recompute(); };
     document.getElementById('addCmp').onclick=function(){ cmpLines.appendChild(makeCatRow(CMPG,null,'шт')); recompute(); };
 
-    ['urg','paintMode','noShleifCut','noShleifWeld'].forEach(function(id){
+    ['urg','paintMode','noShleifCut','noShleifWeld','electrochem'].forEach(function(id){
       var e=document.getElementById(id); e.addEventListener('input',recompute); e.addEventListener('change',recompute);
     });
 
@@ -323,7 +302,8 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
         taxRate:0,
         paintInShop:document.getElementById('paintMode').value==='shop',
         noShleifCut:document.getElementById('noShleifCut').checked,
-        noShleifWeld:document.getElementById('noShleifWeld').checked
+        noShleifWeld:document.getElementById('noShleifWeld').checked,
+        electrochem:document.getElementById('electrochem').checked
       };
     }
 
@@ -376,6 +356,7 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
       r('Работы', res.opsBase);
       r('Шлейф / сборка (' + Math.round((inp.shleifRate||0.5)*100) + '% от сварки, авто)', res.shleif);
       r('Шлейфовка реза (авто, % от резки)', res.shleifCut);
+      r('Электрохимобработка шва (авто, % от сварки)', res.electrochem);
       r('Материалы', res.materials);
       r('Компоненты (материал)', res.componentsMat);
       r('Компоненты (работа)', res.componentsLabor);
@@ -467,7 +448,7 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
         }
       }).then(function(){
         if(!ctx.cardId){ ctx._diag='Не удалось получить cardId (ни из args, ни из t.card).'; return; }
-        return fetchBridge().then(applyBridge).then(filterStaleDxf).then(checkPaidStatus);
+        return fetchBridge().then(applyBridge).then(checkPaidStatus);
       }).then(finishMeta).catch(function(e){
         ctx._diag='loadContext: '+(e&&e.message||e); finishMeta();
       });
@@ -500,26 +481,6 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
           '. Изменения здесь пересчитают и уже начисленный заработок работников по этому заказу задним числом. Меняйте, только если это исправление ошибки в данных, а не обычная правка.</div>';
       } else { pw.innerHTML=''; }
       renderDxfHint();
-    }
-
-    // DXF-метрики хранятся в базе по id вложения и НЕ исчезают при удалении файла с
-    // карточки. Без сверки «Загрузить из DXF» суммировал удалённые файлы с новыми —
-    // старые данные «воскресали». Сверяем с живыми вложениями; при недоступности
-    // Trello ведём себя как раньше (ничего не отсеиваем).
-    function filterStaleDxf(){
-      ctx.staleDxf = 0;
-      if(MODE_REPAIR || !ctx.cardId || !Object.keys(dxfMetrics).length) return Promise.resolve();
-      return fetch(WORKER+'/card-attachment-ids?cardId='+encodeURIComponent(ctx.cardId))
-        .then(function(r){ return r.json(); })
-        .then(function(j){
-          if(!j || !j.ok || !Array.isArray(j.ids)) return;
-          var live = {}; j.ids.forEach(function(id){ live[String(id)] = 1; });
-          var removed = 0;
-          Object.keys(dxfMetrics).forEach(function(k){
-            if(!live[String(k)]){ delete dxfMetrics[k]; removed++; }
-          });
-          ctx.staleDxf = removed;
-        }).catch(function(){ /* сеть/Trello недоступны — работаем по-старому */ });
     }
 
     function fetchBridge(){
@@ -577,10 +538,8 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
       document.getElementById('dxfHint').textContent = ctx._diag
         ? ctx._diag
         : (n
-          ? ('найдено DXF-расчётов: '+n+' — нажмите «Загрузить из DXF»'+(ctx.staleDxf?(' (ещё '+ctx.staleDxf+' — от удалённых с карточки файлов, пропущены)'):''))
-          : (ctx.staleDxf
-            ? ('Все сохранённые DXF-расчёты ('+ctx.staleDxf+') относятся к файлам, удалённым с карточки, — они пропущены. Загрузите новые DXF и сохраните расчёт в «DXF / Раскрой».')
-            : 'Нет сохранённого DXF-расчёта на этой карточке. Сначала сохраните его в разделе «DXF / Раскрой» («Открыть / Расчёт» → толщина → «Сохранить расчёт»).'));
+          ? ('найдено DXF-расчётов: '+n+' — нажмите «Загрузить из DXF»')
+          : 'Нет сохранённого DXF-расчёта на этой карточке. Сначала сохраните его в разделе «DXF / Раскрой» («Открыть / Расчёт» → толщина → «Сохранить расчёт»).');
     }
 
     // best-effort map DXF material+thickness -> sheet catalog code
@@ -736,7 +695,7 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
       document.getElementById('dxfHint').textContent='Читаю DXF-данные…';
       if(Object.keys(dxfMetrics).length){ doPullFromMetrics(); return; }
       // empty: re-fetch the bridge (handles first-load race / stale cache)
-      fetchBridge().then(applyBridge).then(filterStaleDxf).then(doPullFromMetrics);
+      fetchBridge().then(applyBridge).then(doPullFromMetrics);
     };
     document.getElementById('resetAll').onclick=function(){
       var n = opLines.children.length + matLines.children.length + cmpLines.children.length;
@@ -772,7 +731,7 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
         if(!d || !d.inputs) { return; }
         var i=d.inputs;
         (i.operations||[]).forEach(function(o){ opLines.appendChild(makeOpRow(o)); });
-        (i.materials||[]).forEach(function(m){ matLines.appendChild(makeCatRow(MATG,m,'м²/м',true)); });
+        (i.materials||[]).forEach(function(m){ matLines.appendChild(makeCatRow(MATG,m,'м²/м')); });
         (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
         SAVED_ENG = (i.engCoef!=null) ? (+i.engCoef||0) : 0;
@@ -791,6 +750,7 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
         if(i.paintInShop!=null) document.getElementById('paintMode').value = i.paintInShop ? 'shop' : 'outside';
         document.getElementById('noShleifCut').checked = !!i.noShleifCut;
         document.getElementById('noShleifWeld').checked = !!i.noShleifWeld;
+        document.getElementById('electrochem').checked = !!i.electrochem;
 
       }).catch(function(){});
     }
@@ -822,6 +782,7 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
         weld:sk(['weldSS','weldBlack']),              // ⅓
         shleif:(res.shleif||0),                       // ½
         shleifCut:(res.shleifCut||0),                 // ⅓ — шлейфовка кромки после лазера
+        electrochem:(res.electrochem||0),             // доля как у шлейфовки шва
         paint:paintSum,                               // ⅓ (в цеху) / 0 (на стороне)
         paintInShop:!!inp.paintInShop,
         components:components                         // ½ каждая
@@ -893,29 +854,7 @@ body.no-spec .ln.spec{border:0;border-radius:0;background:transparent}
       }).catch(function(){ return false; });
     }
     var CAN_SEE_COST = true; // применится в applyCostPermission()
-    // спеццена для постоянных клиентов: видит и назначает только руководящий состав
-    // («Панель руководителя» / «Бухгалтерия» / «Выставлять счета») или админ доски.
-    // Остальным поле не показывается, но сохранённое значение переживает их пересохранение.
-    function applySpecPermission(){
-      function allow(){ document.body.classList.remove('no-spec'); }
-      if(EMBED){
-        var mid = EMBED_QS.get('memberId') || '';
-        if(!mid) return;
-        fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(mid)).then(function(r){return r.json();})
-          .then(function(j){ if(j && (j.canDashboard || j.canInvoice || j.canIssueInvoice)) allow(); })
-          .catch(function(){});
-        return;
-      }
-      isDirector().then(function(admin){
-        if(admin){ allow(); return; }
-        return t.member('id').then(function(m){
-          return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((m&&m.id)||'')).then(function(r){return r.json();})
-            .then(function(j){ if(j && (j.canDashboard || j.canInvoice || j.canIssueInvoice)) allow(); });
-        });
-      }).catch(function(){});
-    }
     function applyCostPermission(){
-      applySpecPermission();  // право на спеццену проверяется в обоих режимах
       if(EMBED){
         // ПРАВО СПРАШИВАЕМ У СЕРВЕРА, а не у адреса окна. Параметр canSeeCost в URL
         // раньше был единственной проверкой — его можно было переписать руками и
