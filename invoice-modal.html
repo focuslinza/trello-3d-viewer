@@ -55,7 +55,10 @@
 
   <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
   <div class="bar">
-    <div class="tot" id="grand">—</div>
+    <div style="display:flex;gap:14px;align-items:center">
+      <div class="tot" id="grand">—</div>
+      <button class="btn ghost" id="pdfList" type="button" title="Ранее выставленные счета по этому заказу — просмотр и скачивание PDF">Счета (PDF)</button>
+    </div>
     <div style="display:flex;gap:10px">
       <button class="btn ghost" id="close" type="button">Закрыть</button>
       <button class="btn green" id="gen" type="button" disabled>📤 Отправить счёт</button>
@@ -206,6 +209,18 @@
 
   function loadContext(){
     ctx.cardId = t.arg('cardId') || null;
+    (function(){
+      var pb=document.getElementById('pdfList');
+      if(!pb) return;
+      pb.addEventListener('click', function(){
+        if(!ctx.cardId){ alert('Счета по карточке доступны, когда окно открыто из карточки заказа.'); return; }
+        t.modal({ title:'Счета по заказу', accentColor:'#1f6ce8',
+          url:'./card-invoices-modal.html?t='+Date.now(), fullscreen:true,
+          args:{ cardId: ctx.cardId } });
+      });
+      // из бухгалтерии карточки нет — кнопку прячем чуть позже, когда ctx устаканится
+      setTimeout(function(){ if(!ctx.cardId) pb.style.display='none'; }, 1500);
+    })();
     ctx.boardId = t.arg('boardId') || '';
     return Promise.resolve().then(function(){
       if(ctx.cardId && ctx.boardId) return;
