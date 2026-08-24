@@ -134,9 +134,16 @@
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="noShleifWeld" style="width:auto"> без шлейфовки сварки</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="noShleifCut" style="width:auto"> без шлейфовки резки</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="electrochem" style="width:auto"> электрохимобработка шва</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer" title="Наценка за выездные работы: % от сварки и шлейфовок, но не меньше минималки. Процент и минималка — в «Ценах и коэффициентах»"><input type="checkbox" id="mzOn" style="width:auto"> монтаж (выезд)</label>
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="sec">
+      <h3>Дополнительные строки <span style="font-weight:400;font-size:12px;color:#8a94a6;text-transform:none">— доставка, выезд вне рабочего времени и прочее; попадают в счёт как «ПРОЧЕЕ»</span></h3>
+      <div class="lines" id="extraLines"></div>
+      <button class="add" id="addExtra" type="button">+ добавить строку</button>
     </div>
 
     <div class="sec" id="brkSec">
@@ -279,7 +286,25 @@
     document.getElementById('addMat').onclick=function(){ matLines.appendChild(makeCatRow(MATG,null,'м²/м')); recompute(); };
     document.getElementById('addCmp').onclick=function(){ cmpLines.appendChild(makeCatRow(CMPG,null,'шт')); recompute(); };
 
-    ['urg','paintMode','noShleifCut','noShleifWeld','electrochem'].forEach(function(id){
+    // ---- дополнительные строки (ПРОЧЕЕ) ----
+    var extraLinesEl=document.getElementById('extraLines');
+    function makeExtraRow(d){
+      var row=document.createElement('div'); row.className='line';
+      row.innerHTML='<input type="text" class="xnm" placeholder="Например: выезд вне рабочего времени, 4 ч" style="flex:2;min-width:200px">'+
+        '<input type="number" class="xsum" placeholder="Сумма, ₸" min="0" step="any" style="flex:0 0 140px">'+
+        '<button class="del" type="button" title="Убрать строку">×</button>';
+      if(d){ row.querySelector('.xnm').value=d.name||''; row.querySelector('.xsum').value=(+d.amount||0)||''; }
+      row.querySelector('.del').onclick=function(){ row.remove(); recompute(); };
+      ['input','change'].forEach(function(ev){
+        row.querySelector('.xnm').addEventListener(ev,recompute);
+        row.querySelector('.xsum').addEventListener(ev,recompute);
+      });
+      row._read=function(){ return { name:row.querySelector('.xnm').value.trim(), amount:+row.querySelector('.xsum').value||0 }; };
+      return row;
+    }
+    document.getElementById('addExtra').onclick=function(){ extraLinesEl.appendChild(makeExtraRow(null)); };
+
+    ['urg','paintMode','noShleifCut','noShleifWeld','electrochem','mzOn'].forEach(function(id){
       var e=document.getElementById(id); e.addEventListener('input',recompute); e.addEventListener('change',recompute);
     });
 
@@ -303,7 +328,10 @@
         paintInShop:document.getElementById('paintMode').value==='shop',
         noShleifCut:document.getElementById('noShleifCut').checked,
         noShleifWeld:document.getElementById('noShleifWeld').checked,
-        electrochem:document.getElementById('electrochem').checked
+        electrochem:document.getElementById('electrochem').checked,
+        montazh:document.getElementById('mzOn').checked?1:0,
+        extraLines:[].map.call(extraLinesEl.children,function(r){return r._read();})
+          .filter(function(x){return x.name||x.amount>0;})
       };
     }
 
@@ -360,6 +388,8 @@
       r('Материалы', res.materials);
       r('Компоненты (материал)', res.componentsMat);
       r('Компоненты (работа)', res.componentsLabor);
+      r('Монтаж (выезд)', res.montazh);
+      r('Прочее (доп. строки)', res.extra);
       r('Срочность', res.urgency);
       r('Степень изобретения', res.engineering);
       r('Подытог', res.subtotal);
@@ -734,6 +764,8 @@
         (i.materials||[]).forEach(function(m){ matLines.appendChild(makeCatRow(MATG,m,'м²/м')); });
         (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });
         if(i.urgency!=null) document.getElementById('urg').value=i.urgency;
+        if(+i.montazh) document.getElementById('mzOn').checked=true;
+        (i.extraLines||[]).forEach(function(x){ extraLinesEl.appendChild(makeExtraRow(x)); });
         SAVED_ENG = (i.engCoef!=null) ? (+i.engCoef||0) : 0;
         // расчёт без признака режима — значит сделан до перехода на новую базу.
         // Режим влияет только на формулы; в интерфейсе о нём не говорим —

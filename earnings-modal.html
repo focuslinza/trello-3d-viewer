@@ -207,11 +207,23 @@
         html+='</tbody></table></div>';
       }
 
-      // Монтаж по факту переехал в окно «Счёт на оплату» (решение Асхата, 08.2026):
-      // там его заполняет тот, кто выставляет счёт, и сумма «в счёт» гарантированно
-      // плюсуется в счёт. Здесь монтаж показывается только как начисление (сводка выше).
-      html+='<div class="sec"><h3>Монтаж по факту</h3>'+
-        '<div class="muted">Заполняется в окне <b>«Счёт на оплату»</b> (кнопка на карточке или в бухгалтерии) — раздел «Монтаж по факту» над дополнительными строками. Начисление бригаде появится в сводке выше после сохранения монтажа и сдачи заказа.</div></div>';
+      // МОНТАЖ, НОВАЯ СХЕМА (решение Асхата, 08.2026): клиенту монтаж начисляется
+      // галочкой в калькуляторе (% от сварки+шлейфовок, минималка — в «Ценах и
+      // коэффициентах»). Бригада получает свою долю С ЭТОЙ ЖЕ клиентской строки,
+      // поровну на человека. Здесь только назначается, кто выезжал.
+      var mzC = +data.montazhClient||0;
+      var mzSaved = data.montazhSaved||{crew:[],legacy:false};
+      html+='<div class="sec"><h3>Монтажная бригада (выезд)</h3>';
+      if (mzSaved.legacy) {
+        html+='<div class="muted">Заказ посчитан по старой схеме (монтаж по факту, '+fmt((data.montazh&&data.montazh.workValue)||0)+' ₸) — начисление бригаде уже в сводке выше. Новые заказы: монтаж включается галочкой в калькуляторе.</div>';
+      } else {
+        if (mzC>0) html+='<div class="muted">Клиенту начислен монтаж: <b>'+fmt(mzC)+' ₸</b>. Бригада получит свою долю с этой суммы, поровну на каждого.</div>';
+        else html+='<div class="muted" style="color:#e8c07d">⚠ В расчёте нет строки «Монтаж» (галочка в калькуляторе выключена). Назначить бригаду можно, но начисление будет нулевым, пока монтаж не включён клиенту.</div>';
+        if (data.montazh && data.montazh.warning) html+='<div class="muted" style="color:#e8c07d">⚠ '+esc(data.montazh.warning)+'</div>';
+        html+='<div id="crewNew" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px"></div>'+
+          '<div style="margin-top:8px"><button class="btn" id="crewSave" type="button">Сохранить бригаду</button> <span class="muted" id="crewMsg"></span></div>';
+      }
+      html+='</div>';
 
       b.innerHTML=html;
 
@@ -227,7 +239,30 @@
       });
       [].forEach.call(document.querySelectorAll('.def'), function(cb){ cb.addEventListener('change', saveDefaults); });
 
-      // редактор монтажа переехал в окно «Счёт на оплату» — здесь только сводка
+      // блок бригады: чекбоксы работников с этапом «Монтаж»
+      var crewBox=document.getElementById('crewNew');
+      if(crewBox){
+        var pool=workersFor('montazh');
+        if(!pool.length){ crewBox.innerHTML='<span class="muted">Нет работников с этапом «Монтаж» — отметьте этап в «Зарплата / Работники».</span>'; }
+        else pool.forEach(function(w){
+          var lab=document.createElement('label'); lab.className='chk';
+          lab.innerHTML='<input type="checkbox" class="cwn" value="'+w.id+'"'+((mzSaved.crew||[]).indexOf(w.id)>=0?' checked':'')+'> '+esc(w.name);
+          crewBox.appendChild(lab);
+        });
+        var sb=document.getElementById('crewSave');
+        if(sb) sb.onclick=function(){
+          var crew=[].map.call(document.querySelectorAll('#crewNew .cwn:checked'),function(c){return c.value;});
+          var msg=document.getElementById('crewMsg'); msg.textContent='Сохранение…';
+          var base=(data.montazhRaw&&typeof data.montazhRaw==='object')?data.montazhRaw:{};
+          var m={}; Object.keys(base).forEach(function(k){ m[k]=base[k]; });
+          m.crew=crew; if(!m.date) m.date=new Date().toISOString().slice(0,10);
+          fetch(WORKER+'/montazh-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ cardId:ctx.cardId, montazh:m }) })
+          .then(function(r){return r.json();})
+          .then(function(d2){ if(d2&&d2.ok){ msg.textContent='Бригада сохранена ✓'; load(); } else msg.textContent='Ошибка: '+((d2&&d2.error)||'?'); })
+          .catch(function(e){ msg.textContent='Сеть: '+(e&&e.message||e); });
+        };
+      }
     }
 
     // ---- montazh mini-calculator (engine-backed) ----

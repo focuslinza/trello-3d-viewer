@@ -366,7 +366,7 @@
   function grandTotal(){ var K=SUP_TAX[supplierKey]||1; mzCompute();
     return selectedOrders().reduce(function(s,o){return s+Math.ceil(o.total*kFor(o)-1e-9);},0)
       + validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)*K-1e-9); },0)
-      + (mzValid()? Math.ceil(MZ.clientValue*K-1e-9) : 0); }   // монтаж «в счёт» — с налогом поставщика, как все строки
+      ; }   // монтаж и допстроки теперь внутри сумм заказов (считает калькулятор)
   function extrasCeilTotal(){ return validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)-1e-9); },0); }
 
   function render(){
@@ -488,69 +488,13 @@
     }
     html+='</div>';
 
-    // --- МОНТАЖ ПО ФАКТУ (над доп. строками; заполняет тот, кто выставляет счёт) ---
-    html+='<div class="sec"><h3>Монтаж по факту (заполняется после выезда)</h3>';
-    html+='<div class="small muted" style="margin-bottom:6px">Работы на объекте по тарифам: резка/гибка/сварка + компоненты/краска. Шлейфовка добавляется автоматически (50% от сварки). Отмеченное флажком «в счёт» попадает строкой в этот счёт и плюсуется к итогу. Заработок бригаде (объём × ⅓ × 1,5, поровну между «кто ездил») начислится после сдачи заказа.</div>';
-    var mzcards=mzCards();
-    if(!mzcards.length){
-      html+='<div class="muted">Выберите клиента — монтаж привязывается к его заказу (включая уже оплаченные).</div>';
-    } else {
-      html+='<div class="row" style="margin-bottom:8px"><div class="fld"><label>К какому заказу относится монтаж</label><select id="mzCard" style="min-width:320px"><option value="">— выбрать заказ —</option>'+
-        mzcards.map(function(o){ return '<option value="'+esc(o.cardId)+'"'+(MZ.cardId===o.cardId?' selected':'')+'>№'+esc(o.number||'—')+' · '+esc(String(o.name||'').slice(0,50))+(o.paid?' · оплачен':'')+'</option>'; }).join('')+
-        '</select></div></div>';
-      if(MZ.cardId){
-        mzCompute();
-        html+='<div class="small muted" style="margin:4px 0 2px">Работы</div>';
-        MZ.ops.forEach(function(o,i){
-          html+='<div class="row" style="align-items:center;gap:6px;margin-bottom:4px">'+
-            '<select class="mzKind" data-i="'+i+'">'+MZ_OP_KINDS.map(function(k){return '<option value="'+k[0]+'"'+(o.kind===k[0]?' selected':'')+'>'+k[1]+'</option>';}).join('')+'</select>'+
-            '<select class="mzTh" data-i="'+i+'" style="width:84px">'+mzTH().map(function(t){return '<option value="'+t+'"'+(+o.thickness===t?' selected':'')+'>'+t+' мм</option>';}).join('')+'</select>'+
-            '<input type="number" class="mzQty" data-i="'+i+'" min="0" step="any" value="'+(o.qty||'')+'" placeholder="кол-во" style="width:90px">'+
-            '<label class="small" style="white-space:nowrap"><input type="checkbox" class="mzInc" data-i="'+i+'"'+(o.inClient?' checked':'')+'> в счёт</label>'+
-            '<span class="small" style="min-width:80px;text-align:right">'+money(o._price||0)+' ₸</span>'+
-            '<button class="btn ghost mzDelOp" data-i="'+i+'" type="button">✕</button></div>';
-        });
-        html+='<button class="btn ghost" id="mzAddOp" type="button">+ работа</button>';
-        html+='<div class="small muted" style="margin:10px 0 2px">Компоненты / Краска</div>';
-        MZ.comps.forEach(function(c,i){
-          var g=(window.CALC&&CALC.CMP)||{};
-          var opts='<option value="">— выбрать —</option>'+Object.keys(g).map(function(code){return '<option value="'+code+'"'+(c.code===code?' selected':'')+'>'+esc(g[code].lbl||code)+'</option>';}).join('');
-          html+='<div class="row" style="align-items:center;gap:6px;margin-bottom:4px">'+
-            '<select class="mzCCode" data-i="'+i+'" style="min-width:220px">'+opts+'</select>'+
-            '<input type="number" class="mzCQty" data-i="'+i+'" min="0" step="any" value="'+(c.qty||'')+'" placeholder="кол-во" style="width:90px">'+
-            '<label class="small" style="white-space:nowrap"><input type="checkbox" class="mzCInc" data-i="'+i+'"'+(c.inClient?' checked':'')+'> в счёт</label>'+
-            '<span class="small" style="min-width:80px;text-align:right">'+money(c._price||0)+' ₸</span>'+
-            '<button class="btn ghost mzDelC" data-i="'+i+'" type="button">✕</button></div>';
-        });
-        html+='<button class="btn ghost" id="mzAddC" type="button">+ компонент</button>';
-        html+='<div style="margin-top:10px"><b class="small">Кто ездил:</b> '+
-          (MZ_WORKERS.length? MZ_WORKERS.map(function(w2){ return '<label class="small" style="margin-right:10px;white-space:nowrap"><input type="checkbox" class="mzCrew" value="'+esc(w2.id)+'"'+(MZ.crew.indexOf(w2.id)>=0?' checked':'')+'> '+esc(w2.name)+'</label>'; }).join('')
-           : '<span class="muted small">нет работников с этапом «Монтаж»</span>')+'</div>';
-        html+='<div class="small" style="margin-top:8px">'+
-          (MZ.shleifWork>0?('в т.ч. шлейфовка (авто): <b>'+money(MZ.shleifWork)+' ₸</b> · '):'')+
-          'объём работ: <b>'+money(MZ.workValue)+' ₸</b> · <span style="color:var(--green)">в счёт клиенту: <b>'+money(MZ.clientValue)+' ₸</b></span></div>';
-        html+='<div style="margin-top:8px"><button class="btn ghost" id="mzOnly" type="button" title="Снимает галочки с заказов: в счёте останется только монтаж (и доп. строки, если есть). Для случая «основное оплатили, монтаж попросили потом»">Счёт только по доп. работам</button></div>';
-      }
-    }
-    html+='</div>';
-
-    // --- дополнительные строки (доп. работы: доставка и т.п.) ---
-    html+='<div class="sec"><h3>Дополнительные строки счёта</h3>';
-    html+='<div class="small muted" style="margin-bottom:6px">Для позиций, которых нет ни в заказах, ни в тарифах монтажа: доставка, упаковка, аренда техники. Строка попадает в PDF и в журнал счетов; к карточке заказа она не привязывается, оплата по номеру счёта отобразится в журнале платежей.</div>';
-    if(EXTRA_LINES.length){
-      html+='<table><thead><tr><th>Наименование</th><th class="num">Кол-во</th><th class="num">Цена за ед., ₸</th><th class="num">Сумма</th><th></th></tr></thead><tbody>';
-      EXTRA_LINES.forEach(function(x,i){
-        html+='<tr>'+
-          '<td><input type="text" class="exname" data-i="'+i+'" value="'+esc(x.name||'')+'" placeholder="например: Монтаж по заказу №77" style="width:100%;box-sizing:border-box"></td>'+
-          '<td class="num"><input type="number" min="1" step="1" class="exqty qn" data-i="'+i+'" value="'+(x.qty||1)+'"></td>'+
-          '<td class="num"><input type="number" min="0" step="any" class="exprice" data-i="'+i+'" value="'+(x.price!=null?x.price:'')+'" style="width:110px;text-align:right"></td>'+
-          '<td class="num exsum" data-i="'+i+'">'+money((+x.qty||0)*(+x.price||0))+' ₸</td>'+
-          '<td><button class="btn ghost exdel" data-i="'+i+'" type="button" title="Убрать строку">✕</button></td>'+
-        '</tr>';
-      });
-      html+='</tbody></table>';
-    }
-    html+='<button class="btn ghost" id="exAdd" type="button" style="margin-top:6px">+ строка</button></div>';
+    // МОНТАЖ, НОВАЯ СХЕМА (решение Асхата, 08.2026): монтаж клиенту начисляется
+    // галочкой в КАЛЬКУЛЯТОРЕ (% от сварки+шлейфовок + минималка из «Цен и
+    // коэффициентов») и уже сидит в сумме заказа. Бригада назначается в окне
+    // «Заработок по заказу». Модуль «монтаж по факту» из счёта убран.
+    // Дополнительные строки (доставка, выезд вне рабочего времени и т.п.)
+    // переехали в КАЛЬКУЛЯТОР — секция «Дополнительные строки» (решение Асхата,
+    // 08.2026): они входят в сумму заказа и попадают в счёт автоматически.
 
     var orph = orphanOrders();
     if(orph.length && selectedCompanyId){
@@ -717,7 +661,7 @@
   function updateGrand(){
     var g=grandTotal();
     document.getElementById('grand').textContent='Итого по счёту: '+money(g)+' ₸';
-    var ok = !!ctx.buyer && (selectedOrders().length>0 || validExtras().length>0 || mzValid());
+    var ok = !!ctx.buyer && (selectedOrders().length>0 || validExtras().length>0);
     document.getElementById('gen').disabled=!ok;
   }
 
@@ -742,13 +686,6 @@
       var c=ceilLine(q, (+x.price||0) * K);
       items.push({ code:'', name:String(x.name).trim(), qty:q, unit:'Услуга', price:c.price });
     });
-    if(mzValid()){
-      // монтаж — отдельной строкой, привязанной к карточке: оплата по счёту
-      // подсветит и её, а заработок бригаде посчитается по сохранённому montazh
-      var mo=mzCards().filter(function(o){return o.cardId===MZ.cardId;})[0];
-      var cM=ceilLine(1, MZ.clientValue * K);
-      items.push({ code:(mo&&mo.number)||'', name:'Монтажные работы по факту'+(mo&&mo.number?(' (заказ №'+mo.number+')'):''), qty:1, unit:'Услуга', price:cM.price, cardId:MZ.cardId });
-    }
     return {
       supplier:sup, buyer:ctx.buyer,
       number:(numEl.value||'').trim(), date:ruDate(fromIso(dEl.value)), contract:(cEl.value||'Без договора').trim(),

@@ -239,10 +239,30 @@
       line.push({group:'component',code:c.code,section:Cn.sec,name:Cn.lbl,qty:q,unit:u,base:b,ostatki:ostF,rashod:Cn.rah,material:r7c,laborMult:isPaint?0:Cn.m,labor:r4c,lineTotal:isPaint?r7c:(r7c+r4c),isPaint:isPaint,worker:null});
     });
 
-    // монтаж = (weldSS + weldBlack + шлейф) × montazh
+    // МОНТАЖ. Галочка в калькуляторе — как электрообработка шва: наценка
+    // = (сварка нерж. + сварка чёрн. + шлейфовки) × montazhPct, но не меньше
+    // минималки montazhMin (настройки в «Ценах и коэффициентах»). Минималка
+    // спасает заказы «только выезд, заварить мелочь»: работ мало — строка
+    // монтажа всё равно не нулевая. По умолчанию pct=100%, min=0 — прежние числа.
     var montazh=+inp.montazh||0;
-    var J4=(weldSSsum+weldBlackSum+K4+L4)*montazh;
+    var J4=0;
+    if(montazh){
+      var mPct=coef('montazhPct',1), mMin=coef('montazhMin',0);
+      J4=(weldSSsum+weldBlackSum+K4+L4)*montazh*mPct;
+      if(mMin>0&&J4<mMin)J4=mMin;
+    }
     if(J4)line.push({group:'montazh',section:'МОНТАЖ',name:'Монтаж',lineTotal:J4,worker:null});
+
+    // ДОПОЛНИТЕЛЬНЫЕ СТРОКИ (переехали из счёта в калькулятор, 08.2026):
+    // доставка, выезд вне рабочего времени и т.п. Входят в итог и налог,
+    // но не в базы этапных долей, срочности и инженерных — это не работы цеха.
+    var extraSum=0;
+    (inp.extraLines||[]).forEach(function(x){
+      if(!x) return; var v=+x.amount||0; var nm=String(x.name||'').trim();
+      if(!nm&&!v) return;
+      extraSum+=v;
+      line.push({group:'extra',section:'ПРОЧЕЕ',name:nm||'Дополнительно',lineTotal:v,worker:null});
+    });
 
     // срочность C : base = everything except urgency; C7 = (base/days)×1.01×1.01
     // База срочности — ТОЛЬКО РАБОТЫ: операции + работа по комплектующим + шлейфовки
@@ -294,15 +314,15 @@
     var E3=G3*engCoef;
     if(E3)line.push({group:'engineering',section:'ИНЖЕНЕРНЫЕ',name:'Степень изобретения '+Math.round(engCoef*100)+'%',base:G3,lineTotal:E3,worker:null});
 
-    // подытог (A4)
-    var subtotal=E3 + C7 + sumOps + matSum + compMat + K4 + L4 + SC4 + J4 + compLabor;
+    // подытог (A4); extraSum — допстроки (ПРОЧЕЕ)
+    var subtotal=E3 + C7 + sumOps + matSum + compMat + K4 + L4 + SC4 + J4 + compLabor + extraSum;
 
     var taxRate=(inp.taxRate!=null?+inp.taxRate:coef('taxRate',0.16));
     var gross=taxGrossUp(taxRate);
     var taxAmount=subtotal*gross, total=subtotal+taxAmount;
 
     return {lineItems:line,opsBase:sumOps,materials:matSum,componentsMat:compMat,componentsLabor:compLabor,
-            shleif:K4+L4,shleifCut:SC4,montazh:J4,urgency:C7,engineering:E3,subtotal:subtotal,
+            shleif:K4+L4,shleifCut:SC4,montazh:J4,extra:extraSum,urgency:C7,engineering:E3,subtotal:subtotal,
             engBaseMode:engBaseMode,engUnits:engUnits,engBase:G3,dxfOpsSum:dxfOpsSum,engFiles:engFiles,
             taxRate:taxRate,taxGrossUp:gross,taxAmount:taxAmount,total:total};
   }
