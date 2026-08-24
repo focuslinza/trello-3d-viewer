@@ -218,6 +218,8 @@
         html+='<div class="muted">Заказ посчитан по старой схеме (монтаж по факту, '+fmt((data.montazh&&data.montazh.workValue)||0)+' ₸) — начисление бригаде уже в сводке выше. Новые заказы: монтаж включается галочкой в калькуляторе.</div>';
       } else {
         if (mzC>0) html+='<div class="muted">Клиенту начислен монтаж: <b>'+fmt(mzC)+' ₸</b>. Бригада получит свою долю с этой суммы, поровну на каждого.</div>';
+        var mzOtC = (data.montazh&&+data.montazh.otClient)||0;
+        if (mzOtC>0) html+='<div class="muted">Внеурочный выезд: клиенту <b>'+fmt(mzOtC)+' ₸</b>, бригаде из них <b>'+fmt((data.montazh&&data.montazh.otPool)||0)+' ₸</b> (поровну; эти часы в табеле внеурочными не отмечать — оплата задвоится).</div>';
         else html+='<div class="muted" style="color:#e8c07d">⚠ В расчёте нет строки «Монтаж» (галочка в калькуляторе выключена). Назначить бригаду можно, но начисление будет нулевым, пока монтаж не включён клиенту.</div>';
         if (data.montazh && data.montazh.warning) html+='<div class="muted" style="color:#e8c07d">⚠ '+esc(data.montazh.warning)+'</div>';
         html+='<div id="crewNew" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px"></div>'+

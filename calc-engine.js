@@ -253,6 +253,18 @@
     }
     if(J4)line.push({group:'montazh',section:'МОНТАЖ',name:'Монтаж',lineTotal:J4,worker:null});
 
+    // МОНТАЖ ВНЕ РАБОЧЕГО ВРЕМЕНИ (решение Асхата, 08.2026): клиенту — часы ×
+    // человек × окладная часовая ставка × множитель (по умолчанию ×4). Работники
+    // получают прибавку ×2 (свою половину), остальное — компании; делёж считает
+    // сервер в заработке по заказу. Ставка и множители — в «Ценах и коэффициентах».
+    var otH=+inp.mzOtHours||0, otP=Math.max(0,Math.round(+inp.mzOtPeople||0));
+    var mzOt=0;
+    if(montazh&&otH>0&&otP>0){
+      var otRate=coef('mzOtClientRate',0), otMult=coef('mzOtClientMult',4);
+      mzOt=otH*otP*otRate*otMult;
+      if(mzOt>0)line.push({group:'montazh_ot',section:'МОНТАЖ',name:'Монтаж вне рабочего времени ('+otH+' ч × '+otP+' чел.)',hours:otH,people:otP,lineTotal:mzOt,worker:null});
+    }
+
     // ДОПОЛНИТЕЛЬНЫЕ СТРОКИ (переехали из счёта в калькулятор, 08.2026):
     // доставка, выезд вне рабочего времени и т.п. Входят в итог и налог,
     // но не в базы этапных долей, срочности и инженерных — это не работы цеха.
@@ -315,14 +327,14 @@
     if(E3)line.push({group:'engineering',section:'ИНЖЕНЕРНЫЕ',name:'Степень изобретения '+Math.round(engCoef*100)+'%',base:G3,lineTotal:E3,worker:null});
 
     // подытог (A4); extraSum — допстроки (ПРОЧЕЕ)
-    var subtotal=E3 + C7 + sumOps + matSum + compMat + K4 + L4 + SC4 + J4 + compLabor + extraSum;
+    var subtotal=E3 + C7 + sumOps + matSum + compMat + K4 + L4 + SC4 + J4 + compLabor + extraSum + mzOt;
 
     var taxRate=(inp.taxRate!=null?+inp.taxRate:coef('taxRate',0.16));
     var gross=taxGrossUp(taxRate);
     var taxAmount=subtotal*gross, total=subtotal+taxAmount;
 
     return {lineItems:line,opsBase:sumOps,materials:matSum,componentsMat:compMat,componentsLabor:compLabor,
-            shleif:K4+L4,shleifCut:SC4,montazh:J4,extra:extraSum,urgency:C7,engineering:E3,subtotal:subtotal,
+            shleif:K4+L4,shleifCut:SC4,montazh:J4,montazhOt:mzOt,extra:extraSum,urgency:C7,engineering:E3,subtotal:subtotal,
             engBaseMode:engBaseMode,engUnits:engUnits,engBase:G3,dxfOpsSum:dxfOpsSum,engFiles:engFiles,
             taxRate:taxRate,taxGrossUp:gross,taxAmount:taxAmount,total:total};
   }

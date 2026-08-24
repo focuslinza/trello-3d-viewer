@@ -290,6 +290,9 @@
     h+=coefField('Электрохимобработка шва (% от сварки; 0 = выкл.)','electrochemRate', c.electrochemRate!=null&&c.electrochemRate!==''?(+c.electrochemRate*100):0,'% от сварки');
     h+=coefField('Монтаж (выезд): наценка клиенту','montazhPct', c.montazhPct!=null&&c.montazhPct!==''?(+c.montazhPct*100):100,'% от сварки+шлейфовок');
     h+=coefField('Монтаж: минимум по строке (спасает заказы «только выезд»)','montazhMin', c.montazhMin!=null&&c.montazhMin!==''?+c.montazhMin:0,'₸ (0 = выкл.)');
+    h+=coefField('Внеурочный выезд: окладная часовая ставка','mzOtClientRate', c.mzOtClientRate!=null&&c.mzOtClientRate!==''?+c.mzOtClientRate:900,'₸/ч на человека');
+    h+=coefField('Внеурочный выезд: множитель клиенту','mzOtClientMult', c.mzOtClientMult!=null&&c.mzOtClientMult!==''?+c.mzOtClientMult:4,'× от ставки');
+    h+=coefField('Внеурочный выезд: множитель работнику','mzOtWorkerMult', c.mzOtWorkerMult!=null&&c.mzOtWorkerMult!==''?+c.mzOtWorkerMult:2,'× (остальное — компании)');
     h+=coefField('Ставка резки (множитель)','rateCut', c.rateCut!=null&&c.rateCut!==''?+c.rateCut:1,'×');
     h+=coefField('Ставка гибки (множитель)','rateBend', c.rateBend!=null&&c.rateBend!==''?+c.rateBend:1,'×');
     h+=coefField('Ставка сварки (множитель)','rateWeld', c.rateWeld!=null&&c.rateWeld!==''?+c.rateWeld:1,'×');
