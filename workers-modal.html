@@ -92,13 +92,11 @@
       <h3>Доли работников от стоимости этапа</h3>
       <div class="hint" style="margin-bottom:8px">Какой процент от стоимости работы (из расчёта заказа) получает исполнитель. Пример: доля «Цех» 33% и резка на 10 000 ₸ → работнику 3 300 ₸. К инженеру НЕ применяется — у него своя схема (% от работ + доля от «Степени изобретения», настраивается в его карточке ниже). Сохраняется кнопкой «Сохранить всё».</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
-        <label style="font-size:12.5px">Цех (резка/гибка/сварка/краска), % <input id="shareShop" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
-        <label style="font-size:12.5px">Сборка (шлейфовка, компоненты), % <input id="shareAssembly" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
         <label style="font-size:12.5px">Монтажная бригада, % <input id="shareMontazh" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
       </div>
       <details style="margin-top:10px">
-        <summary style="cursor:pointer;font-size:12.5px;color:#9db4d6">Точные доли по видам работ (не обязательно — пусто = берётся доля группы выше)</summary>
-        <div class="hint" style="margin:6px 0 8px">Раньше «Цех» одной цифрой покрывал резку, гибку и сварку. Здесь можно задать каждой свой процент — например, сварка сложнее резки. Пустое поле = как в «Цех» / «Сборка» выше. Шлейфовка реза (после лазера) и шлейфовка шва (после сварки) — теперь отдельные строки со своими долями.</div>
+        <summary style="cursor:pointer;font-size:12.5px;color:#9db4d6">Точные доли по видам работ</summary>
+        <div class="hint" style="margin:6px 0 8px">Единственное место, где задаётся процент исполнителя по каждому виду работ — групповые «Цех»/«Сборка» убраны, чтобы не было накладок (решение Асхата, 08.2026). Пустое поле = прежняя групповая доля, сохранённая в настройках (подсказана в сером тексте поля). Заполните все поля — и вопросов не останется.</div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
           <label style="font-size:12.5px">Резка, % <input id="shareCut" type="number" min="0" max="100" step="0.1" style="width:70px" placeholder="Цех"></label>
           <label style="font-size:12.5px">Гибка, % <input id="shareBend" type="number" min="0" max="100" step="0.1" style="width:70px" placeholder="Цех"></label>
@@ -108,6 +106,8 @@
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:8px">
           <label style="font-size:12.5px">Шлейфовка реза, % <input id="shareShleifCut" type="number" min="0" max="100" step="0.1" style="width:70px" placeholder="Цех"></label>
           <label style="font-size:12.5px">Шлейфовка шва, % <input id="shareShleifWeld" type="number" min="0" max="100" step="0.1" style="width:70px" placeholder="Сборка"></label>
+          <label style="font-size:12.5px" title="Зачистка сварного шва электрохимией. Пусто = как шлейфовка шва">Электрохим. шва, % <input id="shareElectrochem" type="number" min="0" max="100" step="0.1" style="width:70px" placeholder="Шл. шва"></label>
+          <label style="font-size:12.5px" title="Работа по установке компонентов (колёса, крепёж и т.п.). Пусто = прежняя доля «Сборка»">Компоненты, % <input id="shareComponents" type="number" min="0" max="100" step="0.1" style="width:70px" placeholder="Сборка"></label>
         </div>
       </details>
       <div class="hint" style="margin-top:14px;font-weight:600">Порог сдельной с одного заказа — отдельно по ролям</div>
@@ -427,13 +427,12 @@
         return fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
           var c=(j&&j.pricing&&j.pricing.coef)||{};
           function put(id, v, def){ var el=document.getElementById(id); if(el) el.value = (v!=null&&v!=='') ? Math.round(v*1000)/10 : def; }
-          put('shareShop', c.shareShop, Math.round(1000/3)/10);
-          put('shareAssembly', c.shareAssembly, 50);
           put('shareMontazh', c.shareMontazh, 50);
           function putBlank(id, v){ var el=document.getElementById(id); if(el) el.value = (v!=null&&v!=='') ? Math.round(v*1000)/10 : ''; }
           putBlank('shareCut', c.shareCut); putBlank('shareBend', c.shareBend);
           putBlank('shareWeld', c.shareWeld); putBlank('sharePaint', c.sharePaint);
           putBlank('shareShleifCut', c.shareShleifCut); putBlank('shareShleifWeld', c.shareShleifWeld);
+          putBlank('shareElectrochem', c.shareElectrochem); putBlank('shareComponents', c.shareComponents);
           var cap=document.getElementById('capPerOrder'); if(cap) cap.value = (c.pieceCapPerOrder>0) ? c.pieceCapPerOrder : '';
           var cov=document.getElementById('capOverWorksPct'); if(cov) cov.value = (c.pieceCapOverWorks!=null&&c.pieceCapOverWorks!=='') ? c.pieceCapOverWorks : '';
           var ecap=document.getElementById('engCapPerOrder'); if(ecap) ecap.value = (c.engCapPerOrder>0) ? c.engCapPerOrder : '';
@@ -587,10 +586,8 @@
             // защита от тихого срыва: если поля вдруг не найдены (например, раздел
             // ещё не отрисован), ошибка попадает в общий список, а не роняет всю цепочку
             try {
-              var sh={ shareShop:+document.getElementById('shareShop').value||0,
-                       shareAssembly:+document.getElementById('shareAssembly').value||0,
-                       shareMontazh:+document.getElementById('shareMontazh').value||0,
-                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value,
+              var sh={ shareMontazh:+document.getElementById('shareMontazh').value||0,
+                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value,
                        capPerOrder:+document.getElementById('capPerOrder').value||0,
                        capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
                        engCapPerOrder:+document.getElementById('engCapPerOrder').value||0,
@@ -624,10 +621,8 @@
       btn.disabled=true; var t0=btn.textContent; btn.textContent='Сохраняю…';
       msg.textContent=''; msg.style.color='';
       try {
-        var sh={ shareShop:+document.getElementById('shareShop').value||0,
-                 shareAssembly:+document.getElementById('shareAssembly').value||0,
-                 shareMontazh:+document.getElementById('shareMontazh').value||0,
-                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value,
+        var sh={ shareMontazh:+document.getElementById('shareMontazh').value||0,
+                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value,
                  capPerOrder:+document.getElementById('capPerOrder').value||0,
                  capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
                  engCapPerOrder:+document.getElementById('engCapPerOrder').value||0,
