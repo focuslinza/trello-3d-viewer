@@ -115,7 +115,11 @@
       var groups = {}, order = [];
       Object.keys(MAT).forEach(function(code){
         var sec = MAT[code].sec || '';
-        if (sec.indexOf('ЛИСТ') !== 0) return; // sheets only — DXF parts are cut from sheet
+        // листовые разделы; позиции снабженца попадают сюда, если в названии их
+        // раздела есть слово «лист» (DXF-детали режутся из листа) — правило
+        // подсказано в форме снабжения
+        var isSheet = sec.indexOf('ЛИСТ') === 0 || (MAT[code].custom && sec.toUpperCase().indexOf('ЛИСТ') >= 0);
+        if (!isSheet) return;
         if (!groups[sec]) { groups[sec] = []; order.push(sec); }
         groups[sec].push({ code: code, lbl: MAT[code].lbl, spec: MAT[code].spec, th: parseThicknessFromLabel(MAT[code].lbl) });
       });
@@ -138,7 +142,23 @@
         if (th) document.getElementById('thickness').value = th;
       });
     }
+    // материалы снабженца: тянем настройки цен и вливаем в движок; список
+    // строится сразу (работает и без сети), а после ответа — перестраивается
     buildMaterialOptions();
+    (function(){
+      var W2 = (window.WORKER_URL||'').replace(/\/$/,'');
+      if(!W2 || !window.CALC || !window.CALC.applyCustom) return;
+      fetch(W2 + '/pricing-get').then(function(r){ return r.json(); }).then(function(j){
+        if(!j || !j.ok || !j.pricing) return;
+        window.PRICING = j.pricing;
+        window.CALC.applyCustom();
+        var sel = document.getElementById('material');
+        var keep = sel ? sel.value : '';
+        if (sel) sel.innerHTML = '';
+        buildMaterialOptions();
+        if (sel && keep) sel.value = keep;
+      }).catch(function(){});
+    })();
 
     var ovText = document.getElementById('ov-text');
     var overlay = document.getElementById('overlay');
