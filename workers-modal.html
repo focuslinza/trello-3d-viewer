@@ -235,11 +235,20 @@
         else legacy();
       };
       document.getElementById('mobWa').href='https://wa.me/?text='+encodeURIComponent('Ваш личный кабинет MetalShop: '+url);
-      // показываем, что уже задано: сам пароль не хранится (только хэш) — потому
-      // поля пустые; но статус обязан говорить, есть ли он, иначе кажется, что не сохранилось
+      // логин и пароль показываются прямо в полях — руководителю видно, что задано
+      // (решение Асхата, 08.2026). Сервер отдаёт их только праву «HR/Панель».
       (function(){ var el=document.getElementById('mobCredNow');
-        if(w.login) el.innerHTML='Сейчас задано: логин <b>'+esc(String(w.login))+'</b> · пароль '+(w.pass_hash?'установлен ✓':'не задан')+'. Новые значения заменят старые.';
+        if(w.login) el.innerHTML='Сейчас задано: логин <b>'+esc(String(w.login))+'</b> · пароль '+(w.hasPass?'установлен ✓':'не задан')+'.';
         else el.textContent='Логин и пароль пока не заданы.';
+        fetch(WORKER+'/worker-secret',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({workerId:w.id, memberId:window.__MYID||''})})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          if(!j||!j.ok) return; // нет права — поля просто остаются пустыми
+          if(j.login) document.getElementById('mobLogin').value=j.login;
+          if(j.passPlain) document.getElementById('mobPass').value=j.passPlain;
+          if(j.login) el.innerHTML='Сейчас задано: логин <b>'+esc(String(j.login))+'</b> · пароль '+(j.hasPass?(j.passPlain?'<b>'+esc(j.passPlain)+'</b>':'установлен ✓'):'не задан')+'.';
+        }).catch(function(){});
       })();
       document.getElementById('mobPinSave').onclick=function(){
         var lg=document.getElementById('mobLogin').value.trim();
@@ -251,9 +260,8 @@
           .then(function(r){return r.json();})
           .then(function(j){
             if(j&&j.ok){ msg.textContent='Сохранено ✓';
-              w.login=j.login; if(pw) w.pass_hash='set';
-              document.getElementById('mobCredNow').innerHTML='Сейчас задано: логин <b>'+esc(String(j.login))+'</b> · пароль '+(w.pass_hash?'установлен ✓':'не задан')+'. Новые значения заменят старые.';
-              document.getElementById('mobPass').value='';
+              w.login=j.login; if(pw) w.hasPass=1;
+              document.getElementById('mobCredNow').innerHTML='Сейчас задано: логин <b>'+esc(String(j.login))+'</b> · пароль '+(w.hasPass?(pw?'<b>'+esc(pw)+'</b>':'установлен ✓'):'не задан')+'.';
             } else msg.textContent='Ошибка: '+((j&&j.error)||'?');
           })
           .catch(function(e){ msg.textContent='Сеть: '+(e&&e.message||e); });
@@ -657,6 +665,7 @@
       t.organization('memberships').catch(function(){ return null; })
     ]).then(function(res){
       var me=res[0]||{}, board=res[1]||{}, org=res[2]||{};
+      window.__MYID = me.id || '';
       BOARD_MEMBERS = board.members || [];
       function adminIn(o){
         var ms=((o&&o.memberships)||[]).filter(function(x){ return x.idMember===me.id; })[0];
