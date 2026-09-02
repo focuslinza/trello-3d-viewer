@@ -379,7 +379,9 @@
       h+='<div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">';
       h+='<div style="flex:1.5;min-width:340px">';
       // 1. наименование (крупно)  2. номер + этикетка (создание/заявитель — в ленте событий)
-      h+='<h3 style="margin:0 0 10px;font-size:26px;line-height:1.25">'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+'</h3>';
+      h+='<h3 id="ttlView" title="Нажмите, чтобы переименовать" style="margin:0 0 10px;font-size:26px;line-height:1.25;cursor:pointer">'+esc(r.title)+(r.urgent?' <span class="pill urgent">срочно</span>':'')+' <span style="font-size:15px;opacity:.55">✎</span></h3>'+
+        '<div id="ttlEdit" style="display:none;margin:0 0 10px"><input id="ttlInp" type="text" style="width:100%;box-sizing:border-box;font-size:20px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 10px">'+
+        '<div style="margin-top:6px"><button class="btn green" id="ttlSave" type="button">Сохранить</button> <button class="btn" id="ttlCancel" type="button">Отмена</button> <span class="msg" id="ttlMsg"></span></div></div>';
       h+='<div style="margin-bottom:14px;display:flex;align-items:center;gap:12px"><span class="num-badge" style="font-size:14px">'+esc(r.number)+'</span>'+
          '<button class="btn" id="labelBtn" type="button" title="Этикетка с номером и QR — распечатать и наклеить на изделие">▦ QR / печать</button></div>';
       // 3. описание — в таком же затемнённом боксе, как остальные разделы
@@ -462,6 +464,25 @@
       var px=document.getElementById('popX'); if(px) px.onclick=closeCard;
       document.getElementById('ovl').onclick=function(e){ if(e.target===this){ closeCard(); } };
       document.getElementById('editBtn').onclick=function(e){ e.preventDefault(); toggleEdit(); };
+      // переименование по клику на заголовок — доступно всем, кто видит заявку
+      // (начальник цеха не мог найти правку названия в «Компании и контакте»)
+      (function(){
+        var v=document.getElementById('ttlView'), ed=document.getElementById('ttlEdit'), inp=document.getElementById('ttlInp');
+        if(!v||!ed)return;
+        v.onclick=function(){ v.style.display='none'; ed.style.display=''; inp.value=CUR.title||''; inp.focus(); };
+        document.getElementById('ttlCancel').onclick=function(){ ed.style.display='none'; v.style.display=''; };
+        document.getElementById('ttlSave').onclick=function(){
+          var t2=inp.value.trim(), msg=document.getElementById('ttlMsg');
+          if(!t2){ msg.textContent='Название не может быть пустым'; return; }
+          msg.textContent='Сохранение…';
+          post('/repair-update',{ id:CUR.id, title:t2 })
+          .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+            msg.textContent='Сохранено ✓'; setTimeout(function(){ openCard(CUR.id); load(); }, 400);
+          })
+          .catch(function(e2){ msg.textContent='Ошибка: '+(e2&&e2.message||e2); });
+        };
+        inp&&inp.addEventListener('keydown',function(ev){ if(ev.key==='Enter')document.getElementById('ttlSave').click(); });
+      })();
       // описание: клик — редактирование, сохранение — на сервер + событие в ленту
       (function(){
         var v=document.getElementById('descView'), ed=document.getElementById('descEdit'), ta=document.getElementById('descTa');
