@@ -421,7 +421,7 @@
   function savePricing(){
     var P=collectPricing();
     var msg=document.getElementById('prmsg'); msg.textContent='Сохранение…';
-    fetch(WORKER+'/pricing-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pricing:P}) })
+    fetch(WORKER+'/pricing-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pricing:P, knownCustom:window.__KNOWN_CUSTOM||{}}) })
       .then(function(r){return r.json();}).then(function(j){
         if(j&&j.ok){ PRICING_EDIT=P; msg.textContent='Сохранено ✓ Новые расчёты будут по этим ценам.'; }
         else msg.textContent='Ошибка: '+((j&&j.error)||'?');
@@ -765,7 +765,9 @@
   isDirector().then(function(admin){
     if(admin){
       fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
-        if(j&&j.ok&&j.pricing){ var p=j.pricing; PRICING_EDIT={ mat:p.mat||{}, cmp:p.cmp||{}, coef:p.coef||{}, customMat:p.customMat||[], customCmp:p.customCmp||[], customOp:p.customOp||[],
+        if(j&&j.ok&&j.pricing){ var p=j.pricing;
+          try{ window.__KNOWN_CUSTOM={ mat:(p.customMat||[]).map(function(x){return x.code;}), cmp:(p.customCmp||[]).map(function(x){return x.code;}), op:(p.customOp||[]).map(function(x){return x.code;}) }; }catch(e){}
+          PRICING_EDIT={ mat:p.mat||{}, cmp:p.cmp||{}, coef:p.coef||{}, customMat:p.customMat||[], customCmp:p.customCmp||[], customOp:p.customOp||[],
           matOstBySec:p.matOstBySec||{}, matRahBySec:p.matRahBySec||{}, cmpOstBySec:p.cmpOstBySec||{}, cmpRahBySec:p.cmpRahBySec||{}, opOstBySec:p.opOstBySec||{}, opRahBySec:p.opRahBySec||{}, rates:p.rates||{} }; }
       }).catch(function(){}).then(load);
       return;

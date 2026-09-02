@@ -572,6 +572,10 @@
       if(PR||PR_BUSY) return;
       PR_BUSY=true;
       fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
+        // запоминаем, какие пользовательские позиции существовали при загрузке —
+        // сервер не даст этому окну стереть добавленное другими параллельно
+        try{ window.__KNOWN_CUSTOM={ mat:((j.pricing||{}).customMat||[]).map(function(x){return x.code;}),
+                                     cmp:((j.pricing||{}).customCmp||[]).map(function(x){return x.code;}) }; }catch(e){}
         PR=(j&&j.ok&&j.pricing)||{};
         PR.mat=PR.mat||{}; PR.cmp=PR.cmp||{}; PR.customMat=PR.customMat||[]; PR.customCmp=PR.customCmp||[];
         PR_BUSY=false; if(TAB==='prices') render();
@@ -681,6 +685,7 @@
       var save=document.getElementById('sprSave'); if(!save) return;
       save.onclick=function(){
         var body=collectPricesTab();
+        body.knownCustom=window.__KNOWN_CUSTOM||{};
         var msg=document.getElementById('sprMsg'); msg.textContent='Сохранение…'; msg.style.color='var(--muted)';
         fetch(WORKER+'/pricing-save-materials',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
           .then(function(r){return r.json();}).then(function(j){
