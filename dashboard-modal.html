@@ -212,11 +212,11 @@
     if(t==='op'){
       h+=fld('Ставка, ₸/ед', num('rate', it.rate, 'width:100px'));
     } else if(t==='mat'){
-      h+=fld('Цена, ₸', num('u', it.u, 'width:100px'));
+      h+=fld('Цена, ₸ за ед. (лист — м², труба/профиль — м)', num('u', it.u, 'width:100px'));
       h+=fld('Отходы, %', num('ost', pct(it.ost,15), 'width:80px'));
       h+=fld('Расходники, %', num('rah', pct(it.rah,4), 'width:110px'));
     } else {
-      h+=fld('Цена, ₸', num('u', it.u, 'width:100px'));
+      h+=fld('Цена, ₸/шт', num('u', it.u, 'width:100px'));
       h+=fld('Расходники, %', num('rah', pct(it.rah,7), 'width:110px'));
       h+=fld('Работа, ×', num('m', (it.m!=null?it.m:1), 'width:80px'));
     }
@@ -357,7 +357,7 @@
     var opSections = uniq(co.map(function(it){return it.sec;}));
 
     h+='<h3 style="margin-top:18px">Свои материалы</h3>';
-    h+='<div class="small muted" style="margin-bottom:6px">Добавляйте материалы, которых нет выше — они появятся в калькуляторе. «Отходы %» — надбавка на обрезки (обычно 15, для труб/профилей 20). «Расходники %» — сопутствующие затраты (обычно 4). Итог = цена × кол-во × (1+отходы) × (1+расходники).</div>';
+    h+='<div class="small muted" style="margin-bottom:6px">Добавляйте материалы, которых нет выше — они появятся в калькуляторе. <b>Цена указывается за единицу, в которой вводится количество в калькуляторе: листовые — за м², трубы/профили — за погонный метр</b> (не за целый лист!). «Отходы %» — надбавка на обрезки (обычно 15, для труб/профилей 20). «Расходники %» — сопутствующие затраты (обычно 4). Итог = цена × кол-во × (1+отходы) × (1+расходники).</div>';
     cm.forEach(function(it){ h+=custRow('mat', it, matSections); });
     h+='<button class="btnp ghost" data-add="mat" type="button" style="margin-top:4px">+ материал</button>';
 

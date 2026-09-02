@@ -633,7 +633,7 @@
         r+=fld('Название', txtf('lbl', it.lbl, 'width:100%'), 'flex:1;min-width:170px');
         r+=fld('Параметры, мм', txtf('spec', it.spec, 'width:110px'), 'width:110px');
         r+=fld('Раздел', secPicker(it.sec, known), 'width:190px');
-        r+=fld('Цена, ₸', numf('u', it.u));
+        r+=fld(t==='mat'?'Цена, ₸ за ед. (лист — м², труба — м)':'Цена, ₸/шт', numf('u', it.u));
         r+='<button class="sdelcust btn" data-t="'+t+'" data-code="'+esc(it.code||'')+'" type="button" style="padding:6px 10px" title="Удалить позицию">✕</button>';
         r+='</div>';
         return r;
@@ -643,7 +643,7 @@
       h+='<div class="small muted" style="margin-bottom:6px">Появился новый материал — добавьте его здесь, и он сразу станет доступен в калькуляторе.</div>';
       PR.customMat.forEach(function(it){ h+=custRow('mat', it, matSections); });
       h+='<button class="btn" data-sadd="mat" type="button" style="margin-top:4px">+ материал</button>';
-      h+='<div class="hint" style="margin-top:4px">Чтобы листовой материал появился и в DXF-калькуляторе (раскрой), напишите в поле «Раздел» слово «Лист» (например «Листовые чёрные»), а толщину — в названии: «3мм (м2)».</div>';
+      h+='<div class="hint" style="margin-top:4px">Цена — <b>за квадратный метр</b> (не за целый лист!); для труб/профилей — за погонный метр. Чтобы листовой материал появился и в DXF-калькуляторе (раскрой), напишите в поле «Раздел» слово «Лист» (например «Листовые чёрные»), а толщину — в названии: «3мм (м2)».</div>';
 
       h+='<h3 style="margin-top:16px">Свои компоненты</h3>';
       PR.customCmp.forEach(function(it){ h+=custRow('cmp', it, cmpSections); });
