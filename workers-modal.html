@@ -108,6 +108,7 @@
           <label style="font-size:12.5px">Шлейфовка шва, % <input id="shareShleifWeld" type="number" min="0" max="100" step="0.1" style="width:70px" placeholder="Сборка"></label>
           <label style="font-size:12.5px" title="Зачистка сварного шва электрохимией. Пусто = как шлейфовка шва">Электрохим. шва, % <input id="shareElectrochem" type="number" min="0" max="100" step="0.1" style="width:70px" placeholder="Шл. шва"></label>
           <label style="font-size:12.5px" title="Работа по установке компонентов (колёса, крепёж и т.п.). Пусто = прежняя доля «Сборка»">Компоненты, % <input id="shareComponents" type="number" min="0" max="100" step="0.1" style="width:70px" placeholder="Сборка"></label>
+          <label style="font-size:12.5px" title="Сдельная исполнителя ремонтных заявок: % от стоимости ремонтных операций. Пусто = прежняя доля «Цех»">Ремонт, % <input id="shareRepair" type="number" min="0" max="100" step="0.1" style="width:70px" placeholder="Цех"></label>
         </div>
       </details>
       <div class="hint" style="margin-top:14px;font-weight:600">Порог сдельной с одного заказа — отдельно по ролям</div>
@@ -441,6 +442,7 @@
           putBlank('shareWeld', c.shareWeld); putBlank('sharePaint', c.sharePaint);
           putBlank('shareShleifCut', c.shareShleifCut); putBlank('shareShleifWeld', c.shareShleifWeld);
           putBlank('shareElectrochem', c.shareElectrochem); putBlank('shareComponents', c.shareComponents);
+          putBlank('shareRepair', c.shareRepair);
           var cap=document.getElementById('capPerOrder'); if(cap) cap.value = (c.pieceCapPerOrder>0) ? c.pieceCapPerOrder : '';
           var cov=document.getElementById('capOverWorksPct'); if(cov) cov.value = (c.pieceCapOverWorks!=null&&c.pieceCapOverWorks!=='') ? c.pieceCapOverWorks : '';
           var ecap=document.getElementById('engCapPerOrder'); if(ecap) ecap.value = (c.engCapPerOrder>0) ? c.engCapPerOrder : '';
@@ -595,7 +597,7 @@
             // ещё не отрисован), ошибка попадает в общий список, а не роняет всю цепочку
             try {
               var sh={ shareMontazh:+document.getElementById('shareMontazh').value||0,
-                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value,
+                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value,
                        capPerOrder:+document.getElementById('capPerOrder').value||0,
                        capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
                        engCapPerOrder:+document.getElementById('engCapPerOrder').value||0,
@@ -630,7 +632,7 @@
       msg.textContent=''; msg.style.color='';
       try {
         var sh={ shareMontazh:+document.getElementById('shareMontazh').value||0,
-                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value,
+                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value,
                  capPerOrder:+document.getElementById('capPerOrder').value||0,
                  capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
                  engCapPerOrder:+document.getElementById('engCapPerOrder').value||0,
