@@ -104,8 +104,17 @@
     // ---- sheet material catalog (identical to the calculator) ----
     function parseThicknessFromLabel(lbl){
       // "2мм (м2)", "0,8мм (м2)", "1.5мм (м2)", "1мм Рифл (м2)"
-      var mm = String(lbl||'').replace(',', '.').match(/([\d.]+)\s*мм/i);
-      return mm ? parseFloat(mm[1]) : null;
+      var s2 = String(lbl||'').replace(',', '.');
+      var mm = s2.match(/([\d.]+)\s*мм/i);
+      if (mm) return parseFloat(mm[1]);
+      // позиции снабженца без «мм»: «Алюминий 1,5 Гладкий» — одиночное число
+      // до 12 считаем толщиной; размеры вида 40х40 не трогаем
+      var solo = s2.match(/(?:^|\s)(\d{1,2}(?:\.\d)?)(?=\s|$)/);
+      if (solo && s2.indexOf(solo[1]+'х') < 0 && s2.indexOf('х'+solo[1]) < 0) {
+        var v = parseFloat(solo[1]);
+        if (v > 0 && v <= 12) return v;
+      }
+      return null;
     }
     function buildMaterialOptions(){
       var sel = document.getElementById('material');
@@ -115,10 +124,22 @@
       var groups = {}, order = [];
       Object.keys(MAT).forEach(function(code){
         var sec = MAT[code].sec || '';
-        // листовые разделы; позиции снабженца попадают сюда, если в названии их
-        // раздела есть слово «лист» (DXF-детали режутся из листа) — правило
-        // подсказано в форме снабжения
-        var isSheet = sec.indexOf('ЛИСТ') === 0 || (MAT[code].custom && sec.toUpperCase().indexOf('ЛИСТ') >= 0);
+        // листовые: встроенные разделы «ЛИСТ…» + позиции снабженца.
+        // У позиций снабженца главный — флаг «Лист» (галочка в форме);
+        // если флага нет (внесены раньше) — показываем все, кроме очевидных
+        // труб/профилей по названию (решение Асхата, 09.2026: весь листовой
+        // материал снабженца обязан быть в DXF-расчёте).
+        var m0 = MAT[code];
+        var isSheet;
+        if (sec.indexOf('ЛИСТ') === 0) isSheet = true;
+        else if (m0.custom) {
+          if (m0.sheet === true) isSheet = true;
+          else if (m0.sheet === false) isSheet = false;
+          else {
+            var hay = (String(m0.lbl||'') + ' ' + sec).toLowerCase();
+            isSheet = !/(труб|проф|уголок|уголк|швелл|кругляк|пруток|арматур|полос)/.test(hay);
+          }
+        } else isSheet = false;
         if (!isSheet) return;
         if (!groups[sec]) { groups[sec] = []; order.push(sec); }
         groups[sec].push({ code: code, lbl: MAT[code].lbl, spec: MAT[code].spec, th: parseThicknessFromLabel(MAT[code].lbl) });

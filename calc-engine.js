@@ -142,7 +142,7 @@
     _customCodes.forEach(function(c){ delete MAT[c]; delete CMP[c]; delete KIND[c]; });
     _customCodes=[];
     (p.customMat||[]).forEach(function(it){ if(!it || !it.code) return;
-      MAT[it.code]={u:+it.u||0,ost:+it.ost||0,rah:+it.rah||0,sec:it.sec||'ДРУГИЕ МАТЕРИАЛЫ',lbl:it.lbl||it.code,custom:true}; _customCodes.push(it.code); });
+      MAT[it.code]={u:+it.u||0,ost:+it.ost||0,rah:+it.rah||0,sec:it.sec||'ДРУГИЕ МАТЕРИАЛЫ',lbl:it.lbl||it.code,custom:true,sheet:(it.sheet===undefined?undefined:!!it.sheet)}; _customCodes.push(it.code); });
     (p.customCmp||[]).forEach(function(it){ if(!it || !it.code) return;
       CMP[it.code]={u:+it.u||0,ost:+it.ost||0,rah:+it.rah||0,m:(it.m!=null?+it.m:1),sec:it.sec||'ДРУГИЕ КОМПОНЕНТЫ',lbl:it.lbl||it.code,custom:true}; _customCodes.push(it.code); });
     (p.customOp||[]).forEach(function(it){ if(!it || !it.code) return;

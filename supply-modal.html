@@ -671,8 +671,10 @@
         var spec=fv(row,'spec').trim();
         if(t==='mat'){
           var om=oldMat[code]||{};
+          var sheetCb=row.querySelector('[data-f="sheet"]');
           customMat.push({ code:code, lbl:lbl, spec:spec, sec:sec||'ДРУГИЕ МАТЕРИАЛЫ', u:+fv(row,'u')||0,
-            ost:(om.ost!=null?om.ost:0.15), rah:(om.rah!=null?om.rah:0.04) });
+            ost:(om.ost!=null?om.ost:0.15), rah:(om.rah!=null?om.rah:0.04),
+            sheet:(sheetCb?!!sheetCb.checked:(om.sheet!==undefined?om.sheet:undefined)) });
         } else {
           var oc=oldCmp[code]||{};
           customCmp.push({ code:code, lbl:lbl, spec:spec, sec:sec||'ДРУГИЕ КОМПОНЕНТЫ', u:+fv(row,'u')||0,
