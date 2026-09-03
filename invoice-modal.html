@@ -201,7 +201,9 @@
   // клиент и заявка могут быть предвыбраны аргументами
   var MODE_REPAIR = (t.arg('mode')==='repair');
   var PRESELECT_REPAIR = +t.arg('repairId')||null;
-  var ONLY_REPAIR = String(t.arg('onlyRepair')||'')==='1'; // счёт по ремонтам из бухгалтерии: производство не показываем
+  // счёт по ремонтам (из бухгалтерии или из карточки заявки): производство не
+  // показываем — только неоплаченные ремонтные заявки этого заказчика (решение Асхата, 09.2026)
+  var ONLY_REPAIR = String(t.arg('onlyRepair')||'')==='1' || MODE_REPAIR;
   var PRESELECT_COMPANY = t.arg('companyId')||null;
   var nameToId = {};
 
