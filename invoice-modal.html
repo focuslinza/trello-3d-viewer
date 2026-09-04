@@ -330,7 +330,7 @@
       return ((j&&j.requests)||[]).filter(function(r){ return +r.clientTotal>0 && r.status!=='rejected'; }).map(function(r){
         return { cardId:'R'+r.id, isRepair:true, repairId:r.id, name:r.title+(r.objectName?(' — '+r.objectName):''), number:r.number, link:null,
                  total:+r.clientTotal||0, company_id:r.companyId||null, company_name:r.companyName||'',
-                 paid:(r.paid?1:0), paid_at:r.paidAt||null, hidden:0, qty:1, checked:false, personName:'',
+                 paid:(r.paid?1:0), paid_at:r.paidAt||null, hidden:0, qty:1, checked:false, personName:(r.contactName||''),
                  _rTitle:r.title, _rCat:r.category||'', _rObj:r.objectName||'' };
       });
     }).catch(function(){ return []; });
