@@ -439,7 +439,7 @@
       html+='<label class="opt"><input type="radio" name="sup" value="'+k+'"'+(k===supplierKey?' checked':'')+'> '+esc(SUPPLIERS[k].label)+(tx?(' (+'+tx+'%)'):'')+'</label>';
     });
     if (supplierKey==='cash') html+='</div><div class="small muted" style="margin-top:8px">Оплата наличными: счёт не формируется, налог не добавляется. Суммы ниже — как в расчётах. Отметить оплату можно кнопкой «оплачен» у заказа.</div></div>';
-    else html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+' · налог +'+Math.round((SUP_TAX[supplierKey]||1)*100-100)+'% добавляется к ценам строк</div></div>';
+    else html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+' · '+(supplierKey==='too'?'НДС 16% включён в цены строк (плательщик НДС)':('налог +'+Math.round(((SUP_TAX[supplierKey]||1)-1)*100)+'% добавляется к ценам строк'))+'</div>';
 
     // buyer — selectable from the directory (default = card's company)
     html+='<div class="sec"><h3>Покупатель</h3>';
@@ -763,10 +763,14 @@
       var c=ceilLine(q, (+x.price||0) * K);
       items.push({ code:'', name:String(x.name).trim(), qty:q, unit:'Услуга', price:c.price });
     });
+    var VAT_PAYERS = { too:0.16 }; // ТОО «TTMS» — плательщик НДС; ИП — без НДС
+    var vatRate = VAT_PAYERS[supplierKey] || 0;
+    var totalSum = items.reduce(function(s,it){ return s + Math.round((+it.price||0)*(+it.qty||1)*100)/100; }, 0);
+    var ndsVal = vatRate ? Math.round(totalSum * vatRate / (1 + vatRate) * 100) / 100 : null;
     return {
       supplier:sup, buyer:ctx.buyer,
       number:(numEl.value||'').trim(), date:ruDate(fromIso(dEl.value)), contract:(cEl.value||'Без договора').trim(),
-      items:items, nds:null
+      items:items, nds:ndsVal, vatRate:vatRate
     };
   }
 
