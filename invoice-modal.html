@@ -61,7 +61,7 @@
     </div>
     <div style="display:flex;gap:10px">
       <button class="btn ghost" id="close" type="button">Закрыть</button>
-      <button class="btn green" id="gen" type="button" disabled>📤 Отправить счёт</button>
+      <button class="btn green" id="gen" type="button" disabled>🧾 Создать счёт</button>
     </div>
   </div>
 
@@ -456,7 +456,7 @@
               (ctx.buyer.addr?esc(ctx.buyer.addr)+' · ':'')+
               (ctx.buyer.phone?'тел. '+esc(ctx.buyer.phone):'')+'</div>';
       // WhatsApp контактного лица: выбор из контактов CRM или свой номер.
-      // после «Отправить счёт» на этот номер откроется чат с текстом счёта
+      // номер WhatsApp — справочно (отправка из окна убрана, шлют сотрудники сами)
       var co0=companyById(selectedCompanyId);
       var contacts=((co0&&co0.contacts)||[]).filter(function(p){return p&&p.phone;});
       var defPhone = WA_PHONE!==null ? WA_PHONE : (contacts.length?contacts[0].phone:(ctx.buyer.phone||''));
@@ -792,9 +792,9 @@
     if(!setupFonts()){ alert('Не удалось загрузить генератор PDF (pdfMake). Проверьте интернет.'); return; }
     var phoneRaw=(document.getElementById('waPhone')||{}).value||'';
     var phone=normPhone(phoneRaw);
-    if(!phone && !confirm('Номер WhatsApp не указан.\n\nPDF скачается, счёт получит статус «выслан», карточки переедут в «Ждем оплату» — но чат WhatsApp не откроется. Продолжить?')) return;
+    // номер WhatsApp не обязателен (отправка убрана)
     // окно WhatsApp открываем СРАЗУ по клику (иначе браузер заблокирует всплывающее)
-    var waWin = phone ? window.open('', '_blank') : null;
+    var waWin = null; // WhatsApp больше не открываем — счёт скачивается PDF, отправляют сотрудники сами
     var gen=document.getElementById('gen'); gen.disabled=true; gen.textContent='Готовлю…';
     // commit the invoice number (locks it so the next one is +1)
     // монтаж сначала сохраняем в карточку: заработок бригаде считается по нему
@@ -804,7 +804,7 @@
           .then(function(r){return r.json();})
           .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'монтаж не сохранился'); MZ_CACHE[MZ.cardId]=mzPayload(); })
       : Promise.resolve();
-    mzSave.catch(function(e){ alert('Монтаж не сохранился: '+(e&&e.message||e)+'\nСчёт не выпущен.'); gen.disabled=false; gen.textContent='Сформировать счёт'; if(waWin)waWin.close(); throw e; })
+    mzSave.catch(function(e){ alert('Монтаж не сохранился: '+(e&&e.message||e)+'\nСчёт не выпущен.'); gen.disabled=false; gen.textContent='🧾 Создать счёт'; throw e; })
     .then(function(){ return fetch(WORKER+'/invoice-commit'); }).then(function(r){return r.json();}).then(function(j){
       var data=buildData();
       if(j&&j.ok && (!document.getElementById('inum').value || +document.getElementById('inum').value===invNumber)){
@@ -832,34 +832,25 @@
           repairIds:selectedOrders().filter(function(o){ return o.isRepair; }).map(function(o){ return o.repairId; })
         })
       }).then(function(r){return r.json();}).catch(function(){return {};})
-      // 2) статус «выслан» + перенос карточек в «Ждем оплату»
+      // 2) перенос карточек в «Ждем оплату» — БЕЗ статуса «выслан» (moveOnly):
+      //    счёт отправляют сотрудники сами, из своего WhatsApp
       .then(function(){
-        gen.textContent='Отмечаю «выслан»…';
+        gen.textContent='Переношу карточки…';
         return fetch(WORKER+'/invoice-mark-sent',{ method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ number:String(data.number||''), sentTo:phone||phoneRaw }) })
+          body:JSON.stringify({ number:String(data.number||''), moveOnly:1 }) })
           .then(function(r){return r.json();}).catch(function(){return {};});
       })
-      // 3) чат WhatsApp с текстом счёта (PDF прикрепляется из загрузок одним движением)
       .then(function(ms){
-        if(waWin && phone){
-          var msg='Здравствуйте! Направляем счёт на оплату №'+data.number+' от '+(data.date||'')+
-            ' на сумму '+money(grandTotal())+' ₸ ('+((data.supplier&&data.supplier.name)||'MetalShop')+').'+
-            ' PDF-файл счёта прикрепим следующим сообщением.';
-          waWin.location='https://wa.me/'+phone+'?text='+encodeURIComponent(msg);
-        }
-        gen.textContent='📤 Отправить счёт'; gen.disabled=false;
-        var parts=['Счёт №'+data.number+' помечен «выслан».'];
+        gen.textContent='🧾 Создать счёт'; gen.disabled=false;
+        var parts=['Счёт №'+data.number+' создан и сохранён в журнале. PDF скачан — отправьте его клиенту.'];
         if(ms && ms.ok){
           if(ms.moved) parts.push('Карточек перенесено в «'+(ms.listName||'Ждем оплату')+'»: '+ms.moved+'.');
-          if(ms.skipped) parts.push('Уже были там: '+ms.skipped+'.');
           if(ms.warnings && ms.warnings.length) parts.push('⚠ '+ms.warnings.join('; '));
         } else if(ms && ms.error) parts.push('⚠ '+ms.error);
-        parts.push(phone?'В WhatsApp открыт чат — прикрепите скачанный PDF.':'');
         alert(parts.filter(Boolean).join('\n'));
       });
     }).catch(function(e){
-      if(waWin) try{ waWin.close(); }catch(_){}
-      gen.textContent='📤 Отправить счёт'; gen.disabled=false;
+      gen.textContent='🧾 Создать счёт'; gen.disabled=false;
       alert('Ошибка: '+(e&&e.message||e));
     });
   }
