@@ -284,6 +284,8 @@
       {cls:'caninv',    fld:'can_invoice',   label:'Бухгалтерия',         hint:'панель бухгалтера: статусы, счета на оплату, поступления из банка — только бухгалтеру'},
       {cls:'cancrm',    fld:'can_crm',       label:'CRM',                 hint:'клиенты, выручка, долги'},
       {cls:'cancost',   fld:'can_see_cost',  label:'Видит стоимость',     hint:'цены в калькуляторе'},
+      {cls:'canrepcost',  fld:'can_see_repair_cost',     label:'Стоимость ремонтов', hint:'цены клиентам и заработок только в разделе «Ремонт» — без общей «Видит стоимость»'},
+      {cls:'canrepissue', fld:'can_issue_repair_invoice', label:'Счета по ремонту',   hint:'кнопка «Счёт на оплату» только в заявках на ремонт — без права на счета по производству'},
       {cls:'hidestats', fld:'hide_stats',    label:'Скрыт из аналитики',  hint:'не показывать в «Заработке по работникам»', warn:true},
       {cls:'agent',     fld:'is_repair_agent', label:'Агент ремонта',      hint:'бонус за каждую полностью оформленную заявку на ремонт (описание, фирма, контактное лицо, фото) — виден агенту в «Моём заработке»'}
     ];
@@ -475,6 +477,8 @@
       var canIssueInvoice=tr.querySelector('.canissue')?tr.querySelector('.canissue').checked:false;
       var canSupply=tr.querySelector('.cansup')?tr.querySelector('.cansup').checked:false;
       var canCrm=tr.querySelector('.cancrm')?tr.querySelector('.cancrm').checked:false;
+      var canSeeRepairCost=tr.querySelector('.canrepcost')?tr.querySelector('.canrepcost').checked:false;
+      var canIssueRepairInvoice=tr.querySelector('.canrepissue')?tr.querySelector('.canrepissue').checked:false;
       var canSeeCost=tr.querySelector('.cancost')?tr.querySelector('.cancost').checked:false;
       var canTimesheet=tr.querySelector('.cantabel')?tr.querySelector('.cantabel').checked:false;
       var canHr=tr.querySelector('.canhr')?tr.querySelector('.canhr').checked:false;
@@ -495,7 +499,7 @@
       setMsg('Сохранение…');
       return fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, canSeeRepairCost:canSeeRepairCost, canIssueRepairInvoice:canIssueRepairInvoice, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){

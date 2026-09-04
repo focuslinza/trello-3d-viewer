@@ -97,7 +97,7 @@
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     document.getElementById('close').onclick=function(){ t.closeModal(); };
 
-    var ME={id:'',name:''}, PRICED=false, IS_ADMIN=false, CAN_SEE_COST=false, IS_AGENT=false, AGENT_BONUS=0;
+    var ME={id:'',name:''}, PRICED=false, IS_ADMIN=false, CAN_SEE_COST=false, CAN_ISSUE=false, IS_AGENT=false, AGENT_BONUS=0;
     var ROWS=[], COMPANIES=[], WORKERS=[], FILTER='', ONLY_URGENT=false, THUMBS={};
     var CATEGORIES_SEED=['Тележка','Стеллаж','Шкаф','Стол','Полка','Дверь/дверца','Мотор/электрика','Прочее'];
     var COLS=[ {key:'new',title:'Новые заявки на ремонт'}, {key:'done',title:'Сделано'}, {key:'sent',title:'Отправлен'} ];
@@ -421,8 +421,10 @@
       if(PRICED){
         h+='<div id="earnBlock" class="muted" style="margin-bottom:12px"></div>';
         h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
-        h+='<span class="muted">Счёт на оплату (только руководство)</span>';
-        h+='<button class="btn primary" id="invBtn" type="button">Счёт на оплату</button></div>';
+        if(CAN_ISSUE){
+          h+='<span class="muted">Счёт на оплату</span>';
+          h+='<button class="btn primary" id="invBtn" type="button">Счёт на оплату</button></div>';
+        } else h+='<span class="muted">Счёт выставляет руководство или сотрудник с правом «Счета по ремонту»</span></div>';
         h+='<div id="invList" class="muted" style="margin-top:8px">Загрузка…</div>';
       }
       h+='</div>';
@@ -592,7 +594,7 @@
         sel.onchange=save; sel2.onchange=save;
       });
       if(PRICED){
-        document.getElementById('invBtn').onclick=function(){
+        if(document.getElementById('invBtn')) document.getElementById('invBtn').onclick=function(){
           if(!(+r.clientTotal>0)){
             alert('У заявки '+r.number+' не задана цена клиенту — сначала посчитайте в калькуляторе или введите сумму. Без цены строка счёта была бы нулевой.');
             return;
@@ -972,7 +974,11 @@
           // «Панель руководителя» = полные права в ремонте (решение Асхата, 09.2026:
           // начальник цеха должен видеть суммы и выставлять счета)
           var boss=!!(j&&j.canDashboard);
-          if(!admin){ PRICED=!!(j&&(j.canRepair||boss)); CAN_SEE_COST=!!(j&&(j.canSeeRepairCost||j.canSeeCost||boss)); }
+          // ремонтные чипы «Стоимость ремонтов» / «Счета по ремонту» открывают цены
+          // и кнопку счёта в заявках, не давая прав руководителя (решение Асхата, 09.2026)
+          var repRight=!!(j&&(j.canSeeRepairCost||j.canIssueRepairInvoice));
+          if(!admin){ PRICED=!!(j&&(j.canRepair||boss||repRight)); CAN_SEE_COST=!!(j&&(j.canSeeRepairCost||j.canSeeCost||boss)); }
+          CAN_ISSUE=!!(admin||boss||(j&&(j.canIssueRepairInvoice||j.canIssueInvoice||j.canInvoice)));
           IS_AGENT=!!(j&&j.isRepairAgent); AGENT_BONUS=(j&&j.agentBonus)||0;
         })
         .catch(function(){ if(!admin){ PRICED=false; CAN_SEE_COST=false; } });

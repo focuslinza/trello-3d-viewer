@@ -121,7 +121,7 @@
       ]).then(function(rr){
         var p = rr[0]||{}, b = rr[1]||{};
         var isAdmin = ((b.memberships||[]).filter(function(x){ return x.idMember===m.id && x.memberType==='admin'; }).length>0);
-        return !!(p.canIssueInvoice || p.canInvoice || p.canDashboard || isAdmin); // + «Панель руководителя»
+        return !!(p.canIssueInvoice || p.canInvoice || p.canDashboard || isAdmin || (MODE_REPAIR && p.canIssueRepairInvoice)); // «Счета по ремонту» — только для ремонтных счетов
       });
     });
   }
