@@ -111,8 +111,10 @@
   var ctx = { cardId:null, boardId:'', cardCompanyId:null, allCompanies:[], buyer:null };
   // «Счёт на оплату» — только для начальства: право «Выставлять счета» или
   // «Видит суммы (бухгалтер)», либо админ доски Trello
+  var MY_MEMBER_ID = '';
   function gateAccess(t){
     return t.member('id').then(function(m){
+      MY_MEMBER_ID = (m && m.id) || '';
       return Promise.all([
         fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(m.id)).then(function(r){return r.json();}).catch(function(){return {};}),
         t.board('memberships').catch(function(){ return { memberships: [] }; })
@@ -321,7 +323,8 @@
         return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0) };
       });
     }).catch(function(){ return []; });
-    var pRepairs = fetch(WORKER+'/repair-list?full=1').then(function(r){return r.json();}).then(function(j){
+    // viewerId обязателен — иначе сервер прячет цены и ремонты «исчезают» из счёта
+    var pRepairs = fetch(WORKER+'/repair-list?full=1&viewerId='+encodeURIComponent(MY_MEMBER_ID)).then(function(r){return r.json();}).then(function(j){
       NOPRICE_REPAIRS = ((j&&j.requests)||[]).filter(function(r){ return !(+r.clientTotal>0) && r.status!=='rejected' && !r.paid; })
         .map(function(r){ return { repairId:r.id, number:r.number, title:r.title||'', company_id:r.companyId||null, company_name:r.companyName||'' }; });
       return ((j&&j.requests)||[]).filter(function(r){ return +r.clientTotal>0 && r.status!=='rejected'; }).map(function(r){

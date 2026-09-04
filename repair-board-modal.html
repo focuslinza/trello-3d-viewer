@@ -118,7 +118,9 @@
     // ?openRepair=<id> — открыть карточку заявки сразу (заход из бухгалтерии)
     var AUTO_OPEN = (function(){ try { return new URLSearchParams(location.search).get('openRepair')||''; } catch(e){ return ''; } })();
     function loadAll(){
-      var u = PRICED ? '/repair-list?full=1' : '/repair-list';
+      // viewerId обязателен: цены список отдаёт только подтверждённому праву
+      // (урок 09.2026: без него на доске «нет цены», хотя в карточке цена есть)
+      var u = PRICED ? ('/repair-list?full=1&viewerId='+encodeURIComponent(ME.id||'')) : '/repair-list';
       return fetch(WORKER+u).then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
         ROWS=(j.requests||[]).filter(function(r){ return r.status!=='rejected'; });
