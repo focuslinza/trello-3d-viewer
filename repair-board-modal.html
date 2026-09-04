@@ -262,7 +262,39 @@
         var nm=c.name||''; if(!nm) return;
         h+='<option value="'+esc(nm)+'"'+(nm===selected?' selected':'')+'>'+esc(nm)+(c.phone?(' · '+esc(c.phone)):'')+'</option>';
       });
+      // человека от заказчика нет в справочнике, а компания есть — добавляем
+      // прямо отсюда, он сохранится в карточку компании (решение Асхата, 09.2026)
+      h+='<option value="__new__">+ новый контакт…</option>';
       return h;
+    }
+    // разметка полей нового контакта под select'ом (id — префикс select'а)
+    function newContactBox(pfx){
+      return '<div id="'+pfx+'NewBox" style="display:none;margin-top:6px;padding:8px;border:1px dashed var(--line);border-radius:8px">'+
+        '<div class="muted" style="margin-bottom:4px">Новый контакт заказчика — сохранится в карточку компании</div>'+
+        '<input type="text" id="'+pfx+'NewName" placeholder="Имя, например Мираж" style="margin-bottom:6px">'+
+        '<input type="text" id="'+pfx+'NewPhone" placeholder="Телефон (+7…)" style="margin-bottom:6px">'+
+        '<input type="text" id="'+pfx+'NewRole" placeholder="Должность (не обязательно)"></div>';
+    }
+    function wireNewContact(pfx){
+      var sel=document.getElementById(pfx), box=document.getElementById(pfx+'NewBox');
+      if(!sel||!box) return;
+      sel.addEventListener('change', function(){ box.style.display=(this.value==='__new__')?'':'none'; if(this.value==='__new__'){var n=document.getElementById(pfx+'NewName'); if(n) n.focus();} });
+    }
+    // вернуть Promise с именем контакта: либо выбранный, либо новый (после сохранения в компанию)
+    function resolveContact(pfx, companyId){
+      var sel=document.getElementById(pfx); if(!sel) return Promise.resolve('');
+      if(sel.value!=='__new__') return Promise.resolve(sel.value||'');
+      var name=(document.getElementById(pfx+'NewName').value||'').trim();
+      if(!name) return Promise.reject(new Error('Введите имя нового контакта'));
+      var co=companyById(companyId);
+      if(!co) return Promise.reject(new Error('Сначала выберите компанию'));
+      var contact={ id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name:name,
+        phone:(document.getElementById(pfx+'NewPhone').value||'').trim(), role:(document.getElementById(pfx+'NewRole').value||'').trim() };
+      co.contacts=co.contacts||[]; co.contacts.push(contact);
+      return post('/company-save',{ company:co }).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'не удалось сохранить контакт в компанию');
+        return name;
+      });
     }
     function objectOptions(co, selected){
       var h='<option value="">— объект —</option>';
@@ -297,7 +329,7 @@
       h+='<div class="fld"><label>Что нужно починить</label><input type="text" id="cTitle" placeholder="например: тележка, погнуто колесо"></div>';
       h+='<div class="fld"><label>Категория</label><select id="cCat">'+categoryOptions('')+'</select><input type="text" id="cCatNew" placeholder="Название категории" style="display:none;margin-top:6px"></div>';
       h+='<div class="fld"><label>Клиент</label><select id="cCompany">'+companyOptions('')+'</select></div>';
-      h+='<div class="fld" id="cContactW" style="display:none"><label>Контактное лицо</label><select id="cContact"></select></div>';
+      h+='<div class="fld" id="cContactW" style="display:none"><label>Контактное лицо</label><select id="cContact"></select>'+newContactBox('cContact')+'</div>';
       h+='<div class="fld" id="cObjectW" style="display:none"><label>Объект</label><select id="cObject"></select></div>';
       h+='<label class="f"><input type="checkbox" id="cUrgent"> 🔥 Срочно</label>';
       h+='<label class="f">📷 Фото <input type="file" id="cFile" accept="image/*" capture="environment"></label>';
@@ -313,7 +345,7 @@
       document.getElementById('cCompany').onchange=function(){
         var co=companyById(this.value);
         var cw=document.getElementById('cContactW'), ow=document.getElementById('cObjectW');
-        if(co && co.contacts && co.contacts.length){ document.getElementById('cContact').innerHTML=contactOptions(co,''); cw.style.display=''; } else cw.style.display='none';
+        if(co){ document.getElementById('cContact').innerHTML=contactOptions(co,''); cw.style.display=''; wireNewContact('cContact'); } else cw.style.display='none';
         if(co && co.objects && co.objects.length){ document.getElementById('cObject').innerHTML=objectOptions(co,''); ow.style.display=''; } else ow.style.display='none';
       };
       document.getElementById('cSend').onclick=function(){
@@ -333,8 +365,9 @@
         }
         var btn=this, msg=document.getElementById('cMsg');
         btn.disabled=true; msg.textContent='Отправка…'; msg.style.color='var(--muted)';
-        post('/repair-request',{ title:title, category:category, companyId:companyId||null,
-          companyName:co?co.name:'', contactName:(document.getElementById('cContact')||{}).value||'',
+        resolveContact('cContact', companyId).then(function(contactName){
+        return post('/repair-request',{ title:title, category:category, companyId:companyId||null,
+          companyName:co?co.name:'', contactName:contactName||'',
           objectName:(document.getElementById('cObject')||{}).value||'',
           urgent:document.getElementById('cUrgent').checked, byMemberId:ME.id, byName:ME.name })
         .then(function(j){
@@ -346,7 +379,8 @@
             });
           }
           return chain;
-        }).then(function(){ closeOvl(); loadAll(); })
+        }).then(function(){ closeOvl(); loadAll(); });
+        })
         .catch(function(e){ btn.disabled=false; msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
       };
     }
@@ -738,11 +772,12 @@
       h+='<div class="fld"><label>Название</label><input type="text" id="eTitle" value="'+esc(r.title)+'"></div>';
       h+='<input type="hidden" id="eCat" value="'+esc(r.category||'')+'">';
       h+='<div class="fld"><label>Клиент</label><select id="eCompany">'+companyOptions(r.companyId)+'</select></div>';
-      h+='<div class="fld"><label>Контактное лицо</label><select id="eContact">'+contactOptions(co, r.contactName)+'</select></div>';
+      h+='<div class="fld"><label>Контактное лицо</label><select id="eContact">'+contactOptions(co, r.contactName)+'</select>'+newContactBox('eContact')+'</div>';
       h+='<div class="fld"><label>Объект</label><select id="eObject">'+objectOptions(co, r.objectName)+'</select></div>';
       h+='<label class="f"><input type="checkbox" id="eUrgent"'+(r.urgent?' checked':'')+'> 🔥 Срочно</label>';
       h+='<div style="margin-top:10px"><button class="btn primary" id="eSave" type="button">Сохранить</button> <span class="msg" id="eMsg"></span></div>';
       e.innerHTML=h;
+      wireNewContact('eContact');
       document.getElementById('eCompany').onchange=function(){
         var c2=companyById(this.value);
         document.getElementById('eContact').innerHTML=contactOptions(c2,'');
@@ -755,11 +790,12 @@
         var cid=document.getElementById('eCompany').value;
         var c2=companyById(cid);
         var msg=document.getElementById('eMsg'); msg.textContent='Сохранение…'; msg.style.color='var(--muted)';
-        post('/repair-update',{ id:CUR.id, title:title, category:category,
+        resolveContact('eContact', cid).then(function(contactName){
+        return post('/repair-update',{ id:CUR.id, title:title, category:category,
           companyId:cid||null, companyName:c2?c2.name:'',
-          contactName:document.getElementById('eContact').value||'',
+          contactName:contactName||'',
           objectName:document.getElementById('eObject').value||'',
-          urgent:document.getElementById('eUrgent').checked })
+          urgent:document.getElementById('eUrgent').checked }); })
         .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?');
           msg.textContent='Сохранено ✓'; msg.style.color='var(--green)';
           setTimeout(function(){ openCard(CUR.id); }, 500);
