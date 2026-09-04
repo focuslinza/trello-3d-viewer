@@ -206,6 +206,21 @@
   var ONLY_REPAIR = String(t.arg('onlyRepair')||'')==='1' || MODE_REPAIR;
   var PRESELECT_COMPANY = t.arg('companyId')||null;
   var nameToId = {};
+  var NOPRICE_REPAIRS = []; // ремонты клиента без цены — показать, чего им не хватает
+  // устойчивое сравнение названий компаний: кавычки, ТОО/ИП/ООО, регистр, пробелы
+  function normName(s){
+    // \b не работает с кириллицей — режем по словам вручную
+    var SKIP={'тоо':1,'ип':1,'ооо':1,'too':1,'llp':1,'ltd':1,'ао':1,'тов':1};
+    return String(s||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()
+      .split(' ').filter(function(w){ return w && !SKIP[w]; }).join(' ');
+  }
+  function idByName(name){
+    if(!name) return null;
+    if(nameToId[name]) return nameToId[name];
+    var n=normName(name); if(!n) return null;
+    for(var k in nameToId){ if(normName(k)===n) return nameToId[k]; }
+    return null;
+  }
 
   function boot(msg){ var b=document.getElementById('boot'); if(b) b.textContent=msg; }
 
@@ -307,6 +322,8 @@
       });
     }).catch(function(){ return []; });
     var pRepairs = fetch(WORKER+'/repair-list?full=1').then(function(r){return r.json();}).then(function(j){
+      NOPRICE_REPAIRS = ((j&&j.requests)||[]).filter(function(r){ return !(+r.clientTotal>0) && r.status!=='rejected' && !r.paid; })
+        .map(function(r){ return { repairId:r.id, number:r.number, title:r.title||'', company_id:r.companyId||null, company_name:r.companyName||'' }; });
       return ((j&&j.requests)||[]).filter(function(r){ return +r.clientTotal>0 && r.status!=='rejected'; }).map(function(r){
         return { cardId:'R'+r.id, isRepair:true, repairId:r.id, name:r.title+(r.objectName?(' — '+r.objectName):''), number:r.number, link:null,
                  total:+r.clientTotal||0, company_id:r.companyId||null, company_name:r.companyName||'',
@@ -379,7 +396,7 @@
   // принадлежность заказа выбранному клиенту: по id, а для ремонтов без id — по совпадению имени
   function belongsToSelected(o){
     if(o.company_id===selectedCompanyId) return true;
-    if(o.isRepair && !o.company_id && o.company_name){ return nameToId[o.company_name]===selectedCompanyId; }
+    if(o.isRepair && !o.company_id && o.company_name){ return idByName(o.company_name)===selectedCompanyId; }
     return false;
   }
   function clientOrders(){
@@ -393,7 +410,7 @@
     if(ONLY_REPAIR && !o.isRepair) return false; // из ремонта — производство не показываем нигде
     if(o.isRepair){
       if(o.company_id && validIds[o.company_id]) return false;
-      if(!o.company_id && o.company_name && nameToId[o.company_name]) return false;
+      if(!o.company_id && o.company_name && idByName(o.company_name)) return false;
       return true;
     }
     return (!o.company_id || !validIds[o.company_id]);
@@ -464,8 +481,15 @@
     var paidList = clientPaid();
     html+='<div class="sec"><h3>Заказы и ремонты клиента — что включить в счёт</h3>';
     if(!co.length){
-      html+='<div class="muted">У выбранного клиента нет неоплаченных заказов и ремонтов'+(paidList.length?' (оплаченные скрыты — см. ниже)':'')+'. Если заказ есть, но привязан к другому/пустому клиенту — разверните «Заказы без привязки» и привяжите. Ремонт без заданной цены здесь не показывается — сначала укажите цену клиенту в панели «Ремонт».</div>';
-    } else {
+      html+='<div class="muted">У выбранного клиента нет неоплаченных заказов и ремонтов'+(paidList.length?' (оплаченные скрыты — см. ниже)':'')+'. Если заказ есть, но привязан к другому/пустому клиенту — разверните «Заказы без привязки» и привяжите.</div>';
+    }
+    // ремонты этого клиента БЕЗ цены клиенту — их нельзя выставить, но видно, что они есть
+    var npr = NOPRICE_REPAIRS.filter(function(r){ return r.company_id===selectedCompanyId || (!r.company_id && idByName(r.company_name)===selectedCompanyId); });
+    if(npr.length){
+      html+='<div class="muted" style="margin:6px 0;padding:8px 10px;border:1px dashed var(--line);border-radius:8px">⚠ У этого клиента есть <b>'+npr.length+'</b> ремонт'+(npr.length===1?'':'а/ов')+' <b>без цены клиенту</b> — в счёт их выставить нельзя, пока в панели «Ремонт» не указана цена: '+
+        npr.slice(0,8).map(function(r){ return esc(r.number||('Р-'+r.repairId))+' «'+esc(r.title.slice(0,50))+'»'; }).join('; ')+(npr.length>8?' …':'')+'</div>';
+    }
+    if(co.length){
       html+='<div class="small muted" style="margin-bottom:6px">Отметьте заказы — каждый станет строкой счёта. Ремонтные заявки (Р-N) можно включать в тот же счёт вместе с производством. «Кол-во» — сколько это продуктов; цена за единицу = сумма заказа ÷ кол-во. Когда клиент оплатит — нажмите «оплачен», и заказ уйдёт из списка.</div>';
       html+='<table><thead><tr><th></th><th>№</th><th>Наименование (заказ)</th><th class="num">Кол-во</th><th>Степень изобретения</th><th class="num">Сумма'+(supplierKey!=='cash'?' (с налогом)':'')+'</th><th></th></tr></thead><tbody>';
       co.forEach(function(o){
@@ -849,7 +873,7 @@
         var rr = ALL_ORDERS.filter(function(o){ return o.isRepair && o.repairId===PRESELECT_REPAIR; })[0];
         if(rr){
           if(rr.company_id && validIds[rr.company_id]) selectedCompanyId=rr.company_id;
-          else if(rr.company_name && nameToId[rr.company_name]) selectedCompanyId=nameToId[rr.company_name];
+          else if(rr.company_name && idByName(rr.company_name)) selectedCompanyId=idByName(rr.company_name);
           setBuyerFromSelected();
           if(belongsToSelected(rr)) rr.checked=true;
         }
