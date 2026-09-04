@@ -280,6 +280,24 @@
   // load ALL saved calculations once; we split them into "this client" vs "unlinked".
   // Вместе с заказами подгружаем и заявки на РЕМОНТ с заданной ценой — они становятся
   // такими же строками счёта (Р-N), можно смешивать производство и ремонт в одном счёте.
+  // ВСЕ заказы выбранного клиента — сверх общих «последних 500» (урок 09.2026:
+  // у активного заказчика старые заказы выпадали из верхушки списка по дате,
+  // и в счёте их «не было», хотя в базе они есть). Слияние по cardId.
+  var LOADED_FOR = {};
+  function loadOrdersForCompany(cid){
+    if(!cid || LOADED_FOR[cid]) return Promise.resolve(false);
+    LOADED_FOR[cid]=true;
+    return fetch(WORKER+'/calc-list?companyId='+encodeURIComponent(cid)+'&limit=1000').then(function(r){return r.json();}).then(function(j){
+      var have={}; ALL_ORDERS.forEach(function(o){ have[o.cardId]=1; });
+      var added=0;
+      ((j&&j.rows)||[]).forEach(function(row){
+        if(have[row.id]) return;
+        ALL_ORDERS.push({ cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0) });
+        added++;
+      });
+      return added>0;
+    }).catch(function(){ return false; });
+  }
   function loadAllOrders(){
     var pOrders = fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
       return ((j&&j.rows)||[]).map(function(row){
@@ -306,7 +324,8 @@
       });
       BILLED = map;
     }).catch(function(){ BILLED = {}; });
-    return Promise.all([pOrders, pRepairs, pBilled]).then(function(res){ ALL_ORDERS = res[0].concat(res[1]); mzLoadWorkers(); });
+    return Promise.all([pOrders, pRepairs, pBilled]).then(function(res){ ALL_ORDERS = res[0].concat(res[1]); mzLoadWorkers(); })
+      .then(function(){ return loadOrdersForCompany(selectedCompanyId); });
   }
 
   // Имя заказчика-человека (контакт, отмеченный на карточке в «Компания и контакты»):
@@ -367,9 +386,11 @@
     // режим «только ремонты» (счёт из бухгалтерии) — производство не показываем
     return ALL_ORDERS.filter(function(o){ return (!ONLY_REPAIR || o.isRepair) && belongsToSelected(o) && !o.paid && !o.hidden; });
   }
-  function clientPaid(){ return ALL_ORDERS.filter(function(o){ return belongsToSelected(o) && o.paid && !o.hidden; }); }
+  // в режиме «только ремонты» и оплаченные показываем только ремонтные
+  function clientPaid(){ return ALL_ORDERS.filter(function(o){ return (!ONLY_REPAIR || o.isRepair) && belongsToSelected(o) && o.paid && !o.hidden; }); }
   function orphanOrders(){ return ALL_ORDERS.filter(function(o){
     if(o.paid || o.hidden) return false;
+    if(ONLY_REPAIR && !o.isRepair) return false; // из ремонта — производство не показываем нигде
     if(o.isRepair){
       if(o.company_id && validIds[o.company_id]) return false;
       if(!o.company_id && o.company_name && nameToId[o.company_name]) return false;
@@ -377,7 +398,7 @@
     }
     return (!o.company_id || !validIds[o.company_id]);
   }); }
-  function hiddenOrders(){ return ALL_ORDERS.filter(function(o){ return o.hidden; }); }
+  function hiddenOrders(){ return ALL_ORDERS.filter(function(o){ return o.hidden && (!ONLY_REPAIR || o.isRepair); }); }
   function selectedOrders(){ return clientOrders().filter(function(o){return o.checked;}); }
   function kFor(o){ return (o && o.taxIncluded) ? 1 : (SUP_TAX[supplierKey]||1); }
   function grandTotal(){ var K=SUP_TAX[supplierKey]||1; mzCompute();
@@ -557,7 +578,8 @@
     // при наличных счёт не формируется
     (function(){ var g=document.getElementById('gen'); if(g && supplierKey==='cash'){ g.disabled=true; g.title='Наличные — счёт не формируется; отметьте оплату кнопкой «оплачен»'; } })();
     var bs=document.getElementById('buyerSel');
-    if(bs) bs.addEventListener('change', function(){ selectedCompanyId=this.value; setBuyerFromSelected(); render(); loadPersonNames().then(render); });
+    if(bs) bs.addEventListener('change', function(){ selectedCompanyId=this.value; setBuyerFromSelected(); render();
+      loadOrdersForCompany(selectedCompanyId).then(function(added){ if(added) render(); return loadPersonNames(); }).then(render); });
     [].forEach.call(document.querySelectorAll('.ck'), function(c){ c.addEventListener('change', function(){ var id=this.getAttribute('data-id'), chk=this.checked; var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.checked=chk; updateGrand(); }); });
     [].forEach.call(document.querySelectorAll('.qn'), function(q){ q.addEventListener('input', function(){ var id=this.getAttribute('data-id'), v=Math.max(1,+this.value||1); var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(o) o.qty=v; }); });
     [].forEach.call(document.querySelectorAll('.relink'), function(b){ b.addEventListener('click', function(){ relink(this.getAttribute('data-id')); }); });
