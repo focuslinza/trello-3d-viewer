@@ -449,9 +449,8 @@
       h+='<button class="btn'+(r.hasCalc?'':' green')+'" id="calcBtn" type="button">'+(r.hasCalc?'Открыть расчёт':'Посчитать')+'</button></div>';
       // «Кто сделал» — выпадающий список работников, допущенных к ремонту
       h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
-      h+='<span class="muted">Кто сделал:</span> <select id="perfSel" style="background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:180px"><option value="">— выбрать —</option></select>';
-      h+='<select id="perfSel2" style="display:none;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:180px"><option value="">— без второго —</option></select>';
-      h+='<a href="#" id="perfAdd" class="muted" style="font-size:12px;text-decoration:none">+ второй исполнитель</a></div>';
+      h+='<span class="muted">Кто сделал:</span> <span id="perfBox" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"></span>';
+      h+='<a href="#" id="perfAdd" class="muted" style="font-size:12px;text-decoration:none">+ ещё исполнитель</a></div>';
       if(PRICED){
         h+='<div id="earnBlock" class="muted" style="margin-bottom:12px"></div>';
         h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
@@ -590,42 +589,43 @@
           else alert('Браузер заблокировал окно печати — разрешите всплывающие окна.');
         };
       })();
-      // «Кто сделал» — работники с правом «Ремонт»
+      // «Кто сделал» — работники с правом «Ремонт»; исполнителей может быть
+      // сколько угодно, заработок делится поровну на всех (решение Асхата, 09.2026)
       loadRepairWorkers().then(function(list){
-        var sel=document.getElementById('perfSel'), sel2=document.getElementById('perfSel2'), addL=document.getElementById('perfAdd');
-        if(!sel) return;
-        function fill(el){
-          list.forEach(function(w){
-            var o=document.createElement('option'); o.value=w.trello_member_id||w.id; o.textContent=w.name;
-            o.dataset.name=w.name; el.appendChild(o);
+        var box=document.getElementById('perfBox'), addL=document.getElementById('perfAdd');
+        if(!box) return;
+        var rows=(r.performers||[]).map(function(p){ return { memberId:p.memberId||'', name:p.name||'' }; });
+        if(!rows.length) rows.push({ memberId:'', name:'' });
+        var SEL_STYLE='background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:180px';
+        function draw(){
+          box.innerHTML='';
+          rows.forEach(function(p, idx){
+            var el=document.createElement('select'); el.style.cssText=SEL_STYLE; el.dataset.i=idx;
+            var o0=document.createElement('option'); o0.value=''; o0.textContent=idx===0?'— выбрать —':'— убрать —'; el.appendChild(o0);
+            list.forEach(function(w){
+              var o=document.createElement('option'); o.value=w.trello_member_id||w.id; o.textContent=w.name; o.dataset.name=w.name; el.appendChild(o);
+            });
+            if(p.memberId && el.querySelector('option[value="'+p.memberId+'"]')) el.value=p.memberId;
+            else if(p.name){ var op=document.createElement('option'); op.value='__cur'+idx; op.textContent=p.name; op.dataset.name=p.name; el.appendChild(op); el.value=op.value; }
+            el.onchange=function(){
+              var opt=this.options[this.selectedIndex];
+              if(!this.value){ rows.splice(idx,1); if(!rows.length) rows.push({memberId:'',name:''}); }
+              else rows[idx]={ memberId:(String(this.value).indexOf('__cur')===0?'':this.value), name:opt.dataset.name||opt.textContent };
+              draw(); save();
+            };
+            box.appendChild(el);
           });
+          if(rows.length>1){ var n=document.createElement('span'); n.className='muted'; n.style.fontSize='12px'; n.textContent='делится на '+rows.length; box.appendChild(n); }
         }
-        fill(sel); fill(sel2);
-        // восстановление: до двух сохранённых исполнителей (парные ремонты)
-        var perfs = (r.performers||[]).slice(0,2);
-        function restoreTo(el, p){
-          if(!p) return;
-          var id=p.memberId||'';
-          if(id && el.querySelector('option[value="'+id+'"]')) el.value=id;
-          else if(p.name){ var op=document.createElement('option'); op.value='__cur'+el.id; op.textContent=p.name; op.dataset.name=p.name; el.appendChild(op); el.value=op.value; }
-        }
-        restoreTo(sel, perfs[0]);
-        if(perfs[1]){ sel2.style.display=''; addL.style.display='none'; restoreTo(sel2, perfs[1]); }
-        addL.onclick=function(e){ e.preventDefault(); sel2.style.display=''; addL.style.display='none'; };
         function save(){
-          var performers=[];
-          [sel, sel2].forEach(function(el){
-            if(!el || el.style.display==='none' || !el.value) return;
-            var opt=el.options[el.selectedIndex];
-            performers.push({ memberId: (String(el.value).indexOf('__cur')===0?'':el.value), name: opt.dataset.name||opt.textContent });
-          });
-          // один человек дважды не считается
+          var performers=rows.filter(function(p){ return p.memberId||p.name; });
           var seen={}; performers=performers.filter(function(p){ var k=p.memberId||p.name; if(seen[k])return false; seen[k]=1; return true; });
           post('/repair-performers-set',{ id:r.id, performers:performers, byName:ME.name })
             .then(function(){ CUR.doneByName=performers.map(function(p){return p.name;}).join(', '); loadFeed(r.id); if(PRICED) loadEarnings(r.id); })
             .catch(function(e){ alert('Не удалось сохранить исполнителя: '+(e&&e.message||e)); });
         }
-        sel.onchange=save; sel2.onchange=save;
+        addL.onclick=function(e){ e.preventDefault(); if(rows.length>=8) return; rows.push({memberId:'',name:''}); draw(); };
+        draw();
       });
       if(PRICED){
         if(document.getElementById('invBtn')) document.getElementById('invBtn').onclick=function(){
