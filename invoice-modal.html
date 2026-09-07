@@ -49,6 +49,11 @@
     .pop table{width:100%}
     .pop .gh{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.4px;padding-top:10px}
     .pop .popbar{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
+  .chip{display:inline-block;border:1px solid var(--line);background:var(--bg2);color:var(--muted);border-radius:12px;padding:3px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;cursor:pointer}
+  .chip.on{background:#1c3329;color:var(--green);border-color:#2e5c44}
+  .chip.ro{cursor:default;opacity:.7}
+  .chip.busy{opacity:.5;pointer-events:none}
+  .hist{font-size:11px;color:#e8c07d}
   </style>
 </head>
 <body>
@@ -206,6 +211,8 @@
   // счёт по ремонтам (из бухгалтерии или из карточки заявки): производство не
   // показываем — только неоплаченные ремонтные заявки этого заказчика (решение Асхата, 09.2026)
   var ONLY_REPAIR = String(t.arg('onlyRepair')||'')==='1' || MODE_REPAIR;
+  // производственный счёт показывает только заказы на производство, ремонтный — только ремонты
+  function modeOk(o){ return ONLY_REPAIR ? !!o.isRepair : !o.isRepair; }
   var PRESELECT_COMPANY = t.arg('companyId')||null;
   var nameToId = {};
   var NOPRICE_REPAIRS = []; // ремонты клиента без цены — показать, чего им не хватает
@@ -309,7 +316,8 @@
       var added=0;
       ((j&&j.rows)||[]).forEach(function(row){
         if(have[row.id]) return;
-        ALL_ORDERS.push({ cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0) });
+        ALL_ORDERS.push({ cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'' });
         added++;
       });
       return added>0;
@@ -320,7 +328,8 @@
       return ((j&&j.rows)||[]).map(function(row){
         // taxIncluded: старые заказы считались С НАЛОГОМ внутри суммы — к ним
         // множитель поставщика применять нельзя, иначе налог начислится дважды
-        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0) };
+        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'' };
       });
     }).catch(function(){ return []; });
     // viewerId обязателен — иначе сервер прячет цены и ремонты «исчезают» из счёта
@@ -331,6 +340,7 @@
         return { cardId:'R'+r.id, isRepair:true, repairId:r.id, name:r.title+(r.objectName?(' — '+r.objectName):''), number:r.number, link:null,
                  total:+r.clientTotal||0, company_id:r.companyId||null, company_name:r.companyName||'',
                  paid:(r.paid?1:0), paid_at:r.paidAt||null, hidden:0, qty:1, checked:false, personName:(r.contactName||''),
+                 invoiceSent:!!r.invoiceSent, delivered:(r.status==='done'||r.status==='sent'), actSigned:false, dateAt:r.doneAt||r.createdAt||'',
                  _rTitle:r.title, _rCat:r.category||'', _rObj:r.objectName||'' };
       });
     }).catch(function(){ return []; });
@@ -404,13 +414,13 @@
   }
   function clientOrders(){
     // режим «только ремонты» (счёт из бухгалтерии) — производство не показываем
-    return ALL_ORDERS.filter(function(o){ return (!ONLY_REPAIR || o.isRepair) && belongsToSelected(o) && !o.paid && !o.hidden; });
+    return ALL_ORDERS.filter(function(o){ return modeOk(o) && belongsToSelected(o) && !o.paid && !o.hidden; });
   }
   // в режиме «только ремонты» и оплаченные показываем только ремонтные
-  function clientPaid(){ return ALL_ORDERS.filter(function(o){ return (!ONLY_REPAIR || o.isRepair) && belongsToSelected(o) && o.paid && !o.hidden; }); }
+  function clientPaid(){ return ALL_ORDERS.filter(function(o){ return modeOk(o) && belongsToSelected(o) && o.paid && !o.hidden; }); }
   function orphanOrders(){ return ALL_ORDERS.filter(function(o){
     if(o.paid || o.hidden) return false;
-    if(ONLY_REPAIR && !o.isRepair) return false; // из ремонта — производство не показываем нигде
+    if(!modeOk(o)) return false; // производство и ремонт — в своих окнах
     if(o.isRepair){
       if(o.company_id && validIds[o.company_id]) return false;
       if(!o.company_id && o.company_name && idByName(o.company_name)) return false;
@@ -418,7 +428,7 @@
     }
     return (!o.company_id || !validIds[o.company_id]);
   }); }
-  function hiddenOrders(){ return ALL_ORDERS.filter(function(o){ return o.hidden && (!ONLY_REPAIR || o.isRepair); }); }
+  function hiddenOrders(){ return ALL_ORDERS.filter(function(o){ return o.hidden && modeOk(o); }); }
   function selectedOrders(){ return clientOrders().filter(function(o){return o.checked;}); }
   function kFor(o){ return (o && o.taxIncluded) ? 1 : (SUP_TAX[supplierKey]||1); }
   function grandTotal(){ var K=SUP_TAX[supplierKey]||1; mzCompute();
@@ -479,61 +489,59 @@
     }
     html+='</div>';
 
-    // orders of the selected client (unpaid)
+    // ЗАКАЗЫ КЛИЕНТА — «бухгалтерский» вид (решение Асхата, 09.2026): один список
+    // со статусами; порядок: не высланные → высланные неоплаченные → оплаченные
+    // не сданные → сданные → с актом. Галочка — только у неоплаченных.
     var co = clientOrders();
     var paidList = clientPaid();
-    html+='<div class="sec"><h3>Заказы и ремонты клиента — что включить в счёт</h3>';
-    if(!co.length){
-      html+='<div class="muted">У выбранного клиента нет неоплаченных заказов и ремонтов'+(paidList.length?' (оплаченные скрыты — см. ниже)':'')+'. Если заказ есть, но привязан к другому/пустому клиенту — разверните «Заказы без привязки» и привяжите.</div>';
+    var allRows = co.concat(paidList);
+    function stage(o){ if(!o.paid) return o.invoiceSent?1:0; if(!o.delivered) return 2; return o.actSigned?4:3; }
+    allRows.sort(function(a,b){ var d=stage(a)-stage(b); if(d) return d; return String(b.dateAt||'').localeCompare(String(a.dateAt||'')); });
+    html+='<div class="sec"><h3>'+(ONLY_REPAIR?'Заказы на ремонт клиента':'Заказы на производство клиента')+'</h3>';
+    if(!allRows.length){
+      html+='<div class="muted">У выбранного клиента нет '+(ONLY_REPAIR?'ремонтных заявок с ценой':'заказов на производство')+'. Если заказ есть, но привязан к другому/пустому клиенту — разверните «Заказы без привязки» и привяжите.</div>';
     }
-    // ремонты этого клиента БЕЗ цены клиенту — их нельзя выставить, но видно, что они есть
     var npr = NOPRICE_REPAIRS.filter(function(r){ return r.company_id===selectedCompanyId || (!r.company_id && idByName(r.company_name)===selectedCompanyId); });
-    if(npr.length){
+    if(ONLY_REPAIR && npr.length){
       html+='<div class="muted" style="margin:6px 0;padding:8px 10px;border:1px dashed var(--line);border-radius:8px">⚠ У этого клиента есть <b>'+npr.length+'</b> ремонт'+(npr.length===1?'':'а/ов')+' <b>без цены клиенту</b> — в счёт их выставить нельзя, пока в панели «Ремонт» не указана цена: '+
         npr.slice(0,8).map(function(r){ return esc(r.number||('Р-'+r.repairId))+' «'+esc(r.title.slice(0,50))+'»'; }).join('; ')+(npr.length>8?' …':'')+'</div>';
     }
-    if(co.length){
-      html+='<div class="small muted" style="margin-bottom:6px">Отметьте заказы — каждый станет строкой счёта. Ремонтные заявки (Р-N) можно включать в тот же счёт вместе с производством. «Кол-во» — сколько это продуктов; цена за единицу = сумма заказа ÷ кол-во. Когда клиент оплатит — нажмите «оплачен», и заказ уйдёт из списка.</div>';
+    if(allRows.length){
+      html+='<div class="small muted" style="margin-bottom:6px">Галочка — включить в счёт (только неоплаченные). Статусы: «выслан» и «сдали» можно отметить здесь; «оплачен» — только при наличных (иначе отмечает бухгалтер); «акт» ставит бухгалтер. «История» — в какие счета заказ уже входил.</div>';
       var allOn = co.length>0 && co.every(function(o){ return o.checked; });
-      html+='<table><thead><tr><th><input type="checkbox" id="ckAll" title="Выбрать все / снять все"'+(allOn?' checked':'')+'></th><th>№</th><th>Наименование (заказ)</th><th class="num">Кол-во</th><th>Степень изобретения</th><th class="num">Сумма'+(supplierKey!=='cash'?' (с налогом)':'')+'</th><th></th></tr></thead><tbody>';
-      co.forEach(function(o){
+      html+='<table><thead><tr><th>'+(co.length?'<input type="checkbox" id="ckAll" title="Выбрать все / снять все"'+(allOn?' checked':'')+'>':'')+'</th><th>№</th><th>Заказ</th><th class="num">Кол-во</th>'+(ONLY_REPAIR?'':'<th>Степень</th>')+'<th class="num">Сумма'+(supplierKey!=='cash'?' (с налогом)':'')+'</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th><th>История</th></tr></thead><tbody>';
+      function chip(o, field, label, active, title){
+        var on=!!o[field];
+        return '<span class="chip'+(on?' on':'')+(active?'':' ro')+'" data-id="'+esc(o.cardId)+'" data-f="'+field+'" title="'+esc(title||'')+'">'+(on?'✓ ':'')+label+'</span>';
+      }
+      allRows.forEach(function(o){
         var numCell = o.isRepair
           ? '<span style="display:inline-block;background:#2b1f45;color:#c9a8ff;border-radius:6px;padding:1px 8px;font-size:11.5px;font-weight:800">'+esc(o.number)+'</span>'
           : '<span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span>';
-        html+='<tr>'+
-          '<td><input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'></td>'+
+        var hist = (BILLED[o.cardId]&&BILLED[o.cardId].length) ? '<span class="hist" title="В какие счета заказ уже входил">№'+esc(BILLED[o.cardId].join(', №'))+'</span>' : '<span class="muted">—</span>';
+        var cashOk = (supplierKey==='cash');
+        html+='<tr'+(o.paid?' style="opacity:.8"':'')+'>'+
+          '<td>'+(o.paid?'':'<input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'>')+'</td>'+
           '<td class="small">'+numCell+'</td>'+
-          '<td>'+esc(o.name)+(o.isRepair?' <span class="pill">ремонт</span>':'')+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+
-            (BILLED[o.cardId]&&BILLED[o.cardId].length?' <span style="background:#4a3413;color:#e8c07d;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700" title="Этот заказ уже включался в счёт — проверьте, чтобы не выставить дважды">⚠ уже в счёте №'+esc(BILLED[o.cardId].join(', №'))+'</span>':'')+'</td>'+
-          '<td class="num"><input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'"></td>'+
-          (o.isRepair ? '<td></td>' :
+          '<td>'+esc(o.name)+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+
+            (!o.paid&&!o.isRepair?' <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" style="padding:1px 7px;font-size:11px" title="Убрать заказ из списка (не оплата)">убрать</button>':'')+'</td>'+
+          '<td class="num">'+(o.paid?'<span class="muted">'+(o.qty||1)+'</span>':'<input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'">')+'</td>'+
+          (ONLY_REPAIR ? '' : (o.paid ? '<td class="muted small">'+((+o.engCoef||0)===0?'нет':(+o.engCoef===0.5?'+50%':'+100%'))+'</td>' :
             '<td><select class="invSel" data-id="'+esc(o.cardId)+'" title="Степень изобретения назначает руководство: начисляется клиенту поверх работ, инженер получает свою долю от неё">'+
               '<option value="0"'+((+o.engCoef||0)===0?' selected':'')+'>нет</option>'+
               '<option value="0.5"'+((+o.engCoef||0)===0.5?' selected':'')+'>доработка +50%</option>'+
               '<option value="1"'+((+o.engCoef||0)===1?' selected':'')+'>новый продукт +100%</option>'+
-            '</select></td>')+
-          '<td class="num">'+money(o.total*kFor(o))+(o.taxIncluded?' <span class="muted" title="Этот заказ посчитан со включённым налогом — повторно налог не добавляется">₸ (налог внутри)</span>':' ₸')+'</td>'+
-          '<td style="white-space:nowrap"><button class="btn ghost paybtn" data-id="'+esc(o.cardId)+'" type="button" title="Клиент оплатил этот заказ">оплачен</button>'+(o.isRepair?'':' <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" title="Убрать заказ из списка (не оплата)">убрать</button>')+'</td>'+
+            '</select></td>'))+
+          '<td class="num">'+money(o.total*(o.paid?1:kFor(o)))+(o.taxIncluded&&!o.paid?' <span class="muted" title="Этот заказ посчитан со включённым налогом — повторно налог не добавляется">₸ (налог внутри)</span>':' ₸')+'</td>'+
+          '<td>'+chip(o,'invoiceSent','выслан',true,'Счёт отправлен клиенту — отмечает тот, кто отправил')+'</td>'+
+          '<td>'+chip(o,'paid','оплачен',cashOk,cashOk?'Клиент заплатил наличными':'Оплату по безналу отмечает бухгалтер')+'</td>'+
+          '<td>'+chip(o,'delivered','сдали',!o.isRepair,o.isRepair?'Для ремонта = заявка выполнена':'Заказ сдан клиенту — отмечает начальник цеха')+'</td>'+
+          '<td>'+chip(o,'actSigned','акт',false,'Акт подписан — отмечает бухгалтер')+'</td>'+
+          '<td class="small muted">'+esc(String(o.paid_at||o.dateAt||'').slice(0,10))+'</td>'+
+          '<td>'+hist+'</td>'+
         '</tr>';
       });
       html+='</tbody></table>';
-    }
-    // paid orders of this client (hidden by default)
-    if(paidList.length){
-      html+='<div style="margin-top:12px"><span class="lnk" id="paidToggle">'+(showPaid?'▾':'▸')+' Оплаченные заказы этого клиента ('+paidList.length+')</span></div>';
-      if(showPaid){
-        html+='<table style="margin-top:6px;opacity:.75"><thead><tr><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Сумма</th><th>Оплачен</th><th></th></tr></thead><tbody>';
-        paidList.forEach(function(o){
-          html+='<tr>'+
-            '<td class="small">'+(o.isRepair?esc(o.number):'<span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span>')+'</td>'+
-            '<td>'+esc(o.name)+(o.isRepair?' <span class="pill">ремонт</span>':'')+'</td>'+
-            '<td class="num">'+money(o.total)+' ₸</td>'+
-            '<td class="small muted">'+esc(o.paid_at?String(o.paid_at).slice(0,10):'да')+'</td>'+
-            '<td><button class="btn ghost unpaybtn" data-id="'+esc(o.cardId)+'" type="button" title="Вернуть в неоплаченные">вернуть</button></td>'+
-          '</tr>';
-        });
-        html+='</tbody></table>';
-      }
     }
     // hidden orders (removed from the list) — restorable
     var hid = hiddenOrders();
@@ -627,8 +635,23 @@
     if(pt) pt.addEventListener('click', function(){ showPaid=!showPaid; render(); });
     var ht=document.getElementById('hiddenToggle');
     if(ht) ht.addEventListener('click', function(){ showHidden=!showHidden; render(); });
-    [].forEach.call(document.querySelectorAll('.paybtn'), function(b){ b.addEventListener('click', function(){ markPaid(this.getAttribute('data-id'), true); }); });
-    [].forEach.call(document.querySelectorAll('.unpaybtn'), function(b){ b.addEventListener('click', function(){ markPaid(this.getAttribute('data-id'), false); }); });
+    // чипы статусов (как в бухгалтерии): выслан / оплачен (наличные) / сдали; акт — только показ
+    [].forEach.call(document.querySelectorAll('.chip:not(.ro)'), function(ch){
+      ch.addEventListener('click', function(){
+        var id=this.getAttribute('data-id'), field=this.getAttribute('data-f');
+        var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(!o) return;
+        var newVal=!o[field];
+        if(field==='paid'){ markPaid(id, newVal); return; }
+        var self=this; self.classList.add('busy');
+        var p = o.isRepair
+          ? fetch(WORKER+'/repair-flags',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:o.repairId, field:field, value:newVal?1:0 }) })
+          : fetch(WORKER+'/acct-set',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:id, field:field, value:newVal?1:0 }) });
+        p.then(function(r){return r.json();}).then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+          o[field]=newVal; render();
+        }).catch(function(e){ self.classList.remove('busy'); alert('Не удалось изменить статус: '+(e&&e.message||e)); });
+      });
+    });
     [].forEach.call(document.querySelectorAll('.hidebtn'), function(b){ b.addEventListener('click', function(){ markHidden(this.getAttribute('data-id'), true); }); });
     [].forEach.call(document.querySelectorAll('.unhidebtn'), function(b){ b.addEventListener('click', function(){ markHidden(this.getAttribute('data-id'), false); }); });
     [].forEach.call(document.querySelectorAll('.rev'), function(s){ s.addEventListener('click', function(){ openCard(this.getAttribute('data-id')); }); });
