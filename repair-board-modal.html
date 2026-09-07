@@ -432,7 +432,7 @@
       h+='Компания клиент: <b>'+esc(r.companyName||'—')+'</b>';
       h+='<br>Представитель: <b>'+esc(r.contactName||'—')+'</b>';
       if(r.objectName) h+='<br>Объект: <b>'+esc(r.objectName)+'</b>';
-      if(r.doneByName) h+='<br>Сделал: <b>'+esc(r.doneByName)+'</b>'+(r.doneAt?(' ('+esc(String(r.doneAt).slice(0,10))+')'):'')+(r.doneOperations&&r.doneOperations.length?('<br><span class="muted">'+esc(opsSummary(r.doneOperations))+'</span>'):'');
+      // «Сделал» и операции показываются только в блоке «Калькулятор стоимости» — здесь не дублируем (решение Асхата, 09.2026)
       h+='</div><div id="kvEdit" style="display:none"></div></div>';
 
 
