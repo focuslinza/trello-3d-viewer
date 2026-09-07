@@ -349,6 +349,9 @@
         '</label>'+
         '<label title="Сколько процентов от этапа «Степень изобретения» (начисляется клиенту в смете) получает инженер как сдельную. По умолчанию 40%.">от «Степени изобретения», % '+
           '<input class="engInvPct" type="number" min="0" max="100" step="1" style="width:70px" value="'+(FIN.engInventionShare!=null?FIN.engInventionShare:40)+'">'+
+        '</label>'+
+        '<label title="Личная доля инженера от строки «Срочность» заказа (клиент платит за скорость цеха). 0 = не начислять. Раньше поле не было выведено в панель, а в базе стояло значение — отсюда строки «Доля от срочности» в ведомости.">% от срочности '+
+          '<input class="engUrgPct" type="number" min="0" max="100" step="1" style="width:70px" value="'+(w.urgency_percent!=null?w.urgency_percent:0)+'">'+
         '</label><span class="muted" style="font-size:11.5px">копийность определяется автоматически: Σ деталей резки ÷ число DXF на карточке; все ставки меняются руководством в любой момент</span>';
       }
       // личный % от работ СДАННЫХ заказов — ТОЛЬКО для офисных (без производственных
@@ -478,6 +481,7 @@
       var canSupply=tr.querySelector('.cansup')?tr.querySelector('.cansup').checked:false;
       var canCrm=tr.querySelector('.cancrm')?tr.querySelector('.cancrm').checked:false;
       var canSeeRepairCost=tr.querySelector('.canrepcost')?tr.querySelector('.canrepcost').checked:false;
+      var urgEl=tr.querySelector('.engUrgPct'); var urgencyPercent=urgEl?(+urgEl.value||0):undefined;
       var canIssueRepairInvoice=tr.querySelector('.canrepissue')?tr.querySelector('.canrepissue').checked:false;
       var canSeeCost=tr.querySelector('.cancost')?tr.querySelector('.cancost').checked:false;
       var canTimesheet=tr.querySelector('.cantabel')?tr.querySelector('.cantabel').checked:false;
@@ -499,7 +503,7 @@
       setMsg('Сохранение…');
       return fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, canSeeRepairCost:canSeeRepairCost, canIssueRepairInvoice:canIssueRepairInvoice, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, canSeeRepairCost:canSeeRepairCost, canIssueRepairInvoice:canIssueRepairInvoice, urgencyPercent:urgencyPercent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){
