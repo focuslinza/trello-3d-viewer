@@ -317,7 +317,7 @@
       ((j&&j.rows)||[]).forEach(function(row){
         if(have[row.id]) return;
         ALL_ORDERS.push({ cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
-          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'' });
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'', discount:+row.discount||0 });
         added++;
       });
       return added>0;
@@ -329,7 +329,7 @@
         // taxIncluded: старые заказы считались С НАЛОГОМ внутри суммы — к ним
         // множитель поставщика применять нельзя, иначе налог начислится дважды
         return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
-          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'' };
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'', discount:+row.discount||0 };
       });
     }).catch(function(){ return []; });
     // viewerId обязателен — иначе сервер прячет цены и ремонты «исчезают» из счёта
@@ -532,7 +532,8 @@
               '<option value="0.5"'+((+o.engCoef||0)===0.5?' selected':'')+'>доработка +50%</option>'+
               '<option value="1"'+((+o.engCoef||0)===1?' selected':'')+'>новый продукт +100%</option>'+
             '</select></td>'))+
-          '<td class="num">'+money(o.total*(o.paid?1:kFor(o)))+(o.taxIncluded&&!o.paid?' <span class="muted" title="Этот заказ посчитан со включённым налогом — повторно налог не добавляется">₸ (налог внутри)</span>':' ₸')+'</td>'+
+          '<td class="num">'+money(o.total*(o.paid?1:kFor(o)))+(o.taxIncluded&&!o.paid?' <span class="muted" title="Этот заказ посчитан со включённым налогом — повторно налог не добавляется">₸ (налог внутри)</span>':' ₸')+
+            ((+o.discount>0)?'<div class="small" style="color:#e8c07d" title="Спеццена в расчёте: в счёте пойдёт тариф и отдельная строка скидки">уступка '+money(o.discount)+' ₸ ('+Math.round(o.discount/(o.total+o.discount)*100)+'%)</div>':'')+'</td>'+
           '<td>'+chip(o,'invoiceSent','выслан',true,'Счёт отправлен клиенту — отмечает тот, кто отправил')+'</td>'+
           '<td>'+chip(o,'paid','оплачен',cashOk,cashOk?'Клиент заплатил наличными':'Оплату по безналу отмечает бухгалтер')+'</td>'+
           '<td>'+chip(o,'delivered','сдали',!o.isRepair,o.isRepair?'Для ремонта = заявка выполнена':'Заказ сдан клиенту — отмечает начальник цеха')+'</td>'+
@@ -775,11 +776,22 @@
     var sup=SUPPLIERS[supplierKey] || SUPPLIERS.ip;
     var K = SUP_TAX[supplierKey] || 1; // налог компании добавляется к ценам строк счёта
     var numEl=document.getElementById('inum'), dEl=document.getElementById('idate'), cEl=document.getElementById('icontract');
-    var items = selectedOrders().map(function(o){
+    var items = [];
+    selectedOrders().forEach(function(o){
       var qty=Math.max(1,o.qty||1);
       var nm = o.name + (o.personName ? ' ('+o.personName+')' : '');
-      var c = ceilLine(qty, (o.total/qty) * kFor(o));
-      return { code:o.number||'', name:nm, qty:qty, unit:'Услуга', price:c.price, cardId:o.cardId };
+      var disc = +o.discount||0;
+      // СКИДКА ОТДЕЛЬНОЙ СТРОКОЙ (решение Асхата, 09.2026): клиент видит тарифную
+      // цену и размер уступки, а не «низкую цену как норму»
+      if (disc > 0 && !o.isRepair) {
+        var cs = ceilLine(qty, ((o.total + disc)/qty) * kFor(o));
+        items.push({ code:o.number||'', name:nm, qty:qty, unit:'Услуга', price:cs.price, cardId:o.cardId });
+        var dsum = cs.sum - Math.ceil(o.total * kFor(o) - 1e-9); // чтобы итог совпал с суммой заказа копейка в копейку
+        items.push({ code:'', name:'Скидка постоянному клиенту по заказу №'+(o.number||'')+' ('+Math.round(disc/(o.total+disc)*100)+'%)', qty:1, unit:'Услуга', price:-dsum, cardId:o.cardId, isDiscount:true });
+      } else {
+        var c = ceilLine(qty, (o.total/qty) * kFor(o));
+        items.push({ code:o.number||'', name:nm, qty:qty, unit:'Услуга', price:c.price, cardId:o.cardId });
+      }
     });
     validExtras().forEach(function(x){
       var q=Math.max(1,+x.qty||1);

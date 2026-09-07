@@ -64,6 +64,7 @@
     .actions { display:flex; gap:8px; }
     /* cost hidden for workers without permission */
     body.nocost .lt, body.nocost #brkSec, body.nocost #taxFld, body.nocost #totalBig { display:none !important; }
+    .nocost input.sp{display:none}
     .nocostNote { color:var(--muted) !important; font-weight:600; }
     .actions button { height:36px; border-radius:4px; font-size:13px; font-weight:600; cursor:pointer; padding:0 16px; border:none; }
     .save { background:#1f845a; color:#fff; }
@@ -262,12 +263,18 @@
       var qty=document.createElement('input'); qty.type='number'; qty.className='num'; qty.min='0'; qty.step='any';
       qty.placeholder='кол-во'; if(data.qty!=null) qty.value=data.qty;
       var lt=document.createElement('span'); lt.className='lt'; lt.textContent='0 ₸';
+      // СПЕЦЦЕНА (решение Асхата, 09.2026): согласованная с клиентом цена за единицу
+      // вместо тарифа. Стандартная цена сохраняется рядом — отчёт «Уступки» в панели
+      // показывает, где и сколько уступаем; в счёте скидка идёт отдельной строкой.
+      var sp=document.createElement('input'); sp.type='number'; sp.className='num sp'; sp.min='0'; sp.step='any';
+      sp.placeholder='спец. ₸/ед'; sp.title='Особая цена за единицу, согласованная с клиентом (тариф — серым в подсказке). Пусто = по тарифу';
+      sp.style.cssText='width:96px;border-color:#6b5a1e'; if(data.customUnit!=null&&+data.customUnit>0) sp.value=data.customUnit;
       var del=document.createElement('button'); del.className='del'; del.type='button'; del.textContent='×';
       del.onclick=function(){ row.remove(); recompute(); };
-      [ks,th,qty].forEach(function(e){ e.addEventListener('input',recompute); e.addEventListener('change',recompute); });
-      row._read=function(){ return {kind:ks.value, thickness:+th.value, qty:+qty.value||0}; };
-      row._lt=lt;
-      row.appendChild(ks); row.appendChild(th); row.appendChild(qty); row.appendChild(lt); row.appendChild(del);
+      [ks,th,qty,sp].forEach(function(e){ e.addEventListener('input',recompute); e.addEventListener('change',recompute); });
+      row._read=function(){ var o={kind:ks.value, thickness:+th.value, qty:+qty.value||0}; if(+sp.value>0) o.customUnit=+sp.value; return o; };
+      row._lt=lt; row._sp=sp;
+      row.appendChild(ks); row.appendChild(th); row.appendChild(qty); row.appendChild(sp); row.appendChild(lt); row.appendChild(del);
       return row;
     }
     function makeCatRow(grouped, data, unitHint){
@@ -422,6 +429,14 @@
       paint(opLines, function(d){
         if(!(d.qty>0&&d.thickness>0)) return 0;
         return CALC.compute(Object.assign({operations:[d]}, bare)).subtotal;
+      });
+      // тариф — в подсказке окошка спеццены, чтобы уступку было видно сразу
+      [].forEach.call(opLines.children, function(row){
+        var d=row._read(); if(!row._sp) return;
+        var k=CALC.KIND[d.kind]; if(!k||!(d.qty>0&&d.thickness>0)) { row._sp.placeholder='спец. ₸/ед'; return; }
+        var std=(k.t==='FLAT')?(+k.flatRate||0):CALC.opRate(k.t,d.thickness,d.qty)*k.mult;
+        row._sp.placeholder='тариф '+Math.round(std);
+        row._sp.style.background = (+row._sp.value>0 && +row._sp.value<std) ? '#3a2f14' : '';
       });
       paint(matLines, function(d){
         if(!(d.code&&d.qty>0)) return 0;

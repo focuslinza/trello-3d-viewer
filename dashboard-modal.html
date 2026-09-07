@@ -75,6 +75,7 @@
       <button class="btn" id="pricingBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">💲 Цены и коэффициенты</button>
       <button class="btn" id="workers" type="button" style="border-color:#4f7cff;color:#a9c2ff">⚙ Зарплата / Работники</button>
       <button class="btn" id="financeBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">₸ Финансы</button>
+      <button class="btn" id="discBtn" type="button" style="border-color:#e8c07d;color:#e8c07d" title="Где и сколько уступаем клиентам: спеццены в расчётах против тарифа">% Уступки</button>
       <button class="btn" id="backupBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff" title="Автоматические резервные копии системы">🗄 Резервные копии</button>
     </div>
     <button class="btn" id="close" type="button">Закрыть</button>
@@ -681,6 +682,45 @@
   document.getElementById('workers').onclick=function(){
     t.modal({ url:'./workers-modal.html?t='+Date.now(), fullscreen:true, title:'Зарплата и работники', accentColor:'#1f6ce8' });
   };
+  // ОТЧЁТ «УСТУПКИ» (решение Асхата, 09.2026): спеццены из расчётов против тарифа —
+  // по операциям/толщинам (где торг стал нормой → тариф завышен), по клиентам, по инженерам
+  document.getElementById('discBtn').onclick=function(){
+    var r=range();
+    var old=document.getElementById('discOverlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='discOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column;color:var(--txt)';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#8a6d00;color:#fff;flex:0 0 auto">'+
+      '<button id="discBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">% Уступки клиентам: '+r.from+' — '+r.to+'</div></div>'+
+      '<div id="discBody" style="flex:1;overflow:auto;padding:16px;max-width:980px;margin:0 auto;width:100%">Загрузка…</div>';
+    document.body.appendChild(ov);
+    document.getElementById('discBack').onclick=function(){ ov.remove(); };
+    fetch(WORKER+'/discount-report?from='+r.from+'&to='+r.to).then(function(x){return x.json();}).then(function(j){
+      var b=document.getElementById('discBody'); if(!b) return;
+      if(!j||j.error){ b.textContent='Ошибка: '+((j&&j.error)||'?'); return; }
+      function m(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
+      var h='';
+      h+='<div class="card" style="padding:14px;margin-bottom:14px"><div style="font-size:15px;font-weight:700">Итого за период</div>'+
+        '<div class="muted" style="margin-top:4px">Расчётов: <b>'+j.orders+'</b> · с уступкой: <b>'+j.ordersWithDiscount+'</b> · работы по тарифу: <b>'+m(j.totalStandard)+' ₸</b> · уступлено: <b style="color:#e8c07d">'+m(j.totalDiscount)+' ₸ ('+j.pct+'%)</b></div>'+
+        '<div class="small muted" style="margin-top:6px">Как читать: если по какой-то операции уступка стала нормой (частота 50%+), тариф выше рынка — его лучше снизить и убрать торг. Где уступок нет — есть запас поднять.</div></div>';
+      if(!j.ordersWithDiscount){ h+='<div class="muted">За период спеццены в расчётах не использовались. Окошко «спец. ₸/ед» — в строке операции калькулятора (видно тем, кто видит стоимость).</div>'; b.innerHTML=h; return; }
+      h+='<h3>По операциям и толщинам</h3><table><thead><tr><th>Операция</th><th class="num">Расчётов</th><th class="num">С уступкой</th><th class="num">Частота</th><th class="num">По тарифу</th><th class="num">Уступлено</th><th class="num">%</th></tr></thead><tbody>';
+      (j.byOp||[]).filter(function(o){return o.disc>0;}).forEach(function(o){
+        h+='<tr><td>'+esc(o.key)+'</td><td class="num">'+o.orders+'</td><td class="num">'+o.discounted+'</td><td class="num" style="color:'+(o.freq>=50?'#f28b82':'inherit')+'">'+o.freq+'%</td><td class="num">'+m(o.std)+'</td><td class="num" style="color:#e8c07d">'+m(o.disc)+'</td><td class="num">'+o.pct+'%</td></tr>';
+      });
+      h+='</tbody></table>';
+      h+='<h3>По клиентам</h3><table><thead><tr><th>Клиент</th><th class="num">Заказов с уступкой</th><th class="num">По тарифу</th><th class="num">Уступлено</th><th class="num">%</th></tr></thead><tbody>';
+      (j.byClient||[]).forEach(function(c){ h+='<tr><td>'+esc(c.name)+'</td><td class="num">'+c.orders+'</td><td class="num">'+m(c.std)+'</td><td class="num" style="color:#e8c07d">'+m(c.disc)+'</td><td class="num">'+c.pct+'%</td></tr>'; });
+      h+='</tbody></table>';
+      h+='<h3>По инженерам (кто согласовал)</h3><table><thead><tr><th>Инженер</th><th class="num">Заказов</th><th class="num">Уступлено</th><th class="num">%</th></tr></thead><tbody>';
+      (j.byEngineer||[]).forEach(function(c){ h+='<tr><td>'+esc(c.name)+'</td><td class="num">'+c.orders+'</td><td class="num" style="color:#e8c07d">'+m(c.disc)+'</td><td class="num">'+c.pct+'%</td></tr>'; });
+      h+='</tbody></table>';
+      h+='<h3>Заказы с уступкой</h3><table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">По тарифу</th><th class="num">Уступлено</th><th class="num">%</th><th>Дата</th></tr></thead><tbody>';
+      (j.list||[]).forEach(function(o){ h+='<tr><td>'+esc(o.number)+'</td><td>'+esc(o.name)+'</td><td>'+esc(o.client)+'</td><td class="num">'+m(o.std)+'</td><td class="num" style="color:#e8c07d">'+m(o.disc)+'</td><td class="num">'+o.pct+'%</td><td class="small muted">'+esc(o.date)+'</td></tr>'; });
+      h+='</tbody></table>';
+      b.innerHTML=h;
+    }).catch(function(e){ var b=document.getElementById('discBody'); if(b) b.textContent='Сеть: '+(e&&e.message||e); });
+  };
   document.getElementById('financeBtn').onclick=function(){
     var r=range();
     // открываем страницу «Финансы» в этом же окне: оверлей с iframe поверх панели
@@ -778,6 +818,7 @@
     var wb=document.getElementById('workers'); if(wb) wb.style.display='none';
     var pb=document.getElementById('pricingBtn'); if(pb) pb.style.display='none';
     var fb=document.getElementById('financeBtn'); if(fb) fb.style.display='none';
+    var db=document.getElementById('discBtn'); if(db) db.style.display='none';
     t.member('id').then(function(me){
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
         .then(function(r){return r.json();});
