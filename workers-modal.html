@@ -125,6 +125,17 @@
         <label style="font-size:12.5px" title="Только для личного «% от работ сданных заказов» начальника цеха (поле в его карточке ниже) — не общий «офисный» порог, у других ролей на этом механизме своя цифра не появится, пока для них тоже не включат этот же процент.">Порог начальника цеха от работ, ₸ <input id="officeCapPerOrder" type="number" min="0" step="10000" style="width:110px" placeholder="нет"></label>
         <label style="font-size:12.5px" title="Сверх порога — этот % от стоимости работ заказа.">сверх порога, % <input id="officeCapOverWorksPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="1"></label>
       </div>
+      <div style="margin-top:14px;padding-top:10px;border-top:1px dashed var(--line)">
+        <b style="font-size:12.5px">Мотивация начальника цеха: сроки и брак</b>
+        <div class="hint" style="margin:4px 0 8px">Премия начисляется, если доля заказов, сданных в срок за месяц, не ниже порога (срок заказа — от создания карточки до отметки «сдали»). Доля за брак вычитается из сдельной: % от потерь компании на переделках за месяц. Пусто «кому» = правило выключено.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center">
+          <label style="font-size:12.5px">Кому <select id="bossWorkerId" style="min-width:180px"><option value="">— выключено —</option></select></label>
+          <label style="font-size:12.5px">Премия за сроки, ₸/мес <input id="bossOnTimeBonus" type="number" min="0" step="1000" style="width:100px" placeholder="40000"></label>
+          <label style="font-size:12.5px">если в срок не менее, % <input id="bossOnTimePct" type="number" min="0" max="100" step="1" style="width:70px" placeholder="85"></label>
+          <label style="font-size:12.5px">срок заказа по умолчанию, дней <input id="bossLeadDays" type="number" min="1" step="1" style="width:70px" placeholder="14"></label>
+          <label style="font-size:12.5px">доля за брак цеха, % от потерь компании <input id="bossReworkPct" type="number" min="0" max="100" step="1" style="width:70px" placeholder="30"></label>
+        </div>
+      </div>
       <div class="hint" style="margin-top:6px">Сверх порога платится указанный %, срезанный остаток фиксируется по каждому работнику — сумма видна только руководству во вкладке «Зарплаты». Работнику порог, процент и удержания не показываются.</div>
       <div class="savebar" style="margin-top:10px">
         <button class="btn" id="saveShares" type="button" style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff;font-weight:700;padding:8px 18px">💾 Сохранить</button>
@@ -448,6 +459,9 @@
           putBlank('shareShleifCut', c.shareShleifCut); putBlank('shareShleifWeld', c.shareShleifWeld);
           putBlank('shareElectrochem', c.shareElectrochem); putBlank('shareComponents', c.shareComponents);
           putBlank('shareRepair', c.shareRepair);
+          putBlank('bossOnTimeBonus', c.bossOnTimeBonus); putBlank('bossOnTimePct', c.bossOnTimePct); putBlank('bossLeadDays', c.bossLeadDays); putBlank('bossReworkPct', c.bossReworkPct);
+          window.__BOSS_ID=c.bossWorkerId||'';
+          var bsel=document.getElementById('bossWorkerId'); if(bsel&&window.WORKERS){ bsel.innerHTML='<option value="">— выключено —</option>'+window.WORKERS.filter(function(w){return w.active!=0;}).map(function(w){return '<option value="'+w.id+'"'+((c.bossWorkerId||'')===w.id?' selected':'')+'>'+esc(w.name)+'</option>';}).join(''); }
           var cap=document.getElementById('capPerOrder'); if(cap) cap.value = (c.pieceCapPerOrder>0) ? c.pieceCapPerOrder : '';
           var cov=document.getElementById('capOverWorksPct'); if(cov) cov.value = (c.pieceCapOverWorks!=null&&c.pieceCapOverWorks!=='') ? c.pieceCapOverWorks : '';
           var ecap=document.getElementById('engCapPerOrder'); if(ecap) ecap.value = (c.engCapPerOrder>0) ? c.engCapPerOrder : '';
@@ -462,7 +476,11 @@
         .then(function(d){
           rowsEl.innerHTML='';
           var ws=(d&&d.workers)||[];
+          window.WORKERS=ws;
           ws.forEach(function(w){ rowsEl.appendChild(makeRow(w)); });
+          // выпадашка «кому» в мотивации начальника — теперь есть кем наполнить
+          var bsel2=document.getElementById('bossWorkerId');
+          if(bsel2){ var cur=window.__BOSS_ID||bsel2.value||''; bsel2.innerHTML='<option value="">— выключено —</option>'+ws.filter(function(w){return w.active!=0;}).map(function(w){return '<option value="'+w.id+'"'+(cur===w.id?' selected':'')+'>'+esc(w.name)+'</option>';}).join(''); }
           document.getElementById('emptyHint').style.display = ws.length? 'none':'block';
           recalcWages();
           updateCount();
@@ -606,6 +624,7 @@
             try {
               var sh={ shareMontazh:+document.getElementById('shareMontazh').value||0,
                        shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value,
+                       bossWorkerId:document.getElementById('bossWorkerId').value, bossOnTimeBonus:document.getElementById('bossOnTimeBonus').value, bossOnTimePct:document.getElementById('bossOnTimePct').value, bossLeadDays:document.getElementById('bossLeadDays').value, bossReworkPct:document.getElementById('bossReworkPct').value,
                        capPerOrder:+document.getElementById('capPerOrder').value||0,
                        capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
                        engCapPerOrder:+document.getElementById('engCapPerOrder').value||0,
@@ -641,6 +660,7 @@
       try {
         var sh={ shareMontazh:+document.getElementById('shareMontazh').value||0,
                        shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value,
+                       bossWorkerId:document.getElementById('bossWorkerId').value, bossOnTimeBonus:document.getElementById('bossOnTimeBonus').value, bossOnTimePct:document.getElementById('bossOnTimePct').value, bossLeadDays:document.getElementById('bossLeadDays').value, bossReworkPct:document.getElementById('bossReworkPct').value,
                  capPerOrder:+document.getElementById('capPerOrder').value||0,
                  capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
                  engCapPerOrder:+document.getElementById('engCapPerOrder').value||0,
