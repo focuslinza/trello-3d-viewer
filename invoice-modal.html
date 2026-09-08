@@ -765,6 +765,39 @@
         else alert('Не удалось: '+((j&&j.error)||'?'));
       }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
   }
+  // ФОРМА НАЛИЧНЫХ — окно с кнопками (решение Асхата, 09.2026: без ввода цифр)
+  function askCashForm(){
+    return new Promise(function(resolve){
+      var ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center';
+      ov.innerHTML='<div style="background:var(--bg2,#22272b);color:var(--txt,#eee);border:1px solid var(--line,#3a414a);border-radius:12px;padding:18px 20px;width:min(420px,92vw);box-shadow:0 10px 40px rgba(0,0,0,.5)">'+
+        '<div style="font-weight:700;font-size:15px;margin-bottom:10px">Оплата наличными — как придут деньги?</div>'+
+        '<div style="display:flex;gap:10px;margin-bottom:12px">'+
+          '<button type="button" class="btn" id="cfKaspi" style="flex:1;padding:12px;font-size:14px">📱 Перевод на Kaspi</button>'+
+          '<button type="button" class="btn" id="cfBills" style="flex:1;padding:12px;font-size:14px">💵 Купюрами</button>'+
+        '</div>'+
+        '<div id="cfNoteBox" style="display:none">'+
+          '<label class="small muted" id="cfNoteLbl">Кому передадут деньги</label>'+
+          '<input type="text" id="cfNote" placeholder="Имя сотрудника" style="width:100%;box-sizing:border-box;margin:4px 0 10px">'+
+          '<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn" id="cfBack">← Назад</button><button type="button" class="btn green" id="cfOk">Готово</button></div>'+
+        '</div>'+
+        '<div style="text-align:right;margin-top:6px"><button type="button" class="btn ghost" id="cfCancel">Отмена</button></div>'+
+      '</div>';
+      document.body.appendChild(ov);
+      var kind=null;
+      function done(v){ ov.remove(); resolve(v); }
+      ov.querySelector('#cfCancel').onclick=function(){ done(null); };
+      ov.querySelector('#cfKaspi').onclick=function(){ kind='kaspi'; ov.querySelector('#cfNoteLbl').textContent='На чей номер / аккаунт Kaspi (можно не указывать)'; ov.querySelector('#cfNote').placeholder='например: Асхат'; ov.querySelector('#cfNoteBox').style.display=''; ov.querySelector('#cfNote').focus(); };
+      ov.querySelector('#cfBills').onclick=function(){ kind='cash'; ov.querySelector('#cfNoteLbl').textContent='Кому передадут купюры (обязательно)'; ov.querySelector('#cfNote').placeholder='имя сотрудника'; ov.querySelector('#cfNoteBox').style.display=''; ov.querySelector('#cfNote').focus(); };
+      ov.querySelector('#cfBack').onclick=function(){ kind=null; ov.querySelector('#cfNoteBox').style.display='none'; };
+      ov.querySelector('#cfOk').onclick=function(){
+        var note=(ov.querySelector('#cfNote').value||'').trim();
+        if(kind==='cash' && !note){ alert('Укажите, кому отдадут купюры — иначе бухгалтерия не найдёт деньги.'); return; }
+        done({ kind:kind, note:note });
+      };
+      ov.querySelector('#cfNote').addEventListener('keydown', function(e){ if(e.key==='Enter') ov.querySelector('#cfOk').click(); });
+    });
+  }
   function markHidden(cardId, hidden){
     var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]; if(!o||o.isRepair) return;
     fetch(WORKER+'/calc-hide',{ method:'POST', headers:{'Content-Type':'application/json'},
@@ -839,7 +872,7 @@
     if(d.length===10) d='7'+d;
     return d;
   }
-  function generate(){
+  async function generate(){
     if(!setupFonts()){ alert('Не удалось загрузить генератор PDF (pdfMake). Проверьте интернет.'); return; }
     var phoneRaw=(document.getElementById('waPhone')||{}).value||'';
     var phone=normPhone(phoneRaw);
@@ -850,22 +883,10 @@
     // как придут деньги — Kaspi (перевод) или купюры (кому отдали) — для бухгалтерии
     var CASH_INFO = null;
     if (supplierKey === 'cash') {
-      var pick = prompt('Оплата наличными. Как придут деньги?\n\n1 — перевод на Kaspi\n2 — купюрами (на руки)\n\nВведите 1 или 2:', '1');
-      if (pick === null) return;
-      pick = String(pick).trim();
-      if (pick !== '1' && pick !== '2') { alert('Введите 1 (Kaspi) или 2 (купюры).'); return; }
-      if (pick === '2') {
-        var who = prompt('Купюры: кому передадут деньги? (имя сотрудника, обязательно)', '');
-        if (who === null) return;
-        if (!String(who).trim()) { alert('Укажите, кому отдадут купюры — иначе бухгалтерия не найдёт деньги.'); return; }
-        CASH_INFO = { kind: 'cash', note: String(who).trim() };
-      } else {
-        var note = prompt('Kaspi: на чей номер/аккаунт придёт перевод? (можно оставить пустым)', '');
-        if (note === null) return;
-        CASH_INFO = { kind: 'kaspi', note: String(note || '').trim() };
-      }
+      CASH_INFO = await askCashForm();
+      if (!CASH_INFO) return; // отменили
     }
-    var gen=document.getElementById('gen'); gen.disabled=true; gen.textContent='Готовлю…';
+    gen.disabled=true; gen.textContent='Готовлю…';
     // commit the invoice number (locks it so the next one is +1)
     // монтаж сначала сохраняем в карточку: заработок бригаде считается по нему
     var mzSave = mzValid()
