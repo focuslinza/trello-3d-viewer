@@ -495,10 +495,27 @@
       h+='<div class="kpis">';
       h+='<div class="kpi" title="Сколько заказов посчитано в калькуляторе за выбранный период (по дате расчёта)"><div class="k">Заказов</div><div class="v">'+(T.orders||0)+'</div></div>';
       h+='<div class="kpi" title="Общая сумма этих заказов — объём взятой работы, а не деньги в кассе"><div class="k">На сумму</div><div class="v">'+money(T.revenue)+' ₸</div></div>';
-      h+='<div class="kpi green" title="Из заказов этого периода — какие уже оплачены клиентом (флажок «оплачен»)"><div class="k">Оплачено</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
+      h+='<div class="kpi green" id="kpiPaid" title="Нажмите: куда упали деньги — по поставщикам счетов и форме наличных" style="cursor:pointer"><div class="k">Оплачено ▾</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
       h+='<div class="kpi red" title="Дебиторка по заказам периода: работа отдана, деньги не пришли"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
       h+='<div class="kpi amber" title="Заказы, где проставлены все четыре отметки: счёт выслан, оплачен, сдали, акт подписан"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
       h+='</div>';
+      // РАЗБИВКА ОПЛАТ (решение Асхата, 09.2026): ФИРДАУС / TTMS / MetalShop / нал Kaspi / нал купюры
+      if(window.SHOW_VIA && T.byVia){
+        var order=['firdaus','too','ip','cash_kaspi','cash_bills','cash_unknown','unknown'];
+        var keys=Object.keys(T.byVia).sort(function(a,c){ return order.indexOf(a)-order.indexOf(c); });
+        h+='<div class="card" style="padding:10px 14px;margin:6px 0 12px">';
+        h+='<div style="font-weight:700;margin-bottom:6px">Оплачено — куда упало</div>';
+        h+='<table><thead><tr><th>Куда</th><th class="num">Заказов</th><th class="num">Сумма</th><th></th></tr></thead><tbody>';
+        keys.forEach(function(k){ var v=T.byVia[k];
+          h+='<tr><td>'+esc(v.label)+'</td><td class="num">'+v.count+'</td><td class="num"><b>'+money(v.sum)+' ₸</b></td><td><span class="lnk viaOpen" data-k="'+esc(k)+'">'+(window.VIA_OPEN===k?'скрыть':'детали')+'</span></td></tr>';
+          if(window.VIA_OPEN===k){
+            h+='<tr><td colspan="4"><table style="opacity:.85;margin:4px 0 8px"><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Оплачен</th><th>Счёт</th><th>Кому (нал)</th></tr></thead><tbody>';
+            (v.orders||[]).forEach(function(o){ h+='<tr><td>'+esc(o.number)+'</td><td>'+esc(o.name)+'</td><td>'+esc(o.client)+'</td><td class="num">'+money(o.total)+' ₸</td><td class="muted">'+esc(String(o.paidAt||'').slice(0,10))+'</td><td>'+(o.invoiceNumber?'№'+esc(o.invoiceNumber):'—')+'</td><td>'+esc(o.cashNote||'')+'</td></tr>'; });
+            h+='</tbody></table></td></tr>';
+          }
+        });
+        h+='</tbody></table></div>';
+      }
       var rows=visibleRows();
       if(!rows.length){
         h+='<div class="empty">Нет заказов по выбранным условиям'+(FILTER?' в этом периоде':'')+'.</div>';
@@ -522,7 +539,9 @@
                  '<td>'+esc(r.client||'')+'</td>'+
                  '<td class="num">'+money(r.total)+' ₸</td>'+
                  '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
-                 '<td>'+chip(r,'paid','оплачен')+'</td>'+
+                 '<td style="white-space:nowrap">'+chip(r,'paid','оплачен')+
+               (r.payVia==='cash'?' <span class="ncash" data-card="'+esc(r.cardId)+'" title="Наличные: '+(r.cashKind==='kaspi'?'перевод на Kaspi':(r.cashKind==='cash'?'купюры — '+esc(r.cashNote||'кому не указано'):'форма не указана'))+'" style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;background:#3a2f14;color:#e8c07d;font-size:11px;font-weight:800;cursor:pointer;vertical-align:middle">Н</span>':'')+
+             '</td>'+
                  '<td>'+chip(r,'delivered','сдали')+'</td>'+
                  '<td>'+chip(r,'actSigned','акт')+'</td>'+
                  '<td class="muted">'+esc(r.date)+'</td>'+
@@ -542,7 +561,9 @@
              '<td>'+esc(r.name)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span>'+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+'</td>'+
              '<td>'+esc(r.client)+'</td><td class="num">'+money(r.total)+' ₸</td>'+
              '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
-             '<td>'+chip(r,'paid','оплачен')+'</td>'+
+             '<td style="white-space:nowrap">'+chip(r,'paid','оплачен')+
+               (r.payVia==='cash'?' <span class="ncash" data-card="'+esc(r.cardId)+'" title="Наличные: '+(r.cashKind==='kaspi'?'перевод на Kaspi':(r.cashKind==='cash'?'купюры — '+esc(r.cashNote||'кому не указано'):'форма не указана'))+'" style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;background:#3a2f14;color:#e8c07d;font-size:11px;font-weight:800;cursor:pointer;vertical-align:middle">Н</span>':'')+
+             '</td>'+
              '<td>'+chip(r,'delivered','сдали')+'</td>'+
              '<td>'+chip(r,'actSigned','акт')+'</td>'+
              '<td class="muted">'+esc(r.date)+'</td>'+
@@ -1000,6 +1021,12 @@
       [].forEach.call(document.querySelectorAll('.prow'), function(row){
         row.onclick=function(){ var w=this.getAttribute('data-w'); PAY_OPEN[w]=!PAY_OPEN[w]; render(); };
       });
+      var kp=document.getElementById('kpiPaid'); if(kp) kp.onclick=function(){ window.SHOW_VIA=!window.SHOW_VIA; render(); };
+      [].forEach.call(document.querySelectorAll('.viaOpen'), function(el){ el.onclick=function(){ var k=this.getAttribute('data-k'); window.VIA_OPEN=(window.VIA_OPEN===k)?'':k; render(); }; });
+      [].forEach.call(document.querySelectorAll('.ncash'), function(el){ el.onclick=function(){
+        var id=this.getAttribute('data-card'); var r=ROWS.filter(function(x){return x.cardId===id;})[0]; if(!r) return;
+        alert('Наличные по заказу №'+(r.number||'')+'\n'+(r.invoiceNumber?('Счёт №'+r.invoiceNumber+'\n'):'')+'Форма: '+(r.cashKind==='kaspi'?'перевод на Kaspi':(r.cashKind==='cash'?'купюры':'не указана'))+(r.cashNote?('\nКому / куда: '+r.cashNote):'')+'\nСумма: '+money(r.total)+' ₸'+(r.paid?('\nОплачен: '+String(r.paidAt||'').slice(0,10)):'\nЕщё не оплачен'));
+      }; });
       // ОТКАЗ КЛИЕНТА (решение Асхата, 09.2026)
       [].forEach.call(document.querySelectorAll('.ocancel'), function(b){
         b.onclick=function(){ var cardId=this.getAttribute('data-card'), num=this.getAttribute('data-num');

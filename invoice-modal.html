@@ -317,7 +317,7 @@
       ((j&&j.rows)||[]).forEach(function(row){
         if(have[row.id]) return;
         ALL_ORDERS.push({ cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
-          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'' });
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'', sampleOf:row.sample_card_id||'', mainOf:row.main_card_id||'' });
         added++;
       });
       return added>0;
@@ -329,7 +329,7 @@
         // taxIncluded: старые заказы считались С НАЛОГОМ внутри суммы — к ним
         // множитель поставщика применять нельзя, иначе налог начислится дважды
         return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
-          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'' };
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'', sampleOf:row.sample_card_id||'', mainOf:row.main_card_id||'' };
       });
     }).catch(function(){ return []; });
     // viewerId обязателен — иначе сервер прячет цены и ремонты «исчезают» из счёта
@@ -524,6 +524,8 @@
           '<td>'+(o.paid?'':'<input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'>')+'</td>'+
           '<td class="small">'+numCell+'</td>'+
           '<td>'+esc(o.name)+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+
+            (o.sampleOf?' <span class="small" style="color:#e8c07d" title="Основной заказ, созданный из одобренного образца">по образцу</span>':'')+
+            (o.mainOf?' <span class="small" style="color:#e8c07d" title="Образец: по нему уже создан основной заказ">образец → есть основной</span>':'')+
             (!o.paid&&!o.isRepair?' <button class="btn ghost cancelbtn" data-id="'+esc(o.cardId)+'" data-num="'+esc(o.number||'')+'" type="button" style="padding:1px 7px;font-size:11px;color:#f28b82" title="Отказ клиента: уйдёт из счетов, бухгалтерии, аналитики и с доски (обратимо)">отказ</button> <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" style="padding:1px 7px;font-size:11px" title="Убрать заказ из списка (тест/дубль, не оплата)">убрать</button>':'')+'</td>'+
           '<td class="num">'+(o.paid?'<span class="muted">'+(o.qty||1)+'</span>':'<input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'">')+'</td>'+
           (ONLY_REPAIR ? '' : (o.paid ? '<td class="muted small">'+((+o.engCoef||0)===0?'нет':(+o.engCoef===0.5?'+50%':'+100%'))+'</td>' :
@@ -844,6 +846,25 @@
     // номер WhatsApp не обязателен (отправка убрана)
     // окно WhatsApp открываем СРАЗУ по клику (иначе браузер заблокирует всплывающее)
     var waWin = null; // WhatsApp больше не открываем — счёт скачивается PDF, отправляют сотрудники сами
+    // ФОРМА НАЛИЧНЫХ (решение Асхата, 09.2026): при поставщике «Наличные» уточняем,
+    // как придут деньги — Kaspi (перевод) или купюры (кому отдали) — для бухгалтерии
+    var CASH_INFO = null;
+    if (supplierKey === 'cash') {
+      var pick = prompt('Оплата наличными. Как придут деньги?\n\n1 — перевод на Kaspi\n2 — купюрами (на руки)\n\nВведите 1 или 2:', '1');
+      if (pick === null) return;
+      pick = String(pick).trim();
+      if (pick !== '1' && pick !== '2') { alert('Введите 1 (Kaspi) или 2 (купюры).'); return; }
+      if (pick === '2') {
+        var who = prompt('Купюры: кому передадут деньги? (имя сотрудника, обязательно)', '');
+        if (who === null) return;
+        if (!String(who).trim()) { alert('Укажите, кому отдадут купюры — иначе бухгалтерия не найдёт деньги.'); return; }
+        CASH_INFO = { kind: 'cash', note: String(who).trim() };
+      } else {
+        var note = prompt('Kaspi: на чей номер/аккаунт придёт перевод? (можно оставить пустым)', '');
+        if (note === null) return;
+        CASH_INFO = { kind: 'kaspi', note: String(note || '').trim() };
+      }
+    }
     var gen=document.getElementById('gen'); gen.disabled=true; gen.textContent='Готовлю…';
     // commit the invoice number (locks it so the next one is +1)
     // монтаж сначала сохраняем в карточку: заработок бригаде считается по нему
@@ -878,7 +899,8 @@
           cardIds:(function(){ var ids=selectedOrders().filter(function(o){ return !o.isRepair; }).map(function(o){ return o.cardId; });
             if(mzValid() && ids.indexOf(MZ.cardId)<0) ids.push(MZ.cardId);   // счёт «только монтаж» тоже привязан к заказу
             return ids; })(),
-          repairIds:selectedOrders().filter(function(o){ return o.isRepair; }).map(function(o){ return o.repairId; })
+          repairIds:selectedOrders().filter(function(o){ return o.isRepair; }).map(function(o){ return o.repairId; }),
+          cashKind:(CASH_INFO&&CASH_INFO.kind)||null, cashNote:(CASH_INFO&&CASH_INFO.note)||''
         })
       }).then(function(r){return r.json();}).catch(function(){return {};})
       // 2) перенос карточек в «Ждем оплату» — БЕЗ статуса «выслан» (moveOnly):
