@@ -546,7 +546,10 @@
              '<td>'+chip(r,'delivered','сдали')+'</td>'+
              '<td>'+chip(r,'actSigned','акт')+'</td>'+
              '<td class="muted">'+esc(r.date)+'</td>'+
-             (IS_ADMIN?('<td><button class="btn ohide" data-card="'+esc(r.cardId)+'" type="button" title="Скрыть тестовый заказ из бухгалтерии и аналитики (расчёт останется в базе)" style="padding:2px 8px;font-size:11px">🗄</button></td>'):'')+
+             '<td style="white-space:nowrap">'+
+               (r.paid?'':'<button class="btn ocancel" data-card="'+esc(r.cardId)+'" data-num="'+esc(r.number||'')+'" type="button" title="Отказ клиента: заказ не пошёл в производство или клиент отказался платить. Уйдёт из бухгалтерии, счетов, аналитики и с доски (карточка в архив). Обратимо." style="padding:2px 8px;font-size:11px;color:#f28b82;border-color:#5a2e2e">отказ</button> ')+
+               (IS_ADMIN?('<button class="btn ohide" data-card="'+esc(r.cardId)+'" type="button" title="Скрыть тестовый заказ из бухгалтерии и аналитики (расчёт останется в базе)" style="padding:2px 8px;font-size:11px">🗄</button>'):'')+
+             '</td>'+
              '</tr>';
         });
         h+='</tbody></table>';
@@ -996,6 +999,16 @@
       });
       [].forEach.call(document.querySelectorAll('.prow'), function(row){
         row.onclick=function(){ var w=this.getAttribute('data-w'); PAY_OPEN[w]=!PAY_OPEN[w]; render(); };
+      });
+      // ОТКАЗ КЛИЕНТА (решение Асхата, 09.2026)
+      [].forEach.call(document.querySelectorAll('.ocancel'), function(b){
+        b.onclick=function(){ var cardId=this.getAttribute('data-card'), num=this.getAttribute('data-num');
+          var reason=prompt('Отказ по заказу №'+num+'. Укажите причину (клиент отказался / не пошёл в производство / дубль):','клиент отказался');
+          if(reason===null) return;
+          fetch(WORKER+'/calc-cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cardId:cardId,reason:reason,byName:(ME&&ME.name)||''})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error||'?'); load(); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
       });
       [].forEach.call(document.querySelectorAll('.ohide'), function(b){
         b.onclick=function(){ var cardId=this.getAttribute('data-card');

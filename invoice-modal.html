@@ -317,7 +317,7 @@
       ((j&&j.rows)||[]).forEach(function(row){
         if(have[row.id]) return;
         ALL_ORDERS.push({ cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
-          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'', discount:+row.discount||0 });
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'' });
         added++;
       });
       return added>0;
@@ -329,7 +329,7 @@
         // taxIncluded: старые заказы считались С НАЛОГОМ внутри суммы — к ним
         // множитель поставщика применять нельзя, иначе налог начислится дважды
         return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
-          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'', discount:+row.discount||0 };
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'' };
       });
     }).catch(function(){ return []; });
     // viewerId обязателен — иначе сервер прячет цены и ремонты «исчезают» из счёта
@@ -524,7 +524,7 @@
           '<td>'+(o.paid?'':'<input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'>')+'</td>'+
           '<td class="small">'+numCell+'</td>'+
           '<td>'+esc(o.name)+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+
-            (!o.paid&&!o.isRepair?' <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" style="padding:1px 7px;font-size:11px" title="Убрать заказ из списка (не оплата)">убрать</button>':'')+'</td>'+
+            (!o.paid&&!o.isRepair?' <button class="btn ghost cancelbtn" data-id="'+esc(o.cardId)+'" data-num="'+esc(o.number||'')+'" type="button" style="padding:1px 7px;font-size:11px;color:#f28b82" title="Отказ клиента: уйдёт из счетов, бухгалтерии, аналитики и с доски (обратимо)">отказ</button> <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" style="padding:1px 7px;font-size:11px" title="Убрать заказ из списка (тест/дубль, не оплата)">убрать</button>':'')+'</td>'+
           '<td class="num">'+(o.paid?'<span class="muted">'+(o.qty||1)+'</span>':'<input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'">')+'</td>'+
           (ONLY_REPAIR ? '' : (o.paid ? '<td class="muted small">'+((+o.engCoef||0)===0?'нет':(+o.engCoef===0.5?'+50%':'+100%'))+'</td>' :
             '<td><select class="invSel" data-id="'+esc(o.cardId)+'" title="Степень изобретения назначает руководство: начисляется клиенту поверх работ, инженер получает свою долю от неё">'+
@@ -547,15 +547,15 @@
     // hidden orders (removed from the list) — restorable
     var hid = hiddenOrders();
     if(hid.length){
-      html+='<div style="margin-top:12px"><span class="lnk" id="hiddenToggle">'+(showHidden?'▾':'▸')+' Убранные заказы ('+hid.length+')</span></div>';
+      html+='<div style="margin-top:12px"><span class="lnk" id="hiddenToggle">'+(showHidden?'▾':'▸')+' Убранные и отказные заказы ('+hid.length+')</span></div>';
       if(showHidden){
         html+='<table style="margin-top:6px;opacity:.75"><thead><tr><th>№ карт.</th><th>Наименование (заказ)</th><th class="num">Сумма</th><th></th></tr></thead><tbody>';
         hid.forEach(function(o){
           html+='<tr>'+
             '<td class="small"><span class="lnk rev" data-id="'+esc(o.cardId)+'" title="Открыть карточку">'+esc(o.number||'—')+'</span></td>'+
-            '<td>'+esc(o.name)+'</td>'+
+            '<td>'+esc(o.name)+(o.cancelReason?' <span class="small" style="color:#f28b82">· отказ: '+esc(o.cancelReason)+'</span>':' <span class="small muted">· убран</span>')+'</td>'+
             '<td class="num">'+money(o.total)+' ₸</td>'+
-            '<td><button class="btn ghost unhidebtn" data-id="'+esc(o.cardId)+'" type="button" title="Вернуть заказ в список">вернуть</button></td>'+
+            '<td><button class="btn ghost unhidebtn" data-id="'+esc(o.cardId)+'" data-cancel="'+(o.cancelReason?'1':'0')+'" type="button" title="Вернуть заказ в список'+(o.cancelReason?' и разархивировать карточку':'')+'">вернуть</button></td>'+
           '</tr>';
         });
         html+='</tbody></table>';
@@ -654,7 +654,11 @@
       });
     });
     [].forEach.call(document.querySelectorAll('.hidebtn'), function(b){ b.addEventListener('click', function(){ markHidden(this.getAttribute('data-id'), true); }); });
-    [].forEach.call(document.querySelectorAll('.unhidebtn'), function(b){ b.addEventListener('click', function(){ markHidden(this.getAttribute('data-id'), false); }); });
+    [].forEach.call(document.querySelectorAll('.unhidebtn'), function(b){ b.addEventListener('click', function(){
+      if(this.getAttribute('data-cancel')==='1') cancelOrder(this.getAttribute('data-id'), '', true); else markHidden(this.getAttribute('data-id'), false); }); });
+    [].forEach.call(document.querySelectorAll('.cancelbtn'), function(b){ b.addEventListener('click', function(){
+      var reason=prompt('Отказ по заказу №'+this.getAttribute('data-num')+'. Причина (клиент отказался / не пошёл в производство / дубль):','клиент отказался');
+      if(reason===null) return; cancelOrder(this.getAttribute('data-id'), reason, false); }); });
     [].forEach.call(document.querySelectorAll('.rev'), function(s){ s.addEventListener('click', function(){ openCard(this.getAttribute('data-id')); }); });
     // доп. строки счёта: правки пишутся в состояние без перерисовки (не терять фокус),
     // сумма строки и общий итог обновляются на лету
@@ -749,6 +753,16 @@
       }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
   }
 
+  // ОТКАЗ КЛИЕНТА (решение Асхата, 09.2026): скрыть везде + карточку в архив; обратимо
+  function cancelOrder(cardId, reason, undo){
+    var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]; if(!o||o.isRepair) return;
+    fetch(WORKER+'/calc-cancel',{ method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ cardId:cardId, reason:reason||'', undo:undo?1:0, byName:'' }) })
+      .then(function(r){return r.json();}).then(function(j){
+        if(j&&j.ok){ o.hidden=undo?0:1; o.cancelReason=undo?'':(reason||'отказ клиента'); if(o.hidden) o.checked=false; render(); }
+        else alert('Не удалось: '+((j&&j.error)||'?'));
+      }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
+  }
   function markHidden(cardId, hidden){
     var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]; if(!o||o.isRepair) return;
     fetch(WORKER+'/calc-hide',{ method:'POST', headers:{'Content-Type':'application/json'},
