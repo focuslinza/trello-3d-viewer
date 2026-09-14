@@ -108,6 +108,8 @@
       var ids=[], seen={};
       (parse(r.items_json,[])||[]).forEach(function(it){ if(it&&it.cardId&&!seen[it.cardId]){ seen[it.cardId]=1; ids.push(it.cardId); } });
       (parse(r.card_ids_json,[])||[]).forEach(function(id){ if(id&&!seen[id]){ seen[id]=1; ids.push(id); } });
+      // ремонтные заявки счёта — id вида R91 (решение Асхата, 09.2026)
+      (parse(r.repair_ids_json,[])||[]).forEach(function(rid){ var k='R'+rid; if(rid&&!seen[k]){ seen[k]=1; ids.push(k); } });
       return ids;
     }
     function ochip(o, field, label){
@@ -129,13 +131,15 @@
         }
         if(o.paid && p && (+p.received||0)<=0) anyPaidNoMoney=true;
         h+='<tr>'+
-           '<td><a class="onum" href="https://trello.com/c/'+esc(o.cardId)+'" target="_blank" title="Открыть карточку заказа в новой вкладке">'+esc(o.number||'—')+' ↗</a></td>'+
+           '<td>'+(o.isRepair
+              ? '<span class="onum" style="color:#c9a8ff" title="Ремонтная заявка">'+esc(o.number||'—')+'</span>'
+              : '<a class="onum" href="https://trello.com/c/'+esc(o.cardId)+'" target="_blank" title="Открыть карточку заказа в новой вкладке">'+esc(o.number||'—')+' ↗</a>')+'</td>'+
            '<td>'+esc(String(o.name||'').slice(0,70))+(String(o.name||'').length>70?'…':'')+'</td>'+
            '<td class="num">'+money(o.total)+' ₸</td>'+
            '<td>'+ochip(o,'invoiceSent','выслан')+'</td>'+
            '<td>'+ochip(o,'paid','оплачен')+'</td>'+
-           '<td>'+ochip(o,'delivered','сдали')+'</td>'+
-           '<td>'+ochip(o,'actSigned','акт')+'</td>'+
+           '<td>'+(o.isRepair?('<span class="chip'+(o.delivered?' on':'')+'" style="cursor:default;opacity:.75" title="Ремонт: «сдали» = заявка выполнена">'+(o.delivered?'✓ ':'')+'сдали</span>'):ochip(o,'delivered','сдали'))+'</td>'+
+           '<td>'+(o.isRepair?'<span class="muted">—</span>':ochip(o,'actSigned','акт'))+'</td>'+
            '</tr>';
       });
       h+='</tbody></table>';
@@ -162,6 +166,14 @@
           var cardId=this.getAttribute('data-card'), field=this.getAttribute('data-f');
           var o=ORD[cardId]; if(!o||o.missing) return;
           var newVal=!o[field]; this.classList.add('busy');
+          if(o.isRepair){
+            var f2=(field==='paid')?'paid':(field==='invoiceSent'?'invoice_sent':null);
+            if(!f2){ this.classList.remove('busy'); return; }
+            fetch(WORKER+'/repair-flags',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:o.repairId,field:f2,value:newVal?1:0})})
+              .then(function(x){return x.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); o[field]=newVal; render(); loadPayments&&loadPayments(); })
+              .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); render(); });
+            return;
+          }
           // те же вызовы, что во вкладке «Заказы»: «оплачен» идёт через /calc-paid
           // (авто-перемещение карточки, дата оплаты), остальное через /acct-set
           var p=(field==='paid')

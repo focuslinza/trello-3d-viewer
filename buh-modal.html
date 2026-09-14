@@ -852,9 +852,11 @@
     }
 
     function invStatusLabel(r){
-      if(r.status==='full') return ['оплачен полностью','var(--green)'];
-      if(r.status==='launched') return ['аванс '+(r.pct!=null?r.pct+'%':'')+' — в производстве','#579dff'];
-      if(r.status==='partial') return ['частично '+(r.pct!=null?r.pct+'%':''),'var(--amber)'];
+      // «вручную» — статус по отметкам «оплачен» у заказов/ремонтов, без подтверждения банка
+      var m=r.manual?' · вручную':'';
+      if(r.status==='full') return ['оплачен полностью'+m,'var(--green)'];
+      if(r.status==='launched') return ['аванс '+(r.pct!=null?r.pct+'%':'')+' — в производстве'+m,'#579dff'];
+      if(r.status==='partial') return ['частично '+(r.pct!=null?r.pct+'%':'')+(r.manual?(' · вручную '+r.manualPaidItems+' из '+r.manualItems):''),'var(--amber)'];
       return ['не оплачен','var(--muted)'];
     }
     function renderInvoicesBody(){
@@ -868,7 +870,7 @@
       h+='<div class="kpi"><div class="k">Аванс, в работе</div><div class="v" style="color:#579dff">'+(T.launched||0)+'</div></div>';
       h+='<div class="kpi green" title="Из заказов этого периода — какие уже оплачены клиентом (флажок «оплачен»)"><div class="k">Оплачено</div><div class="v">'+(T.full||0)+'</div></div>';
       h+='</div>';
-      h+='<div class="muted" style="margin:-6px 0 10px">Поступления подтягиваются из выписки БЦК автоматически. Порог запуска в производство: '+Math.round((INV_SHARE||0.5)*100)+'% суммы счёта. Статусы счетов не зависят от галочек по заказам.</div>';
+      h+='<div class="muted" style="margin:-6px 0 10px">Поступления подтягиваются из выписки БЦК автоматически; пока банк не подключён, статус считается по вашим отметкам «оплачен» у заказов и ремонтов счёта (помечается как «вручную»). Порог запуска в производство: '+Math.round((INV_SHARE||0.5)*100)+'% суммы счёта. Статусы счетов не зависят от галочек по заказам.</div>';
       h+='<div style="display:flex;gap:8px;margin-bottom:10px">'+
          '<div class="tab'+(INV_KIND==='all'?' active':'')+'" data-ik="all">Все счета</div>'+
          '<div class="tab'+(INV_KIND==='prod'?' active':'')+'" data-ik="prod">Изготовление</div>'+
