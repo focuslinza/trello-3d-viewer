@@ -53,17 +53,21 @@
     body.push({ text:[{text:'Всего к оплате: ',bold:true},{text:rubWords(total),bold:true}], fontSize:9.5, margin:[0,0,0,16] });
     body.push({ canvas:[{type:'line',x1:0,y1:0,x2:523,y2:0,lineWidth:0.7,lineColor:gray}], margin:[0,0,0,8] });
     // подпись директора поверх линии (некоторые клиенты требуют подписанный счёт)
-    body.push({ columns:[
+    // ПОДПИСЬ И ПЕЧАТЬ — ОДНИМ НЕРАЗРЫВНЫМ БЛОКОМ (урок 09.2026: печать уезжала
+    // вниз/на следующую страницу, когда блок не помещался в конце страницы).
+    // unbreakable держит подпись, печать и ФИО вместе; печать чуть меньше и
+    // плотнее посажена на подпись, чтобы блок занимал меньше высоты.
+    body.push({ unbreakable:true, columns:[
       {width:80,text:'Исполнитель',fontSize:9.5,margin:[0,10,0,0]},
       {width:150,stack: sup.noSign ? [
         {text:'______________________',fontSize:9.5,margin:[0,10,0,0]}
       ] : [
-        {image:DIRECTOR_SIGN, width:86, margin:[28,-30,0,0]},
-        {text:'______________________',fontSize:9.5,margin:[0,-16,0,0]}
+        {image:DIRECTOR_SIGN, width:86, margin:[28,-26,0,0]},
+        {text:'______________________',fontSize:9.5,margin:[0,-14,0,0]}
       ]},
-      (sup.seal==='ttms' ? {width:110, image:SEAL_TTMS, margin:[-60,-52,0,-40]} : {width:0, text:''}),
+      (sup.seal==='ttms' ? {width:96, image:SEAL_TTMS, margin:[-52,-44,0,-34]} : {width:0, text:''}),
       {width:'*',text:'/'+(sup.executor||'')+'/',fontSize:9.5,margin:[0,10,0,0]}
-    ], margin:[0,26,0,0] });
+    ], margin:[0,18,0,0] });
 
     return { pageSize:'A4', pageMargins:[40,36,40,36], defaultStyle:{ font:'DejaVu', fontSize:9 }, content:body };
   }
