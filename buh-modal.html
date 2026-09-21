@@ -686,7 +686,7 @@
       var _fullMonth=/-01$/.test(RANGE.from) && String(RANGE.from).slice(0,7)===String(RANGE.to).slice(0,7) && new Date(Date.UTC(+RANGE.to.slice(0,4),+RANGE.to.slice(5,7),0)).getUTCDate()===+RANGE.to.slice(8,10);
       if(PAY&&PAY.closed){
         h+='<div style="margin:14px 0 6px;padding:10px 12px;border:1px solid #2e5c44;background:#1c3329;border-radius:8px">🔒 <b>Месяц '+esc(_ymP)+' закрыт</b>'+(PAY.closedAt?(' '+esc(String(PAY.closedAt).slice(0,16)))+'':'')+(PAY.closedBy?(' · '+esc(PAY.closedBy)):'')+
-          ' — ведомость зафиксирована как выплачено; правки долей, порогов и цен её не меняют. '+
+          ' — начисления зафиксированы как выплачено; правки долей, порогов и цен их не меняют. Удержания (карта, еда) можно вносить и после закрытия. '+
           '<button class="btn" id="payReopen" type="button" style="margin-left:8px;padding:3px 10px;font-size:12px">Открыть снова</button></div>';
       } else if(_fullMonth){
         h+='<div style="margin:14px 0 6px"><button class="btn" id="payClose" type="button" style="border-color:#2e5c44;color:#4bce97" title="Зафиксировать ведомость месяца как выплаченную: дальнейшие изменения процентов, порогов и цен её не пересчитают. Можно открыть снова.">🔒 Закрыть месяц '+esc(_ymP)+'</button>'+
@@ -1061,8 +1061,6 @@
         post('/payroll-close',{ ym:ym, reopen:1, byName:(ME&&ME.name)||'' }).then(function(){ loadPayroll(); })
           .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
       };
-      // в закрытом месяце поля удержаний только для чтения
-      if(PAY&&PAY.closed) [].forEach.call(document.querySelectorAll('.adjOff, .adjMeals'), function(el){ el.disabled=true; el.title='Месяц закрыт'; });
       // удержания: сохраняем по уходу из поля (месяц = месяц конца периода)
       [].forEach.call(document.querySelectorAll('.adjOff, .adjMeals'), function(el){
         el.onchange=function(){
