@@ -681,6 +681,17 @@
       // ведомость на ВСЕХ: сдельщики, окладники и «оклад + сдельная».
       // paySlip приходит от нового worker.js; старый отдаёт только salaried — тогда работаем по нему
       var ss=(PAY.paySlip||PAY.salaried||[]).filter(function(p){ return !f || p.name.toLowerCase().indexOf(f)>=0; });
+      // ЗАКРЫТИЕ МЕСЯЦА (решение Асхата, 09.2026)
+      var _ymP=(PAY&&PAY.ym)||String(RANGE.to).slice(0,7);
+      var _fullMonth=/-01$/.test(RANGE.from) && String(RANGE.from).slice(0,7)===String(RANGE.to).slice(0,7) && new Date(Date.UTC(+RANGE.to.slice(0,4),+RANGE.to.slice(5,7),0)).getUTCDate()===+RANGE.to.slice(8,10);
+      if(PAY&&PAY.closed){
+        h+='<div style="margin:14px 0 6px;padding:10px 12px;border:1px solid #2e5c44;background:#1c3329;border-radius:8px">🔒 <b>Месяц '+esc(_ymP)+' закрыт</b>'+(PAY.closedAt?(' '+esc(String(PAY.closedAt).slice(0,16)))+'':'')+(PAY.closedBy?(' · '+esc(PAY.closedBy)):'')+
+          ' — ведомость зафиксирована как выплачено; правки долей, порогов и цен её не меняют. '+
+          '<button class="btn" id="payReopen" type="button" style="margin-left:8px;padding:3px 10px;font-size:12px">Открыть снова</button></div>';
+      } else if(_fullMonth){
+        h+='<div style="margin:14px 0 6px"><button class="btn" id="payClose" type="button" style="border-color:#2e5c44;color:#4bce97" title="Зафиксировать ведомость месяца как выплаченную: дальнейшие изменения процентов, порогов и цен её не пересчитают. Можно открыть снова.">🔒 Закрыть месяц '+esc(_ymP)+'</button>'+
+          ' <span class="muted" style="font-size:12px">после выплаты — чтобы ведомость больше не менялась</span></div>';
+      }
       h+='<h3 style="margin:14px 0 6px">Зарплата к выдаче</h3>';
       if(!ss.length) h+='<div class="empty">Нет начислений за период.</div>';
       else {
@@ -1035,6 +1046,23 @@
       [].forEach.call(document.querySelectorAll('.prow'), function(row){
         row.onclick=function(){ var w=this.getAttribute('data-w'); PAY_OPEN[w]=!PAY_OPEN[w]; render(); };
       });
+      var pcB=document.getElementById('payClose');
+      if(pcB) pcB.onclick=function(){
+        var ym=(PAY&&PAY.ym)||String(RANGE.to).slice(0,7);
+        if(!confirm('Закрыть месяц '+ym+'?\n\nВедомость зафиксируется в текущем виде (как выплачено). Изменения процентов, порогов и цен больше не будут её пересчитывать. Удержания за этот месяц тоже станут неизменяемыми.')) return;
+        pcB.disabled=true; pcB.textContent='Фиксирую…';
+        post('/payroll-close',{ ym:ym, byName:(ME&&ME.name)||'' }).then(function(){ loadPayroll(); })
+          .catch(function(e){ pcB.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
+      };
+      var prB=document.getElementById('payReopen');
+      if(prB) prB.onclick=function(){
+        var ym=(PAY&&PAY.ym)||String(RANGE.to).slice(0,7);
+        if(!confirm('Открыть месяц '+ym+' снова? Ведомость будет пересчитана по ТЕКУЩИМ процентам и может измениться.')) return;
+        post('/payroll-close',{ ym:ym, reopen:1, byName:(ME&&ME.name)||'' }).then(function(){ loadPayroll(); })
+          .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+      };
+      // в закрытом месяце поля удержаний только для чтения
+      if(PAY&&PAY.closed) [].forEach.call(document.querySelectorAll('.adjOff, .adjMeals'), function(el){ el.disabled=true; el.title='Месяц закрыт'; });
       // удержания: сохраняем по уходу из поля (месяц = месяц конца периода)
       [].forEach.call(document.querySelectorAll('.adjOff, .adjMeals'), function(el){
         el.onchange=function(){

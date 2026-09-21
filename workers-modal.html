@@ -92,7 +92,12 @@
       <h3>Доли работников от стоимости этапа</h3>
       <div class="hint" style="margin-bottom:8px">Какой процент от стоимости работы (из расчёта заказа) получает исполнитель. Пример: доля «Цех» 33% и резка на 10 000 ₸ → работнику 3 300 ₸. К инженеру НЕ применяется — у него своя схема (% от работ + доля от «Степени изобретения», настраивается в его карточке ниже). Сохраняется кнопкой «Сохранить всё».</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
-        <label style="font-size:12.5px">Монтажная бригада, % <input id="shareMontazh" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
+        <div style="margin:6px 0 10px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px">
+        <label style="font-size:12.5px;font-weight:700" title="Когда сдельная (и проценты от работ) попадает в зарплату: в месяц сдачи заказа или в месяц подписания акта. Заказы, сданные до даты перехода, остаются по сдаче — повторно не начисляются.">Сдельная начисляется
+          <select id="pieceBasis" style="margin-left:6px"><option value="delivered">по сдаче заказа</option><option value="act">после подписания акта</option></select></label>
+        <span id="pieceBasisFromLbl" class="muted" style="font-size:11.5px;margin-left:8px"></span>
+      </div>
+      <label style="font-size:12.5px">Монтажная бригада, % <input id="shareMontazh" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
       </div>
       <details style="margin-top:10px">
         <summary style="cursor:pointer;font-size:12.5px;color:#9db4d6">Точные доли по видам работ</summary>
@@ -372,7 +377,15 @@
       if (w.id && isOffice) {
         mot += '<label title="Личный процент от стоимости работ КАЖДОГО сданного заказа. Для офисных: бухгалтер, снабженец, директор. Начисляется в месяц сдачи. Агенту ремонта не назначать — у него свой бонус.">% от работ сданных заказов '+
           '<input class="wrkPct" type="number" min="0" max="100" step="0.1" style="width:70px" value="'+(w.works_percent>0?w.works_percent:'')+'" placeholder="0">'+
-        '</label>';
+        '</label>'+
+        // БАЗА ПРОЦЕНТА (решение Асхата, 09.2026): по сдаче или по подписанному акту
+        '<label title="Когда начисляется процент: в месяц СДАЧИ заказа или в месяц ПОДПИСАНИЯ АКТА. «По акту» — для снабженца: его заработок зависит от того, чтобы заказ был закрыт документально.">начислять '+
+          '<select class="wrkBasis" style="margin-left:4px">'+
+            '<option value="delivered"'+(w.works_basis!=='act'?' selected':'')+'>по сдаче заказа</option>'+
+            '<option value="act"'+(w.works_basis==='act'?' selected':'')+'>по подписанному акту</option>'+
+          '</select></label>'+
+        (w.works_basis==='act'&&w.works_basis_from?'<span class="muted" style="font-size:11.5px" title="Заказы, сданные раньше этой даты, уже оплачены по сдаче и по акту не начисляются повторно">с заказов, сданных с '+esc(w.works_basis_from)+'</span>':'')+
+        '<label title="Не применять к этому работнику «Порог начальника цеха от работ» — процент идёт полный с каждого заказа."><input class="wrkNoCap" type="checkbox"'+(w.works_nocap==1?' checked':'')+' style="width:auto"> без порога</label>';
       } else if (w.id && w.works_percent > 0) {
         // у производственника уже стоит процент (двойная мотивация) — показываем
         // с предупреждением, чтобы можно было осознанно обнулить или оставить
@@ -459,6 +472,8 @@
           putBlank('shareShleifCut', c.shareShleifCut); putBlank('shareShleifWeld', c.shareShleifWeld);
           putBlank('shareElectrochem', c.shareElectrochem); putBlank('shareComponents', c.shareComponents);
           putBlank('shareRepair', c.shareRepair);
+          var pbSel=document.getElementById('pieceBasis'); if(pbSel){ pbSel.value=(c.pieceBasis==='act'?'act':'delivered'); }
+          var pbL=document.getElementById('pieceBasisFromLbl'); if(pbL){ pbL.textContent=(c.pieceBasis==='act'&&c.pieceBasisFrom)?('по акту — заказы, сданные с '+c.pieceBasisFrom+'; более ранние оставлены по сдаче'):''; }
           putBlank('bossOnTimeBonus', c.bossOnTimeBonus); putBlank('bossOnTimePct', c.bossOnTimePct); putBlank('bossLeadDays', c.bossLeadDays); putBlank('bossReworkPct', c.bossReworkPct);
           window.__BOSS_ID=c.bossWorkerId||'';
           var bsel=document.getElementById('bossWorkerId'); if(bsel&&window.WORKERS){ bsel.innerHTML='<option value="">— выключено —</option>'+window.WORKERS.filter(function(w){return w.active!=0;}).map(function(w){return '<option value="'+w.id+'"'+((c.bossWorkerId||'')===w.id?' selected':'')+'>'+esc(w.name)+'</option>';}).join(''); }
@@ -521,7 +536,9 @@
       setMsg('Сохранение…');
       return fetch(WORKER+'/workers-save', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, canSeeRepairCost:canSeeRepairCost, canIssueRepairInvoice:canIssueRepairInvoice, urgencyPercent:urgencyPercent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })() })
+        body: JSON.stringify({ id:id||undefined, name:name, salary:salary, active:active, trelloMemberId:memberId||undefined, stages:stages, canInvoice:canInvoice, canSeeCost:canSeeCost, canSupply:canSupply, canCrm:canCrm, canTimesheet:canTimesheet, canHr:canHr, canDashboard:canDashboard, canRepair:canRepair, hideStats:hideStats, isSalaried:isSalaried, payType:payType, canIssueInvoice:canIssueInvoice, isRepairAgent:isRepairAgent, canSeeRepairCost:canSeeRepairCost, canIssueRepairInvoice:canIssueRepairInvoice, urgencyPercent:urgencyPercent, worksPercent:(function(){ var el=tr.querySelector('.wrkPct'); return el ? (parseFloat(el.value)||0) : undefined; })(),
+          worksBasis:(function(){ var el=tr.querySelector('.wrkBasis'); return el ? el.value : undefined; })(),
+          worksNoCap:(function(){ var el=tr.querySelector('.wrkNoCap'); return el ? !!el.checked : undefined; })() })
       }).then(function(r){ return r.json(); })
         .then(function(d){
           if(d&&d.ok){
@@ -623,7 +640,7 @@
             // ещё не отрисован), ошибка попадает в общий список, а не роняет всю цепочку
             try {
               var sh={ shareMontazh:+document.getElementById('shareMontazh').value||0,
-                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value,
+                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value, pieceBasis:(document.getElementById('pieceBasis')||{}).value,
                        bossWorkerId:document.getElementById('bossWorkerId').value, bossOnTimeBonus:document.getElementById('bossOnTimeBonus').value, bossOnTimePct:document.getElementById('bossOnTimePct').value, bossLeadDays:document.getElementById('bossLeadDays').value, bossReworkPct:document.getElementById('bossReworkPct').value,
                        capPerOrder:+document.getElementById('capPerOrder').value||0,
                        capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
@@ -659,7 +676,7 @@
       msg.textContent=''; msg.style.color='';
       try {
         var sh={ shareMontazh:+document.getElementById('shareMontazh').value||0,
-                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value,
+                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value, pieceBasis:(document.getElementById('pieceBasis')||{}).value,
                        bossWorkerId:document.getElementById('bossWorkerId').value, bossOnTimeBonus:document.getElementById('bossOnTimeBonus').value, bossOnTimePct:document.getElementById('bossOnTimePct').value, bossLeadDays:document.getElementById('bossLeadDays').value, bossReworkPct:document.getElementById('bossReworkPct').value,
                  capPerOrder:+document.getElementById('capPerOrder').value||0,
                  capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
