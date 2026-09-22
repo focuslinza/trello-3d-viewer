@@ -49,6 +49,9 @@
 <body>
   <div id="app"><div class="muted">Загрузка счёта…</div></div>
   <div class="bar">
+    <button class="btn" id="invEdit" type="button" style="display:none;margin-right:auto" title="Исправить строки счёта (название, кол-во, цена) — номер НЕ меняется, старая версия сохраняется в истории">✎ Изменить счёт</button>
+    <button class="btn" id="invSplit" type="button" style="display:none" title="Выделить выбранные строки в отдельный счёт со следующим номером">✂ Выделить в отдельный счёт</button>
+    <button class="btn" id="invAnnul" type="button" style="display:none;color:#f28b82" title="Аннулировать счёт: не входит в суммы, заказы снова свободны, номер и история сохраняются">Аннулировать</button>
     <button class="btn" id="xls1c" type="button" style="display:none" title="Файл в формате счёта 1С — бухгалтер импортирует его в 1С:Бухгалтерию">📗 Excel для 1С</button>
     <button class="btn primary" id="pdf" type="button" style="display:none">⬇ Скачать PDF</button>
   </div>
@@ -82,7 +85,9 @@
       }
       var r=CUR;
       var p=PAYINFO[r.number];
-      h+='<h2>Счёт на оплату №'+esc(r.number)+' от '+esc(r.date_text||r.date_iso||'')+'</h2>';
+      h+='<h2>Счёт на оплату №'+esc(r.number)+' от '+esc(r.date_text||r.date_iso||'')+(+r.version>1?' <span class="pill" title="Счёт исправлялся — номер тот же">версия '+(+r.version)+'</span>':'')+'</h2>';
+      if(+r.archived===1) h+='<div class="warn12" style="color:#f28b82">⛔ Счёт аннулирован'+(r.archive_reason?(': '+esc(r.archive_reason)):'')+' — не входит в суммы и дебиторку.</div>';
+      h+='<div class="muted" style="font-size:11.5px;margin:-4px 0 8px">Номер счёта — системный. В 1С вносите этот же номер: №'+esc(r.number)+'.</div>';
       h+='<div class="pillrow">'+
          (r.sent_at?('<span class="pill g">📤 выслан '+esc(String(r.sent_at).slice(0,16).replace('T',' '))+(r.sent_to?(' → '+esc(r.sent_to)):'')+'</span>'):'<span class="pill">не выслан</span>')+
          statusPill(p)+'</div>';
@@ -93,6 +98,15 @@
       // сам счёт показываем HTML-копией PDF (браузеры блокируют PDF во вложенном
       // окне Trello); скачивание отдаёт настоящий PDF тем же генератором
       h+=renderDocHtml(r);
+      var hist=parse(r.versions_json,[])||[];
+      if(hist.length){
+        h+='<div style="margin:14px 0 70px"><div style="font-weight:700;margin-bottom:6px">История изменений</div>';
+        hist.slice().reverse().forEach(function(v){
+          h+='<div class="muted" style="font-size:12px;margin-bottom:3px">'+esc(String(v.at||'').slice(0,16).replace('T',' '))+(v.by?(' · '+esc(v.by)):'')+
+            (v.v?(' · версия '+v.v+' была на '+money(v.total)+' ₸'):'')+(v.reason?(' · '+esc(v.reason)):'')+'</div>';
+        });
+        h+='</div>';
+      }
       el.innerHTML=h;
       [].forEach.call(document.querySelectorAll('.tabbtn'), function(b){
         b.onclick=function(){ CUR=ROWS[+this.getAttribute('data-i')]; render(); };
@@ -100,6 +114,9 @@
       bindOrderChips();
       document.getElementById('pdf').style.display='';
       document.getElementById('xls1c').style.display='';
+      var arch=(+r.archived===1);
+      ['invEdit','invSplit','invAnnul'].forEach(function(id){ document.getElementById(id).style.display=arch?'none':''; });
+      if(parse(r.items_json,[]).length<2) document.getElementById('invSplit').style.display='none';
     }
 
     // ---- заказы счёта со статусами ----
@@ -316,6 +333,84 @@
       if(!CUR || !window.pdfMake){ alert('Генератор PDF не загрузился — проверьте интернет.'); return; }
       var r=CUR, buy=parse(r.buyer_json,{})||{};
       pdfMake.createPdf(buildDoc(r)).download('Счет_'+r.number+'_'+String(buy.name||'клиент').replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30)+'.pdf');
+    };
+
+    // ---- ИСПРАВЛЕНИЕ / РАЗДЕЛЕНИЕ / АННУЛИРОВАНИЕ (решение Асхата, 09.2026) ----
+    function postJ(path, body){
+      return fetch(WORKER+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        .then(function(r){return r.json();}).then(function(j){ if(!j||!(j.ok)) throw new Error((j&&j.error)||'сервер не подтвердил'); return j; });
+    }
+    function reloadAll(number){
+      fetch(WORKER+'/invoice-list?number='+encodeURIComponent(number||CUR.number)).then(function(r){return r.json();}).then(function(j){
+        var rows=(j&&j.rows)||[]; if(!rows.length) return;
+        var i=ROWS.indexOf(CUR); if(i>=0) ROWS[i]=rows[0]; else ROWS=[rows[0]];
+        CUR=rows[0]; render(); loadOrders();
+      });
+    }
+    function overlay(inner){
+      var ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:flex;align-items:center;justify-content:center';
+      ov.innerHTML='<div style="background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:16px 18px;width:min(900px,96vw);max-height:90vh;overflow:auto">'+inner+'</div>';
+      document.body.appendChild(ov); return ov;
+    }
+    document.getElementById('invEdit').onclick=function(){
+      var items=(parse(CUR.items_json,[])||[]).map(function(x){ return Object.assign({},x); });
+      var h='<div style="font-weight:700;font-size:15px;margin-bottom:6px">Изменить счёт №'+esc(CUR.number)+' — номер останется тем же</div>'+
+        '<table style="width:100%"><thead><tr><th>Наименование</th><th style="width:80px">Кол-во</th><th style="width:110px">Цена</th><th style="width:110px">Сумма</th><th></th></tr></thead><tbody id="edRows"></tbody></table>'+
+        '<div style="margin:10px 0"><label class="muted" style="font-size:12px">Причина изменения (увидят в истории)</label><input id="edReason" type="text" placeholder="например: скидка / переименовали по просьбе клиента" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+        '<div style="display:flex;gap:8px;justify-content:space-between;align-items:center"><b id="edTotal"></b><span><button class="btn" id="edCancel" type="button">Отмена</button> <button class="btn primary" id="edSave" type="button">Сохранить как новую версию</button></span></div>';
+      var ov=overlay(h);
+      function draw(){
+        var tb=ov.querySelector('#edRows'); tb.innerHTML='';
+        var tot=0;
+        items.forEach(function(it,i){
+          var sum=(+it.qty||0)*(+it.price||0); tot+=sum;
+          var tr=document.createElement('tr');
+          tr.innerHTML='<td><input class="edN" data-i="'+i+'" type="text" style="width:100%;box-sizing:border-box" value="'+esc(it.name||'')+'"></td>'+
+            '<td><input class="edQ" data-i="'+i+'" type="number" step="any" style="width:70px" value="'+(+it.qty||0)+'"></td>'+
+            '<td><input class="edP" data-i="'+i+'" type="number" step="any" style="width:100px" value="'+(+it.price||0)+'"></td>'+
+            '<td style="text-align:right">'+money(sum)+'</td>'+
+            '<td><button class="btn edDel" data-i="'+i+'" type="button" title="Убрать строку из счёта" style="padding:2px 8px">✕</button></td>';
+          tb.appendChild(tr);
+        });
+        ov.querySelector('#edTotal').textContent='Итого: '+money(tot)+' ₸ (было '+money(+CUR.total||0)+' ₸)';
+        [].forEach.call(ov.querySelectorAll('.edN'),function(e){ e.oninput=function(){ items[+this.dataset.i].name=this.value; }; });
+        [].forEach.call(ov.querySelectorAll('.edQ'),function(e){ e.onchange=function(){ items[+this.dataset.i].qty=+this.value||0; draw(); }; });
+        [].forEach.call(ov.querySelectorAll('.edP'),function(e){ e.onchange=function(){ items[+this.dataset.i].price=+this.value||0; draw(); }; });
+        [].forEach.call(ov.querySelectorAll('.edDel'),function(e){ e.onclick=function(){ if(items.length<2){ alert('В счёте должна остаться хотя бы одна строка. Чтобы отменить счёт целиком — «Аннулировать».'); return; } items.splice(+this.dataset.i,1); draw(); }; });
+      }
+      draw();
+      ov.querySelector('#edCancel').onclick=function(){ ov.remove(); };
+      ov.querySelector('#edSave').onclick=function(){
+        var btn=this; btn.disabled=true; btn.textContent='Сохраняю…';
+        postJ('/invoice-revise',{ id:CUR.id, items:items, reason:ov.querySelector('#edReason').value||'', byName:'' })
+          .then(function(j){ ov.remove(); alert('Счёт №'+j.number+' исправлен (версия '+j.version+'), итог '+money(j.total)+' ₸.\nСкачайте новый PDF кнопкой «Скачать PDF».'); reloadAll(j.number); })
+          .catch(function(e){ btn.disabled=false; btn.textContent='Сохранить как новую версию'; alert('Не удалось: '+(e&&e.message||e)); });
+      };
+    };
+    document.getElementById('invSplit').onclick=function(){
+      var items=parse(CUR.items_json,[])||[];
+      var h='<div style="font-weight:700;font-size:15px;margin-bottom:6px">Выделить строки из счёта №'+esc(CUR.number)+' в новый счёт</div>'+
+        '<div class="muted" style="font-size:12px;margin-bottom:8px">Отмеченные строки уйдут в новый счёт со следующим номером; этот счёт останется без них (новая версия).</div>';
+      items.forEach(function(it,i){ h+='<label style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" class="spC" value="'+i+'" style="width:auto"> '+esc(it.name||'')+' <span class="muted" style="margin-left:auto">'+money((+it.qty||0)*(+it.price||0))+' ₸</span></label>'; });
+      h+='<div style="text-align:right;margin-top:10px"><button class="btn" id="spCancel" type="button">Отмена</button> <button class="btn primary" id="spGo" type="button">Выделить</button></div>';
+      var ov=overlay(h);
+      ov.querySelector('#spCancel').onclick=function(){ ov.remove(); };
+      ov.querySelector('#spGo').onclick=function(){
+        var lines=[].map.call(ov.querySelectorAll('.spC:checked'),function(c){ return +c.value; });
+        if(!lines.length){ alert('Отметьте строки для нового счёта.'); return; }
+        if(lines.length===items.length){ alert('Все строки выделить нельзя — тогда просто используйте этот счёт.'); return; }
+        var btn=this; btn.disabled=true;
+        postJ('/invoice-split',{ id:CUR.id, lines:lines, byName:'' })
+          .then(function(j){ ov.remove(); alert('Готово: новый счёт №'+j.newNumber+' на '+money(j.movedTotal)+' ₸.\nСчёт №'+j.number+' теперь на '+money(j.keptTotal)+' ₸.\nНе забудьте скачать новые PDF обоих счетов.'); reloadAll(j.number); })
+          .catch(function(e){ btn.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
+      };
+    };
+    document.getElementById('invAnnul').onclick=function(){
+      var reason=prompt('Аннулировать счёт №'+CUR.number+'?\nСчёт перестанет учитываться в суммах, его заказы снова можно будет выставить. Номер и история сохранятся.\n\nПричина:', 'ошибка в счёте');
+      if(reason===null) return;
+      postJ('/invoice-archive',{ id:CUR.id, archived:1, reason:reason||'аннулирован', byName:'' })
+        .then(function(){ reloadAll(CUR.number); }).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
     };
 
     var qs = Q.get('number') ? ('number='+encodeURIComponent(Q.get('number'))) : ('cardId='+encodeURIComponent(Q.get('cardId')||''));

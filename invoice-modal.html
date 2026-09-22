@@ -348,6 +348,7 @@
     var pBilled = fetch(WORKER+'/invoice-list').then(function(r){return r.json();}).then(function(j){
       var map = {};
       (((j&&j.rows)||[])).forEach(function(iv){
+        if (+iv.archived === 1) return; // аннулированный счёт заказы не держит
         var mark = String(iv.number||'');
         try { (JSON.parse(iv.card_ids_json)||[]).forEach(function(cid){ (map[cid]=map[cid]||[]).push(mark); }); } catch(e){}
         try { (JSON.parse(iv.repair_ids_json)||[]).forEach(function(rid){ var k='R'+rid; (map[k]=map[k]||[]).push(mark); }); } catch(e){}
@@ -765,6 +766,27 @@
         else alert('Не удалось: '+((j&&j.error)||'?'));
       }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
   }
+  function askInvoiceNames(list){
+    return new Promise(function(resolve){
+      var ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center';
+      var h='<div style="background:var(--bg2,#22272b);color:var(--txt,#eee);border:1px solid var(--line,#3a414a);border-radius:12px;padding:16px 18px;width:min(760px,95vw);max-height:85vh;overflow:auto">'+
+        '<div style="font-weight:700;font-size:15px;margin-bottom:4px">Проверьте наименования в счёте</div>'+
+        '<div class="small muted" style="margin-bottom:10px">Так строки будут напечатаны в счёте. Правка здесь не меняет название карточки заказа.</div>';
+      list.forEach(function(o,i){
+        var def=o.invName || (o.name + (o.personName ? ' ('+o.personName+')' : ''));
+        h+='<div style="display:flex;gap:8px;align-items:center;margin:6px 0"><span class="small muted" style="min-width:52px">'+esc(o.number||'')+'</span>'+
+          '<input class="inN" data-i="'+i+'" type="text" style="flex:1;box-sizing:border-box" value="'+esc(def)+'"></div>';
+      });
+      h+='<div style="text-align:right;margin-top:12px"><button type="button" class="btn ghost" id="inCancel">Отмена</button> <button type="button" class="btn green" id="inOk">Создать счёт</button></div></div>';
+      ov.innerHTML=h; document.body.appendChild(ov);
+      ov.querySelector('#inCancel').onclick=function(){ ov.remove(); resolve(false); };
+      ov.querySelector('#inOk').onclick=function(){
+        [].forEach.call(ov.querySelectorAll('.inN'),function(e){ var o=list[+e.getAttribute('data-i')]; var v=(e.value||'').trim(); if(o&&v) o.invName=v; });
+        ov.remove(); resolve(true);
+      };
+    });
+  }
   // ФОРМА НАЛИЧНЫХ — окно с кнопками (решение Асхата, 09.2026: без ввода цифр)
   function askCashForm(){
     return new Promise(function(resolve){
@@ -828,7 +850,7 @@
     var items = [];
     selectedOrders().forEach(function(o){
       var qty=Math.max(1,o.qty||1);
-      var nm = o.name + (o.personName ? ' ('+o.personName+')' : '');
+      var nm = o.invName || (o.name + (o.personName ? ' ('+o.personName+')' : ''));
       var disc = +o.discount||0;
       // СКИДКА ОТДЕЛЬНОЙ СТРОКОЙ (решение Асхата, 09.2026): клиент видит тарифную
       // цену и размер уступки, а не «низкую цену как норму»
@@ -886,6 +908,10 @@
       CASH_INFO = await askCashForm();
       if (!CASH_INFO) return; // отменили
     }
+    // НАИМЕНОВАНИЯ В СЧЁТЕ (решение Асхата, 09.2026): бухгалтер правит название строки
+    // здесь — карточка заказа не меняется, а счёт сразу выходит с правильным текстом
+    var okNames = await askInvoiceNames(selectedOrders());
+    if (!okNames) return;
     gen.disabled=true; gen.textContent='Готовлю…';
     // commit the invoice number (locks it so the next one is +1)
     // монтаж сначала сохраняем в карточку: заработок бригаде считается по нему

@@ -899,7 +899,7 @@
         var st=invStatusLabel(r);
         if(INV_EDIT===r.id){
           h+='<tr style="background:#22272b">'+
-             '<td><input class="ie-num" value="'+esc(r.number)+'" style="width:64px"></td>'+
+             '<td><input class="ie-num" value="'+esc(r.number)+'" style="width:64px" disabled title="Номер системный — не меняется. В 1С вносите этот же номер."></td>'+
              '<td><input type="date" class="ie-date" value="'+esc(r.dateIso||'')+'" style="width:135px"></td>'+
              '<td><input class="ie-buyer" value="'+esc(r.buyer)+'" style="width:100%;min-width:140px"></td>'+
              '<td class="num">'+(r.cards||0)+'</td>'+
