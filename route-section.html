@@ -45,7 +45,10 @@
       { key:'paint',   label:'Покраска' },
       { key:'montazh', label:'Монтаж' }
     ];
-    var DEFAULT_CHECKED = { cut:1, bend:1, weld:1, shleif:1 };
+    // ПУСТОЙ МАРШРУТ ПО УМОЛЧАНИЮ (решение Асхата, 09.2026): раньше резка, гибка,
+    // сварка и шлейфовка были отмечены заранее — инженер забывал снять лишнее,
+    // и рабочий отмечал несуществующий этап. Теперь отмечает только инженер.
+    var DEFAULT_CHECKED = {};
     var STATUS_NEXT = { queued:'active', active:'done', done:'queued' };
     var STATUS_LBL  = { queued:'○ в очереди', active:'▶ в работе', done:'✓ готово' };
     var ROUTE=null, WORKERS=[], CARD_ID=null, CARD_META={name:'',url:'',num:''}, editing=false;
@@ -78,7 +81,7 @@
     function renderEditor(){
       var el=document.getElementById('wrap');
       var existing={}; ((ROUTE&&ROUTE.ops)||[]).forEach(function(o){ existing[o.key]=o; });
-      var h='<div class="muted" style="margin-bottom:6px">Отметьте операции, нужные для этого заказа (порядок — как в списке):</div>';
+      var h='<div class="muted" style="margin-bottom:6px">Отметьте операции, нужные <b>для этого</b> заказа (порядок — как в списке). По умолчанию не отмечено ничего: лишний этап в маршруте — это лишняя сдельная и путаница в цехе.</div>';
       OPS.forEach(function(op){
         var on = ROUTE ? !!existing[op.key] : !!DEFAULT_CHECKED[op.key];
         // расчёт на карточке уже есть → инженер точно работал: в новом маршруте
