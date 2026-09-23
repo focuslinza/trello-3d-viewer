@@ -135,8 +135,12 @@
   var BILLED = {};       // 'cardId' | 'R<repairId>' -> ['№173', ...] — заказ уже включался в счета
   var supplierKey = 'ip';
   // налог добавляется В СЧЁТЕ по выбранной компании (в расчёте заказа налога больше нет):
-  // наличные 0% · ИП FIRDAUS (упрощёнка) 3% · ИП MetalShop и ТОО TTMS 16%
-  var SUP_TAX = { cash: 1, firdaus: 1.03, ip: 1.16, too: 1.16 };
+  //  • наличные — 0%;
+  //  • ИП FIRDAUS — упрощёнка, 3% с оборота;
+  //  • ИП MetalShop — ОУР без НДС: в счёт налог НЕ добавляется (ИПН платится с
+  //    прибыли по году, а не со счёта) — решение Асхата, 09.2026;
+  //  • ТОО TTMS — плательщик НДС, 16% включены в цены строк и выделяются в счёте.
+  var SUP_TAX = { cash: 1, firdaus: 1.03, ip: 1, too: 1.16 };
   var invNumber = null;
   var showOrphans = false;
   var showPaid = false;
@@ -450,7 +454,7 @@
       html+='<label class="opt"><input type="radio" name="sup" value="'+k+'"'+(k===supplierKey?' checked':'')+'> '+esc(SUPPLIERS[k].label)+(tx?(' (+'+tx+'%)'):'')+'</label>';
     });
     if (supplierKey==='cash') html+='</div><div class="small muted" style="margin-top:8px">Оплата наличными: счёт не формируется, налог не добавляется. Суммы ниже — как в расчётах. Отметить оплату можно кнопкой «оплачен» у заказа.</div></div>';
-    else html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+' · '+(supplierKey==='too'?'НДС 16% включён в цены строк (плательщик НДС)':('налог +'+Math.round(((SUP_TAX[supplierKey]||1)-1)*100)+'% добавляется к ценам строк'))+'</div>';
+    else html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+' · '+(supplierKey==='too'?'НДС 16% включён в цены строк (плательщик НДС)':(supplierKey==='ip'?'ОУР без НДС — налог к ценам не добавляется':'налог +'+Math.round(((SUP_TAX[supplierKey]||1)-1)*100)+'% добавляется к ценам строк'))+'</div>';
 
     // buyer — selectable from the directory (default = card's company)
     html+='<div class="sec"><h3>Покупатель</h3>';
