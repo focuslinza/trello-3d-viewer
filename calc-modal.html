@@ -107,18 +107,21 @@
     <div class="sec" id="fitSec" style="display:none">
       <h3>Подогнать под договорную сумму</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <label class="hint">Итог клиенту, ₸ <input type="number" id="fitTarget" min="0" step="1000" style="width:140px" placeholder="например 450000"></label>
-        <label class="hint">менять цены
-          <select id="fitScope" style="margin-left:4px">
-            <option value="ops">только работ</option>
-            <option value="all">работ и материалов</option>
+        <label class="hint">Сумма клиенту «как договорились», ₸ <input type="number" id="fitTarget" min="0" step="1000" style="width:150px" placeholder="например 450000"></label>
+        <label class="hint" title="Через какую компанию пойдёт оплата — её процент уже входит в введённую сумму">через
+          <select id="fitSup" style="margin-left:4px">
+            <option value="" selected>— выберите компанию —</option>
+            <option value="1">наличные / Kaspi (0%)</option>
+            <option value="1.10">ИП «MetalShop» (+10%)</option>
+            <option value="1.03">ИП «FIRDAUS» (+3%)</option>
+            <option value="1.16">ТОО «TTMS» (+16%)</option>
           </select></label>
-        <label class="hint" title="Работникам сдельная начислится по тарифным ценам, а уступку берёт на себя компания. Снимите галочку, если скидка должна уменьшить и заработок за эти работы."><input type="checkbox" id="fitKeepPiece" checked style="width:auto"> сдельную считать по тарифу</label>
         <button class="btn" id="fitGo" type="button">Подогнать</button>
         <button class="btn" id="fitClear" type="button" title="Убрать спеццены и вернуть тарифные">Вернуть тарифные</button>
         <span class="hint" id="fitMsg"></span>
       </div>
-      <div class="hint" style="margin-top:6px">Итог считается без налога поставщика: в счёте к нему добавится процент выбранной компании (ИП MetalShop +10%, TTMS +16%). Разница между тарифом и договорной ценой сохраняется как уступка и видна в отчёте «% Уступки».</div>
+      <div class="hint" id="fitRates" style="margin-top:6px"></div>
+      <div class="hint" style="margin-top:6px">Вводите <b>конечную сумму</b>, о которой договорились с клиентом — процент компании уже в ней. Меняются только цены работ (материалы идут по факту закупки), сдельная считается от изменённых цен. Если цена ниже тарифной — разница сохраняется как уступка: в счёте пойдёт строкой «Скидка» и попадёт в отчёт «% Уступки». Если выше — ничего дополнительно не пишется.</div>
     </div>
 
     <div class="sec">
@@ -418,7 +421,6 @@
       keys.forEach(function(k){ acc = g2(acc, Math.max(1, Math.round(+(dxfMetrics[k]||{}).quantity||1))); });
       return Math.max(1, acc);
     }
-    var FIT_KEEP_PIECE=false; // сдельная по тарифным ценам, уступка за счёт компании
     // подбор общего множителя цен, чтобы итог совпал с договорной суммой:
     // пересчитываем движком (учитываются шлейфовки, электрохим, монтаж, надбавки)
     function fitToTarget(target, scope){
@@ -442,7 +444,14 @@
       if(totalAt(lo)>target) { totalAt(1); return { ok:false, err:'Сумма слишком маленькая: даже при минимальных ценах итог выше (материалы и фиксированные строки).' }; }
       for(var i=0;i<40;i++){ var mid=(lo+hi)/2; if(totalAt(mid)<target) lo=mid; else hi=mid; }
       var k=(lo+hi)/2, fin=totalAt(k);
-      return { ok:true, k:k, total:fin, was:t0 };
+      // новые тарифы по строкам — чтобы инженер видел, что именно изменилось
+      var rates=base.map(function(b){
+        var d=b.row._read(), lbl;
+        if(d.kind){ var kk=CALC.KIND[d.kind]; lbl=(kk&&kk.lbl||d.kind).replace(/\s*\(.*\)$/,'')+(d.thickness?(' '+d.thickness+' мм'):''); }
+        else { var mm=CALC.MAT[d.code]; lbl=(mm&&mm.lbl)||d.code; }
+        return { label:lbl, from:Math.round(b.std), to:Math.round(b.std*k) };
+      });
+      return { ok:true, k:k, total:fin, was:t0, rates:rates };
     }
     var lastResult=null;
     function recompute(){
@@ -906,17 +915,26 @@
       document.getElementById('fitGo').onclick=function(){
         var target=+document.getElementById('fitTarget').value||0;
         if(!(target>0)){ msg.textContent='Введите договорную сумму.'; return; }
-        var r=fitToTarget(target, document.getElementById('fitScope').value);
+        // введена КОНЕЧНАЯ сумма (с процентом компании) — вычитаем его, чтобы
+        // счёт после наценки вышел ровно на неё (решение Асхата, 09.2026)
+        var supSel=document.getElementById('fitSup').value;
+        if(!supSel){ msg.textContent='Выберите компанию, через которую пойдёт оплата — от неё зависит процент в сумме.'; msg.style.color='var(--blk)'; return; }
+        var mult=+supSel||1;
+        var inner=target/mult;
+        var r=fitToTarget(inner, 'ops'); // меняем только цены работ — материалы по факту закупки
         if(!r.ok){ msg.textContent=r.err; msg.style.color='var(--blk)'; recompute(); return; }
-        FIT_KEEP_PIECE=document.getElementById('fitKeepPiece').checked;
         recompute();
         var diff=r.was-r.total;
         msg.style.color='';
-        msg.textContent='Подогнано: цены ×'+r.k.toFixed(3)+' · итог '+fmt(Math.round(r.total))+' ₸ (по тарифу было '+fmt(Math.round(r.was))+' ₸, уступка '+fmt(Math.round(diff))+' ₸ = '+Math.round(diff/r.was*100)+'%)'+(FIT_KEEP_PIECE?' · сдельная по тарифу':' · сдельная по сниженным ценам');
+        msg.textContent='Подогнано: цены ×'+r.k.toFixed(3)+' · в счёте '+fmt(Math.round(r.total*mult))+' ₸'+(mult>1?(' (в расчёте '+fmt(Math.round(r.total))+' ₸ + '+Math.round((mult-1)*100)+'%)'):'')+
+          ' · по тарифу было '+fmt(Math.round(r.was*mult))+' ₸, уступка '+fmt(Math.round(diff*mult))+' ₸ = '+Math.round(diff/r.was*100)+'%'+' · сдельная — от изменённых цен';
+        var rl=document.getElementById('fitRates');
+        if(rl) rl.innerHTML = r.rates.map(function(x){ return '<div>'+x.label+': <b>'+fmt(x.from)+'</b> → <b style="color:#e8c07d">'+fmt(x.to)+'</b> ₸/ед</div>'; }).join('');
       };
       document.getElementById('fitClear').onclick=function(){
         [].slice.call(opLines.children).concat([].slice.call(matLines.children)).forEach(function(row){ if(row._sp) row._sp.value=''; });
-        FIT_KEEP_PIECE=false; document.getElementById('fitTarget').value=''; msg.textContent='Вернули тарифные цены.'; recompute();
+        document.getElementById('fitTarget').value=''; msg.textContent='Вернули тарифные цены.';
+        var rl2=document.getElementById('fitRates'); if(rl2) rl2.innerHTML=''; recompute();
       };
     })();
     document.getElementById('btnClose').onclick=function(){ t.closeModal(); };
@@ -924,16 +942,9 @@
       var btn=this; var msg=document.getElementById('msg');
       msg.className='msg'; msg.textContent='Сохранение…'; btn.disabled=true;
       var inp=lastResult.inputs, res=lastResult.result;
-      // СДЕЛЬНАЯ ПО ТАРИФУ (решение Асхата, 09.2026): при подгоне под договорную сумму
-      // уступку берёт на себя компания — база заработка считается по тарифным ценам
+      // СДЕЛЬНАЯ — ВСЕГДА ОТ ФАКТИЧЕСКИХ ЦЕН РАСЧЁТА (решение Асхата, 09.2026):
+      // изменили тариф под договорную сумму — заработок считается от него же
       var resPiece=res;
-      if(FIT_KEEP_PIECE){
-        try {
-          var inpStd=JSON.parse(JSON.stringify(inp));
-          ['operations','materials','components'].forEach(function(g){ (inpStd[g]||[]).forEach(function(x){ delete x.customUnit; }); });
-          resPiece=CALC.compute(inpStd);
-        } catch(e){ resPiece=res; }
-      }
       // per-stage costs for the earnings report
       var byKind={}; (resPiece.lineItems||[]).forEach(function(li){ if(li.kind) byKind[li.kind]=(byKind[li.kind]||0)+(li.lineTotal||0); });
       function sk(ks){ return ks.reduce(function(s,k){ return s+(byKind[k]||0); },0); }

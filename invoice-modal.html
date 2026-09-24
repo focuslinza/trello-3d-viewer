@@ -133,7 +133,9 @@
   var selectedCompanyId = null;
   var ALL_ORDERS = [];   // every saved calc: {cardId, name, number, total, company_id, qty, checked}
   var BILLED = {};       // 'cardId' | 'R<repairId>' -> ['№173', ...] — заказ уже включался в счета
-  var supplierKey = 'ip';
+  // КОМПАНИЯ ВЫБИРАЕТСЯ ОСОЗНАННО (решение Асхата, 09.2026): ничего не выбрано по
+  // умолчанию — счёт не создаётся, пока не указана компания-поставщик.
+  var supplierKey = '';
   // налог добавляется В СЧЁТЕ по выбранной компании (в расчёте заказа налога больше нет):
   //  • наличные — 0%;
   //  • ИП FIRDAUS — упрощёнка, 3% с оборота;
@@ -444,7 +446,7 @@
   function extrasCeilTotal(){ return validExtras().reduce(function(s,x){ return s + Math.ceil(Math.max(1,+x.qty||1)*(+x.price||0)-1e-9); },0); }
 
   function render(){
-    var sup = SUPPLIERS[supplierKey];
+    var sup = SUPPLIERS[supplierKey] || null;
     var html='';
 
     // supplier
@@ -454,7 +456,8 @@
       var tx = Math.round((SUP_TAX[k]||1)*100-100);
       html+='<label class="opt"><input type="radio" name="sup" value="'+k+'"'+(k===supplierKey?' checked':'')+'> '+esc(SUPPLIERS[k].label)+(tx?(' (+'+tx+'%)'):'')+'</label>';
     });
-    if (supplierKey==='cash') html+='</div><div class="small muted" style="margin-top:8px">Оплата наличными: счёт не формируется, налог не добавляется. Суммы ниже — как в расчётах. Отметить оплату можно кнопкой «оплачен» у заказа.</div></div>';
+    if (!supplierKey) html+='</div><div class="small" style="margin-top:8px;color:#e8c07d">⚠ Выберите компанию — от неё зависит налог, реквизиты и печать. Пока не выбрано, счёт не создаётся.</div>';
+    else if (supplierKey==='cash') html+='</div><div class="small muted" style="margin-top:8px">Оплата наличными: счёт не формируется, налог не добавляется. Суммы ниже — как в расчётах. Отметить оплату можно кнопкой «оплачен» у заказа.</div></div>';
     else html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+' · '+(supplierKey==='too'?'НДС 16% включён в цены строк (плательщик НДС)':(supplierKey==='ip'?'ОУР без НДС — к ценам добавляется 10% (налоговая нагрузка); НДС в счёте не выделяется':'налог +'+Math.round(((SUP_TAX[supplierKey]||1)-1)*100)+'% добавляется к ценам строк'))+'</div>';
 
     // buyer — selectable from the directory (default = card's company)
@@ -621,6 +624,9 @@
         }).catch(function(e){ el.disabled=false; alert('Не сохранилось: '+(e&&e.message||e)); });
     }); });
     // при наличных счёт не формируется
+    (function(){ var g0=document.getElementById('gen');
+      if(g0 && !supplierKey){ g0.disabled=true; g0.title='Сначала выберите компанию-поставщика вверху окна'; }
+    })();
     (function(){ var g=document.getElementById('gen'); if(g && supplierKey==='cash'){ g.disabled=true; g.title='Наличные — счёт не формируется; отметьте оплату кнопкой «оплачен»'; } })();
     var bs=document.getElementById('buyerSel');
     if(bs) bs.addEventListener('change', function(){ selectedCompanyId=this.value; setBuyerFromSelected(); render();
@@ -849,7 +855,8 @@
     return { sum: sum, price: sum / qty };        // цена подгоняется, чтобы qty×цена = сумма
   }
   function buildData(){
-    var sup=SUPPLIERS[supplierKey] || SUPPLIERS.ip;
+    var sup=SUPPLIERS[supplierKey];
+    if(!sup) throw new Error('Не выбрана компания-поставщик');
     var K = SUP_TAX[supplierKey] || 1; // налог компании добавляется к ценам строк счёта
     var numEl=document.getElementById('inum'), dEl=document.getElementById('idate'), cEl=document.getElementById('icontract');
     var items = [];
@@ -908,6 +915,7 @@
     var waWin = null; // WhatsApp больше не открываем — счёт скачивается PDF, отправляют сотрудники сами
     // ФОРМА НАЛИЧНЫХ (решение Асхата, 09.2026): при поставщике «Наличные» уточняем,
     // как придут деньги — Kaspi (перевод) или купюры (кому отдали) — для бухгалтерии
+    if (!supplierKey) { alert('Выберите компанию-поставщика вверху окна — от неё зависят налог, реквизиты и печать.'); return; }
     var CASH_INFO = null;
     if (supplierKey === 'cash') {
       CASH_INFO = await askCashForm();
