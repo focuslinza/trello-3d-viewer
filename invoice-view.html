@@ -90,6 +90,11 @@
       if(+r.archived===1) h+='<div class="warn12" style="color:#f28b82">⛔ Счёт аннулирован'+(r.archive_reason?(': '+esc(r.archive_reason)):'')+' — не входит в суммы и дебиторку.</div>';
       h+='<div class="muted" style="font-size:11.5px;margin:-4px 0 8px">Номер счёта — системный. В 1С вносите этот же номер: №'+esc(r.number)+'.'+
         (r.parent_number?(' Это счёт на остаток по счёту №'+esc(r.parent_number)+'.'):'')+'</div>';
+      if(+r.prepay_pct>0){
+        var rest=Math.max(0, Math.round((+r.full_total||0)-(+r.total||0)));
+        h+='<div class="warn12" style="color:#e8c07d">💠 Счёт на <b>предоплату '+Math.round(+r.prepay_pct)+'%</b> от '+money(+r.full_total||0)+' ₸.'+
+          (rest?(' Остаток <b>'+money(rest)+' ₸</b> ещё не выставлен — когда придёт время, нажмите «Счёт на остаток».'):'')+'</div>';
+      }
       h+='<div class="pillrow">'+
          (r.sent_at?('<span class="pill g">📤 выслан '+esc(String(r.sent_at).slice(0,16).replace('T',' '))+(r.sent_to?(' → '+esc(r.sent_to)):'')+'</span>'):'<span class="pill">не выслан</span>')+
          statusPill(p)+'</div>';

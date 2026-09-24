@@ -862,6 +862,12 @@
       });
     }
 
+    // ПРЕДОПЛАТА: бейдж доли и невыставленного остатка (решение Асхата, 09.2026)
+    function prepayBadge(r){
+      if(!(+r.prepayPct>0)) return '';
+      var rest=+r.restUnbilled||0;
+      return ' <span class="pill" style="background:#3a2f14;color:#e8c07d" title="Счёт выставлен на часть суммы; остаток ещё не выставлен">предоплата '+Math.round(r.prepayPct)+'%'+(rest?(' · остаток '+money(rest)+' ₸ не выставлен'):'')+'</span>';
+    }
     function invStatusLabel(r){
       // «вручную» — статус по отметкам «оплачен» у заказов/ремонтов, без подтверждения банка
       var m=r.manual?' · вручную':'';
@@ -918,6 +924,8 @@
            (r.sentAt?('<div style="font-size:10.5px;color:var(--green);white-space:nowrap" title="Счёт отправлен клиенту'+(r.sentTo?(' на '+esc(r.sentTo)):'')+'">📤 выслан '+esc((r.sentAt||'').slice(0,10))+'</div>'):
                      ('<div style="font-size:10.5px;color:var(--muted)">не выслан</div>'))+
            '</td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+((+r.repairs>0)?' <span class="pill" style="background:#2b1f45;color:#c9a8ff">ремонт'+(r.repairs>1?(' ×'+r.repairs):'')+'</span>':'')+
+             prepayBadge(r)+
+             (r.parentNumber?' <span class="pill" style="background:#1c2f45;color:#9cc4ff" title="Счёт на остаток">остаток по №'+esc(r.parentNumber)+'</span>':'')+
              (r.archived?' <span class="pill" style="background:#3a2226;color:#f3b3b3">в архиве</span>'+(r.archiveReason?(' <span class="muted" style="font-size:11px">'+esc(r.archiveReason)+'</span>'):''):'')+'</td>'+
            '<td class="num">'+(r.cards||0)+(r.repairs?' <span style="color:#c9a8ff" title="ремонтных заявок в счёте">+'+r.repairs+'Р</span>':'')+'</td>'+
            '<td class="num">'+money(r.total)+' ₸</td>'+
