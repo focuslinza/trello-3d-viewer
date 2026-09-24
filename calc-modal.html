@@ -87,9 +87,18 @@
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
       <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
-      <button class="resetBtn" id="resetAll" type="button" title="Удалить все строки работ/материалов/компонентов и начать заново">↺ Сбросить расчёт</button>
-      <button class="resetBtn resetAutoBtn" id="resetAuto" type="button" title="Удалить только строки, добавленные автоматически из DXF — ручные строки и компоненты не трогает">↺ Сбросить автоматическое</button>
+      <button class="resetBtn resetAutoBtn" id="resetAuto" type="button" title="Удалить только строки, пришедшие из DXF (резка и гибка) — ручные строки, материалы и компоненты остаются">↺ Сбросить DXF-расчёт</button>
+      <button class="resetBtn" id="resetAll" type="button" title="Удалить ВСЕ строки: и из DXF, и добавленные вручную — начать расчёт заново">↺ Сбросить весь расчёт</button>
+      <button class="btn" id="dxfPurge" type="button" style="display:none;border-color:#6b5a1e;color:#e8c07d" title="Удалить сохранённые расчёты по DXF-файлам, которых уже нет на карточке">🧹 Забыть старые DXF</button>
       <span class="hint" id="dxfHint"></span>
+    </div>
+    <!-- Пояснение к кнопкам (решение Асхата, 09.2026): раньше разницу между сбросами
+         приходилось помнить, и инженеры теряли ручные строки -->
+    <div class="hint" style="margin:-6px 0 12px;line-height:1.5">
+      <b>Загрузить из DXF</b> — подтянуть резку и гибку из файлов карточки (только из тех, что есть на ней сейчас).<br>
+      <b>↺ Сбросить DXF-расчёт</b> — удалить <b>только строки из DXF</b> (резка и гибка); материалы, компоненты, сварка, шлейфовка и допстроки останутся. Обычный порядок при замене файла: «Сбросить DXF-расчёт» → «Загрузить из DXF» → «Сохранить».<br>
+      <b>↺ Сбросить весь расчёт</b> — удалить <b>все</b> строки: и из DXF, и добавленные вручную. Чистый лист.<br>
+      Сбросы ничего не меняют в базе, пока не нажата кнопка «Сохранить».
     </div>
     <div id="dxfBreakdown"></div>
 
@@ -556,6 +565,20 @@
         var cd=res.j.cardData||{}, bd=res.j.boardData||{};
         if(res.j.cardNumber) ctx.cardNumber = res.j.cardNumber;  // from "Card Number" field
         dxfMetrics = cd.dxfMetrics || {};
+        // АКТУАЛЬНЫЕ DXF (урок 09.2026, карточка 3507): расчёты удалённых с карточки
+        // файлов оставались в системе и лезли в калькулятор поверх нового файла.
+        // Берём из базы только те, файлы которых сейчас есть на карточке.
+        if(ctx.cardId){
+          fetch(WORKER+'/dxf-get?prune=1&cardId='+encodeURIComponent(ctx.cardId))
+            .then(function(r){return r.json();}).then(function(jd){
+              if(!jd||!jd.ok) return;
+              dxfMetrics = jd.metrics || {};
+              window.__DXF_STALE = jd.staleCount||0;
+              var hint=document.getElementById('dxfHint');
+              if(hint && jd.staleCount){ hint.textContent='Пропущены расчёты '+jd.staleCount+' DXF, которых уже нет на карточке — они не попадут в расчёт. Кнопка «🧹 Забыть старые DXF» удалит их насовсем.'; }
+              var b=document.getElementById('dxfPurge'); if(b) b.style.display = jd.staleCount ? '' : 'none';
+            }).catch(function(){});
+        }
         var cid=cd.companyId;
         if(cid){
           // Справочник клиентов теперь живёт в D1 (см. CRM) — старое board-pluginData
@@ -755,6 +778,20 @@
       // empty: re-fetch the bridge (handles first-load race / stale cache)
       fetchBridge().then(applyBridge).then(doPullFromMetrics);
     };
+    var _pb=document.getElementById('dxfPurge');
+    if(_pb) _pb.onclick=function(){
+      if(!ctx.cardId) return;
+      if(!confirm('Удалить сохранённые расчёты по DXF-файлам, которых уже нет на карточке? Файлы и текущие расчёты это не трогает.')) return;
+      var self=this; self.disabled=true;
+      fetch(WORKER+'/dxf-get?purge=1&cardId='+encodeURIComponent(ctx.cardId))
+        .then(function(r){return r.json();}).then(function(jd){
+          self.disabled=false;
+          if(!jd||!jd.ok) throw new Error((jd&&jd.error)||'?');
+          dxfMetrics=jd.metrics||{}; self.style.display='none';
+          document.getElementById('dxfHint').textContent='Старые DXF забыты ('+(jd.staleCount||0)+'). Нажмите «Загрузить из DXF» — подтянется только то, что есть на карточке.';
+          
+        }).catch(function(e){ self.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
+    };
     document.getElementById('resetAll').onclick=function(){
       var n = opLines.children.length + matLines.children.length + cmpLines.children.length;
       if(!n){ document.getElementById('dxfHint').textContent='Строк и так нет — сбрасывать нечего.'; return; }
@@ -769,7 +806,7 @@
       var autoOp = opLines.querySelectorAll('[data-dxf]').length;
       var autoMat = matLines.querySelectorAll('[data-dxf]').length;
       var n = autoOp + autoMat;
-      if(!n){ document.getElementById('dxfHint').textContent='Автоматических строк нет — сбрасывать нечего (возможно, они были внесены ещё до появления этой метки — тогда используйте «Сбросить расчёт» целиком).'; return; }
+      if(!n){ document.getElementById('dxfHint').textContent='Автоматических строк нет — сбрасывать нечего (возможно, они были внесены ещё до появления этой метки — тогда используйте «Сбросить весь расчёт»).'; return; }
       if(!confirm('Удалить строки, добавленные автоматически из DXF ('+n+' шт.)? Ручные строки и компоненты останутся нетронутыми. Это не сохранится, пока вы не нажмёте «Сохранить».')) return;
       [].slice.call(opLines.querySelectorAll('[data-dxf]')).forEach(function(r){ r.remove(); });
       [].slice.call(matLines.querySelectorAll('[data-dxf]')).forEach(function(r){ r.remove(); });
