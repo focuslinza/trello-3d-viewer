@@ -51,6 +51,7 @@
   <div class="bar">
     <button class="btn" id="invEdit" type="button" style="display:none;margin-right:auto" title="Исправить строки счёта (название, кол-во, цена) — номер НЕ меняется, старая версия сохраняется в истории">✎ Изменить счёт</button>
     <button class="btn" id="invSplit" type="button" style="display:none" title="Выделить выбранные строки в отдельный счёт со следующим номером">✂ Выделить в отдельный счёт</button>
+    <button class="btn" id="invResid" type="button" style="display:none" title="Выставить счёт на неоплаченный остаток по этому счёту — номер возьмётся из системы, счета не будут дублироваться">💠 Счёт на остаток</button>
     <button class="btn" id="invAnnul" type="button" style="display:none;color:#f28b82" title="Аннулировать счёт: не входит в суммы, заказы снова свободны, номер и история сохраняются">Аннулировать</button>
     <button class="btn" id="xls1c" type="button" style="display:none" title="Файл в формате счёта 1С — бухгалтер импортирует его в 1С:Бухгалтерию">📗 Excel для 1С</button>
     <button class="btn primary" id="pdf" type="button" style="display:none">⬇ Скачать PDF</button>
@@ -87,7 +88,8 @@
       var p=PAYINFO[r.number];
       h+='<h2>Счёт на оплату №'+esc(r.number)+' от '+esc(r.date_text||r.date_iso||'')+(+r.version>1?' <span class="pill" title="Счёт исправлялся — номер тот же">версия '+(+r.version)+'</span>':'')+'</h2>';
       if(+r.archived===1) h+='<div class="warn12" style="color:#f28b82">⛔ Счёт аннулирован'+(r.archive_reason?(': '+esc(r.archive_reason)):'')+' — не входит в суммы и дебиторку.</div>';
-      h+='<div class="muted" style="font-size:11.5px;margin:-4px 0 8px">Номер счёта — системный. В 1С вносите этот же номер: №'+esc(r.number)+'.</div>';
+      h+='<div class="muted" style="font-size:11.5px;margin:-4px 0 8px">Номер счёта — системный. В 1С вносите этот же номер: №'+esc(r.number)+'.'+
+        (r.parent_number?(' Это счёт на остаток по счёту №'+esc(r.parent_number)+'.'):'')+'</div>';
       h+='<div class="pillrow">'+
          (r.sent_at?('<span class="pill g">📤 выслан '+esc(String(r.sent_at).slice(0,16).replace('T',' '))+(r.sent_to?(' → '+esc(r.sent_to)):'')+'</span>'):'<span class="pill">не выслан</span>')+
          statusPill(p)+'</div>';
@@ -115,7 +117,7 @@
       document.getElementById('pdf').style.display='';
       document.getElementById('xls1c').style.display='';
       var arch=(+r.archived===1);
-      ['invEdit','invSplit','invAnnul'].forEach(function(id){ document.getElementById(id).style.display=arch?'none':''; });
+      ['invEdit','invSplit','invAnnul','invResid'].forEach(function(id){ document.getElementById(id).style.display=arch?'none':''; });
       if(parse(r.items_json,[]).length<2) document.getElementById('invSplit').style.display='none';
     }
 
@@ -405,6 +407,13 @@
           .then(function(j){ ov.remove(); alert('Готово: новый счёт №'+j.newNumber+' на '+money(j.movedTotal)+' ₸.\nСчёт №'+j.number+' теперь на '+money(j.keptTotal)+' ₸.\nНе забудьте скачать новые PDF обоих счетов.'); reloadAll(j.number); })
           .catch(function(e){ btn.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
       };
+    };
+    document.getElementById('invResid').onclick=function(){
+      var sum=prompt('Счёт на остаток по счёту №'+CUR.number+'.\nСумма остатка (оставьте как есть — посчитаем «сумма счёта минус поступления»):','');
+      if(sum===null) return;
+      postJ('/invoice-residual',{ id:CUR.id, amount:(sum?+sum:0)||0, byName:'' })
+        .then(function(j){ alert('Создан счёт №'+j.number+' на остаток '+money(j.amount)+' ₸ по счёту №'+j.parent+'.\nВ 1С вносите этот же номер. Откройте его в журнале и скачайте PDF.'); reloadAll(CUR.number); })
+        .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
     };
     document.getElementById('invAnnul').onclick=function(){
       var reason=prompt('Аннулировать счёт №'+CUR.number+'?\nСчёт перестанет учитываться в суммах, его заказы снова можно будет выставить. Номер и история сохранятся.\n\nПричина:', 'ошибка в счёте');

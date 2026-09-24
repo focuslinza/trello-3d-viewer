@@ -102,6 +102,25 @@
     </div>
     <div id="dxfBreakdown"></div>
 
+    <!-- ПОДГОН ПОД ДОГОВОРНУЮ СУММУ (решение Асхата, 09.2026): раньше инженер вручную
+         подбирал цены реза/гибки, чтобы попасть в согласованную с клиентом сумму -->
+    <div class="sec" id="fitSec" style="display:none">
+      <h3>Подогнать под договорную сумму</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <label class="hint">Итог клиенту, ₸ <input type="number" id="fitTarget" min="0" step="1000" style="width:140px" placeholder="например 450000"></label>
+        <label class="hint">менять цены
+          <select id="fitScope" style="margin-left:4px">
+            <option value="ops">только работ</option>
+            <option value="all">работ и материалов</option>
+          </select></label>
+        <label class="hint" title="Работникам сдельная начислится по тарифным ценам, а уступку берёт на себя компания. Снимите галочку, если скидка должна уменьшить и заработок за эти работы."><input type="checkbox" id="fitKeepPiece" checked style="width:auto"> сдельную считать по тарифу</label>
+        <button class="btn" id="fitGo" type="button">Подогнать</button>
+        <button class="btn" id="fitClear" type="button" title="Убрать спеццены и вернуть тарифные">Вернуть тарифные</button>
+        <span class="hint" id="fitMsg"></span>
+      </div>
+      <div class="hint" style="margin-top:6px">Итог считается без налога поставщика: в счёте к нему добавится процент выбранной компании (ИП MetalShop +10%, TTMS +16%). Разница между тарифом и договорной ценой сохраняется как уступка и видна в отчёте «% Уступки».</div>
+    </div>
+
     <div class="sec">
       <h3>Работы (резка / гибка / сварка)</h3>
       <div class="lines" id="opLines"></div>
@@ -398,6 +417,32 @@
       var acc=0;
       keys.forEach(function(k){ acc = g2(acc, Math.max(1, Math.round(+(dxfMetrics[k]||{}).quantity||1))); });
       return Math.max(1, acc);
+    }
+    var FIT_KEEP_PIECE=false; // сдельная по тарифным ценам, уступка за счёт компании
+    // подбор общего множителя цен, чтобы итог совпал с договорной суммой:
+    // пересчитываем движком (учитываются шлейфовки, электрохим, монтаж, надбавки)
+    function fitToTarget(target, scope){
+      var rows=[].slice.call(opLines.children).concat(scope==='all'?[].slice.call(matLines.children):[]);
+      var base=[];
+      rows.forEach(function(row){
+        var d=row._read(); if(!row._sp) return;
+        var std;
+        if(d.kind){ var k=CALC.KIND[d.kind]; if(!k||!(d.qty>0&&d.thickness>0)) return; std=(k.t==='FLAT')?(+k.flatRate||0):CALC.opRate(k.t,d.thickness,d.qty)*k.mult; }
+        else { var mm=CALC.MAT[d.code]; if(!mm||!(d.qty>0)) return; std=+mm.u||0; }
+        if(!(std>0)) return;
+        base.push({row:row, std:std});
+      });
+      if(!base.length) return { ok:false, err:'Нет строк, цены которых можно менять.' };
+      function totalAt(k){
+        base.forEach(function(b){ b.row._sp.value=Math.round(b.std*k*100)/100; });
+        return CALC.compute(gather()).total;
+      }
+      var lo=0.02, hi=5, t0=totalAt(1);
+      if(totalAt(hi)<target) { totalAt(1); return { ok:false, err:'Сумма слишком большая — не хватает даже при пятикратной цене.' }; }
+      if(totalAt(lo)>target) { totalAt(1); return { ok:false, err:'Сумма слишком маленькая: даже при минимальных ценах итог выше (материалы и фиксированные строки).' }; }
+      for(var i=0;i<40;i++){ var mid=(lo+hi)/2; if(totalAt(mid)<target) lo=mid; else hi=mid; }
+      var k=(lo+hi)/2, fin=totalAt(k);
+      return { ok:true, k:k, total:fin, was:t0 };
     }
     var lastResult=null;
     function recompute(){
@@ -855,17 +900,46 @@
     }
 
     // ---- save ----
+    (function(){
+      var sec=document.getElementById('fitSec'); if(sec) sec.style.display='';
+      var msg=document.getElementById('fitMsg');
+      document.getElementById('fitGo').onclick=function(){
+        var target=+document.getElementById('fitTarget').value||0;
+        if(!(target>0)){ msg.textContent='Введите договорную сумму.'; return; }
+        var r=fitToTarget(target, document.getElementById('fitScope').value);
+        if(!r.ok){ msg.textContent=r.err; msg.style.color='var(--blk)'; recompute(); return; }
+        FIT_KEEP_PIECE=document.getElementById('fitKeepPiece').checked;
+        recompute();
+        var diff=r.was-r.total;
+        msg.style.color='';
+        msg.textContent='Подогнано: цены ×'+r.k.toFixed(3)+' · итог '+fmt(Math.round(r.total))+' ₸ (по тарифу было '+fmt(Math.round(r.was))+' ₸, уступка '+fmt(Math.round(diff))+' ₸ = '+Math.round(diff/r.was*100)+'%)'+(FIT_KEEP_PIECE?' · сдельная по тарифу':' · сдельная по сниженным ценам');
+      };
+      document.getElementById('fitClear').onclick=function(){
+        [].slice.call(opLines.children).concat([].slice.call(matLines.children)).forEach(function(row){ if(row._sp) row._sp.value=''; });
+        FIT_KEEP_PIECE=false; document.getElementById('fitTarget').value=''; msg.textContent='Вернули тарифные цены.'; recompute();
+      };
+    })();
     document.getElementById('btnClose').onclick=function(){ t.closeModal(); };
     document.getElementById('btnSave').onclick=function(){
       var btn=this; var msg=document.getElementById('msg');
       msg.className='msg'; msg.textContent='Сохранение…'; btn.disabled=true;
       var inp=lastResult.inputs, res=lastResult.result;
+      // СДЕЛЬНАЯ ПО ТАРИФУ (решение Асхата, 09.2026): при подгоне под договорную сумму
+      // уступку берёт на себя компания — база заработка считается по тарифным ценам
+      var resPiece=res;
+      if(FIT_KEEP_PIECE){
+        try {
+          var inpStd=JSON.parse(JSON.stringify(inp));
+          ['operations','materials','components'].forEach(function(g){ (inpStd[g]||[]).forEach(function(x){ delete x.customUnit; }); });
+          resPiece=CALC.compute(inpStd);
+        } catch(e){ resPiece=res; }
+      }
       // per-stage costs for the earnings report
-      var byKind={}; (res.lineItems||[]).forEach(function(li){ if(li.kind) byKind[li.kind]=(byKind[li.kind]||0)+(li.lineTotal||0); });
+      var byKind={}; (resPiece.lineItems||[]).forEach(function(li){ if(li.kind) byKind[li.kind]=(byKind[li.kind]||0)+(li.lineTotal||0); });
       function sk(ks){ return ks.reduce(function(s,k){ return s+(byKind[k]||0); },0); }
       // split component LABOR per component; Краска = flat sum (no multiplier)
       var paintSum=0; var compMap={}; // key -> {label, value}
-      (res.lineItems||[]).forEach(function(li){
+      (resPiece.lineItems||[]).forEach(function(li){
         if(li.group!=='component') return;
         if(li.isPaint || li.section==='КРАСКА'){ paintSum += (+li.material||0); return; }
         var labor=+li.labor||0; if(labor<=0) return;
@@ -875,13 +949,13 @@
       });
       var components=Object.keys(compMap).map(function(k){ return compMap[k]; });
       var stageCosts={
-        eng:(res.engineering||0)+(res.urgency||0),   // ⅓
+        eng:(resPiece.engineering||0)+(resPiece.urgency||0),   // ⅓
         cut:sk(['cut','cutTube']),                    // ⅓
-        bend:sk(['bend','bendTube','bendRod']),       // ⅓
+        bend:sk(['bend','bendTube','bendRod','roll']),// ⅓
         weld:sk(['weldSS','weldBlack']),              // ⅓
-        shleif:(res.shleif||0),                       // ½
-        shleifCut:(res.shleifCut||0),                 // ⅓ — шлейфовка кромки после лазера
-        electrochem:(res.electrochem||0),             // доля как у шлейфовки шва
+        shleif:(resPiece.shleif||0),                  // ½
+        shleifCut:(resPiece.shleifCut||0),            // ⅓ — шлейфовка кромки после лазера
+        electrochem:(resPiece.electrochem||0),        // доля как у шлейфовки шва
         paint:paintSum,                               // ⅓ (в цеху) / 0 (на стороне)
         paintInShop:!!inp.paintInShop,
         components:components                         // ½ каждая
