@@ -101,6 +101,42 @@
         btn.addEventListener('click', openCalc);
         row.appendChild(left); row.appendChild(btn); el.appendChild(row);
         // director: earnings; director OR allowed worker: invoice
+        // ОБРАЗЕЦ ↔ ПАРТИЯ (решение Асхата, 09.2026): кнопка создаёт вторую карточку
+        // и связывает её с образцом — ничего не нужно таскать по колонкам и выбирать руками
+        function addSampleBtn(){
+          fetch(WORKER+'/sample-link?cardId='+encodeURIComponent(CARD.id))
+            .then(function(r){ return r.json(); })
+            .then(function(j){
+              if(!j || !j.ok) return;
+              var row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
+              var lbl=document.createElement('div'); lbl.className='muted';
+              if(j.sample){
+                lbl.innerHTML='Партия по образцу <b>#'+(j.sample.number||'')+'</b> — '+(j.sample.name||'').slice(0,60);
+                row.appendChild(lbl); el.appendChild(row); return;
+              }
+              if(j.batch){
+                lbl.innerHTML='Образец. Партия по нему: карточка <b>#'+(j.batch.number||'')+'</b>';
+                row.appendChild(lbl); el.appendChild(row); return;
+              }
+              lbl.textContent='Клиент одобрил образец?';
+              var b=document.createElement('button'); b.className='btn'; b.type='button'; b.style.background='#8a6d00';
+              b.textContent='Партия по этому образцу';
+              b.title='Создать отдельную карточку на партию: копия этой (вложения, чек-листы, клиент), расчёт переносится черновиком на 1 изделие — останется поменять количество. Карточки будут связаны.';
+              b.addEventListener('click', function(){
+                if(!confirm('Создать карточку «Партия по образцу»? Она появится в колонке «Согласование», связь с этим образцом проставится автоматически.')) return;
+                b.disabled=true; b.textContent='Создаю…';
+                fetch(WORKER+'/order-from-sample',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:CARD.id, byName:'' }) })
+                  .then(function(r){ return r.json(); })
+                  .then(function(jj){
+                    if(!jj || !jj.ok) throw new Error((jj && jj.error) || 'сервер не подтвердил');
+                    alert('Создана карточка #'+(jj.number||'')+' в «Согласовании».'+(jj.hadCalc?' Расчёт образца перенесён черновиком — откройте калькулятор и поставьте количество партии.':' Расчёта у образца не было — посчитайте партию в калькуляторе.'));
+                    location.reload();
+                  })
+                  .catch(function(e){ b.disabled=false; b.textContent='Партия по этому образцу'; alert('Не удалось: '+(e&&e.message||e)); });
+              });
+              row.appendChild(lbl); row.appendChild(b); el.appendChild(row);
+            }).catch(function(){});
+        }
         function addInvoiceBtn(){
           var row3=document.createElement('div'); row3.className='row'; row3.style.marginTop='8px';
           var lbl3=document.createElement('div'); lbl3.className='muted'; lbl3.textContent='Счёт на оплату (можно объединить несколько заказов клиента)';
@@ -160,7 +196,7 @@
             eb.addEventListener('click', openEarnings);
             row2.appendChild(lbl); row2.appendChild(eb); el.appendChild(row2);
           }
-          if(admin){ addEarningsBtn(); addInvoiceBtn(); return checkSalesLink(true, me).then(function(){ return t.sizeTo('#wrap'); }); }
+          if(admin){ addEarningsBtn(); addInvoiceBtn(); addSampleBtn(); return checkSalesLink(true, me).then(function(){ return t.sizeTo('#wrap'); }); }
           // не админ: кнопки по правам из базы работников. «Заработок по заказу» —
           // начальнику цеха (чип «Панель руководителя» или «Видит стоимость»):
           // именно там расставляются исполнители этапов и их доли.
@@ -168,6 +204,7 @@
             if (myGen !== renderGen) return; // устарело
             if(j&&(j.canDashboard||j.canSeeCost)) addEarningsBtn();
             if(j&&(j.canIssueInvoice||j.canInvoice)) addInvoiceBtn();
+            if(j&&(j.canDashboard||j.canSeeCost)) addSampleBtn(); // партия по образцу — инженер/начальник цеха
             return checkSalesLink(!!(j&&(j.canDashboard||j.canSeeCost)), me);
           }).catch(function(){}).then(function(){ if (myGen !== renderGen) return; return t.sizeTo('#wrap'); });
         });
