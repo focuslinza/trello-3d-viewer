@@ -76,6 +76,7 @@
       <button class="btn" id="workers" type="button" style="border-color:#4f7cff;color:#a9c2ff">⚙ Зарплата / Работники</button>
       <button class="btn" id="financeBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">₸ Финансы</button>
       <button class="btn" id="discBtn" type="button" style="border-color:#e8c07d;color:#e8c07d" title="Где и сколько уступаем клиентам: спеццены в расчётах против тарифа">% Уступки</button>
+      <button class="btn" id="boardBtn" type="button" style="border-color:#4caf7d;color:#9ee6bd" title="Своя доска: импорт из Trello, сравнение и переключение режима">🧱 Своя доска</button>
       <button class="btn" id="backupBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff" title="Автоматические резервные копии системы">🗄 Резервные копии</button>
     </div>
     <button class="btn" id="close" type="button">Закрыть</button>
@@ -684,6 +685,74 @@
   };
   // ОТЧЁТ «УСТУПКИ» (решение Асхата, 09.2026): спеццены из расчётов против тарифа —
   // по операциям/толщинам (где торг стал нормой → тариф завышен), по клиентам, по инженерам
+  // СВОЯ ДОСКА (этап ухода от Trello, решение Асхата, 09.2026): импорт, сравнение
+  // и переключение источника карточек — всё в одном окне, без ручных адресов
+  document.getElementById('boardBtn').onclick=function(){
+    var old=document.getElementById('brdOverlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='brdOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column;color:var(--txt)';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#2e5c44;color:#fff;flex:0 0 auto">'+
+      '<button id="brdBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">🧱 Своя доска — уход от Trello</div></div>'+
+      '<div id="brdBody" style="flex:1;overflow:auto;padding:16px;max-width:900px;margin:0 auto;width:100%">Загрузка…</div>';
+    document.body.appendChild(ov);
+    document.getElementById('brdBack').onclick=function(){ ov.remove(); };
+    function tok(){ try{ return localStorage.getItem('ms_board_token')||''; }catch(e){ return ''; } }
+    function draw(st){
+      var b=document.getElementById('brdBody'); if(!b) return;
+      var mode=st.mode||'trello';
+      var h='';
+      h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-size:15px;font-weight:700">Сейчас карточки берутся из: '+
+        (mode==='db'?'<span style="color:#9ee6bd">своей базы</span>':'<span style="color:#e8c07d">Trello</span>')+'</div>'+
+        '<div class="muted" style="margin-top:4px">Следующий номер изготовления: <b>'+(st.nextCardNumber||'—')+'</b> · следующий номер ремонта: <b>'+(st.nextRepairNumber||'—')+'</b>'+
+        (st.maxSeen?(' · максимум по всем источникам: '+st.maxSeen):'')+'</div></div>';
+      h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-weight:700;margin-bottom:6px">1. Импорт из Trello</div>'+
+        '<div class="muted small">Переносит колонки, карточки с номерами и описаниями, комментарии и историю переносов в свою базу. Вложения переезжают лениво — при первом скачивании. Импорт можно повторять: дублей не будет, данные обновятся.</div>'+
+        '<div style="margin-top:8px"><button class="btn" id="brdImport" type="button">↓ Импортировать сейчас</button> <span id="brdImpMsg" class="muted"></span></div></div>';
+      h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-weight:700;margin-bottom:6px">2. Сравнить, не переключая</div>'+
+        '<div class="muted small">Откройте две вкладки и сравните скорость и полноту: в шапке каждой доски показано, откуда данные и за сколько миллисекунд они пришли.</div>'+
+        '<div style="margin-top:8px"><a class="btn" id="brdOpenTrello" target="_blank" style="text-decoration:none">Доска на Trello</a> '+
+        '<a class="btn" id="brdOpenDb" target="_blank" style="text-decoration:none;border-color:#2e5c44;color:#9ee6bd">Своя доска (db=1)</a></div></div>';
+      h+='<div class="card" style="padding:14px"><div style="font-weight:700;margin-bottom:6px">3. Переключение источника</div>'+
+        '<div class="muted small">Меняет источник для всех сразу. Переключайте, только когда сравнили и убедились, что своя доска полная и быстрая. Обратно — в любой момент, данные Trello при этом не трогаются.</div>'+
+        '<div style="margin-top:8px">'+
+          (mode==='db'
+            ? '<button class="btn" id="brdToTrello" type="button">← Вернуть Trello</button>'
+            : '<button class="btn" id="brdToDb" type="button" style="border-color:#2e5c44;color:#9ee6bd">Переключить на свою базу →</button>')+
+        ' <span id="brdModeMsg" class="muted"></span></div></div>';
+      b.innerHTML=h;
+      var t=encodeURIComponent(tok());
+      document.getElementById('brdOpenTrello').href=WORKER+'/board?token='+t;
+      document.getElementById('brdOpenDb').href=WORKER+'/board?token='+t+'&db=1';
+      var imp=document.getElementById('brdImport');
+      if(imp) imp.onclick=function(){
+        if(!tok()){ alert('Сначала откройте свою доску по личной ссылке — из неё берётся токен доступа.'); return; }
+        imp.disabled=true; document.getElementById('brdImpMsg').textContent='Импортирую…';
+        fetch(WORKER+'/board-import-trello',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok()})})
+          .then(function(r){return r.json();}).then(function(j){
+            imp.disabled=false;
+            if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+            document.getElementById('brdImpMsg').textContent='Готово: колонок '+j.lists+', карточек '+j.cards+', вложений '+j.attachments+', комментариев '+j.comments+', переносов '+j.moves+'. Следующий номер: '+j.nextCardNumber+' · '+j.nextRepairNumber;
+            load();
+          }).catch(function(e){ imp.disabled=false; document.getElementById('brdImpMsg').textContent='Ошибка: '+(e&&e.message||e); });
+      };
+      function setMode(m){
+        if(!tok()){ alert('Сначала откройте свою доску по личной ссылке — из неё берётся токен доступа.'); return; }
+        if(!confirm(m==='db'?'Переключить всех на свою базу? Карточки будут создаваться и двигаться в системе, Trello останется как есть.':'Вернуть источником Trello?')) return;
+        fetch(WORKER+'/board-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok(),mode:m})})
+          .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); load(); })
+          .catch(function(e){ document.getElementById('brdModeMsg').textContent='Ошибка: '+(e&&e.message||e); });
+      }
+      var b1=document.getElementById('brdToDb'); if(b1) b1.onclick=function(){ setMode('db'); };
+      var b2=document.getElementById('brdToTrello'); if(b2) b2.onclick=function(){ setMode('trello'); };
+    }
+    function load(){
+      fetch(WORKER+'/card-seq?token='+encodeURIComponent(tok()))
+        .then(function(r){return r.json();}).then(function(j){ draw(j&&j.ok?j:{}); })
+        .catch(function(){ draw({}); });
+    }
+    load();
+  };
   document.getElementById('discBtn').onclick=function(){
     var r=range();
     var old=document.getElementById('discOverlay'); if(old) old.remove();
@@ -819,6 +888,7 @@
     var pb=document.getElementById('pricingBtn'); if(pb) pb.style.display='none';
     var fb=document.getElementById('financeBtn'); if(fb) fb.style.display='none';
     var db=document.getElementById('discBtn'); if(db) db.style.display='none';
+    var bb=document.getElementById('boardBtn'); if(bb) bb.style.display='none';
     t.member('id').then(function(me){
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
         .then(function(r){return r.json();});
