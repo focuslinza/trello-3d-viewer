@@ -741,12 +741,13 @@
               msgEl.textContent=j.step||'…';
               if(j.done){
                 imp.disabled=false;
-                msgEl.textContent='Готово: карточек '+j.cards+', вложений '+j.attachments+', комментариев '+j.comments+', переносов '+j.moves+'. Следующий номер: '+j.nextCardNumber+' · '+j.nextRepairNumber;
+                msgEl.textContent='Готово: карточек '+j.cards+', вложений '+j.attachments+', комментариев '+j.comments+', переносов '+j.moves+', данных модулей '+(j.pluginKeys||0)+'. Следующий номер: '+j.nextCardNumber+' · '+j.nextRepairNumber;
                 load(); return;
               }
               state={ token:state.token, phase:j.phase, offset:j.offset,
                       maxShort:j.maxShort||state.maxShort||0, cards:j.cards||state.cards||0,
-                      attachments:j.attachments||state.attachments||0, comments:j.comments||state.comments||0, moves:j.moves||state.moves||0 };
+                      attachments:j.attachments||state.attachments||0, comments:j.comments||state.comments||0, moves:j.moves||state.moves||0,
+                      pluginKeys:j.pluginKeys||state.pluginKeys||0 };
               step();
             }).catch(function(e){ imp.disabled=false; msgEl.textContent='Ошибка: '+(e&&e.message||e); });
         }
