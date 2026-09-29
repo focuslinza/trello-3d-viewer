@@ -1,5 +1,12 @@
 // ============================================================
-// This file is already set up for you — no need to edit it.
+// Адрес сервера системы. Менять не нужно.
 // ============================================================
-// It points the viewer at your Cloudflare Worker.
-window.WORKER_URL = "https://trello-3d-viewer.azhanbos.workers.dev";
+// Если страница открыта с домена самой системы (ttms.kz или *.workers.dev),
+// адрес берётся из самой страницы — так при переезде на свой домен ничего
+// не ломается. Со сторонних хостингов (GitHub Pages, Trello Power-Up)
+// используется запасной адрес ниже.
+(function () {
+  var FALLBACK = "https://trello-3d-viewer.azhanbos.workers.dev";
+  var OWN = /(^|\.)ttms\.kz$/i.test(location.hostname) || /\.workers\.dev$/i.test(location.hostname);
+  window.WORKER_URL = OWN ? (location.origin) : FALLBACK;
+})();
