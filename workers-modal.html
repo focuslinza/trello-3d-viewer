@@ -173,7 +173,9 @@
     var BOARD_MEMBERS = [];
 
     function memberOptionsHtml(selectedId){
-      var h = '<option value="">— не привязан —</option>';
+      // привязка к Trello больше не обязательна: вход по личной ссылке (кнопка 🔗),
+      // а внутренний идентификатор ms-… система выдаёт сама (решение Асхата, 09.2026)
+      var h = '<option value="">— без Trello (вход по ссылке) —</option>';
       BOARD_MEMBERS.forEach(function(m){
         var nm = m.fullName || m.username || m.id;
         h += '<option value="'+m.id+'"'+(m.id===selectedId?' selected':'')+'>'+String(nm).replace(/</g,'&lt;')+'</option>';
