@@ -725,16 +725,32 @@
       document.getElementById('brdOpenTrello').href=WORKER+'/board?token='+t;
       document.getElementById('brdOpenDb').href=WORKER+'/board?token='+t+'&db=1';
       var imp=document.getElementById('brdImport');
+      // ИМПОРТ ПОРЦИЯМИ (урок 09.2026: один большой вызов упирался в лимит
+      // Cloudflare «Too many API requests») — идём этапами, показывая прогресс
       if(imp) imp.onclick=function(){
         if(!tok()){ alert('Сначала откройте свою доску по личной ссылке — из неё берётся токен доступа.'); return; }
-        imp.disabled=true; document.getElementById('brdImpMsg').textContent='Импортирую…';
-        fetch(WORKER+'/board-import-trello',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok()})})
-          .then(function(r){return r.json();}).then(function(j){
-            imp.disabled=false;
-            if(!j||!j.ok) throw new Error((j&&j.error)||'?');
-            document.getElementById('brdImpMsg').textContent='Готово: колонок '+j.lists+', карточек '+j.cards+', вложений '+j.attachments+', комментариев '+j.comments+', переносов '+j.moves+'. Следующий номер: '+j.nextCardNumber+' · '+j.nextRepairNumber;
-            load();
-          }).catch(function(e){ imp.disabled=false; document.getElementById('brdImpMsg').textContent='Ошибка: '+(e&&e.message||e); });
+        imp.disabled=true;
+        var msgEl=document.getElementById('brdImpMsg');
+        var state={ token:tok(), phase:'lists', offset:0 };
+        var guard=0;
+        function step(){
+          if(++guard>400){ imp.disabled=false; msgEl.textContent='Импорт прервался: слишком много шагов. Попробуйте ещё раз.'; return; }
+          fetch(WORKER+'/board-import-trello',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)})
+            .then(function(r){return r.json();}).then(function(j){
+              if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+              msgEl.textContent=j.step||'…';
+              if(j.done){
+                imp.disabled=false;
+                msgEl.textContent='Готово: карточек '+j.cards+', вложений '+j.attachments+', комментариев '+j.comments+', переносов '+j.moves+'. Следующий номер: '+j.nextCardNumber+' · '+j.nextRepairNumber;
+                load(); return;
+              }
+              state={ token:state.token, phase:j.phase, offset:j.offset,
+                      maxShort:j.maxShort||state.maxShort||0, cards:j.cards||state.cards||0,
+                      attachments:j.attachments||state.attachments||0, comments:j.comments||state.comments||0, moves:j.moves||state.moves||0 };
+              step();
+            }).catch(function(e){ imp.disabled=false; msgEl.textContent='Ошибка: '+(e&&e.message||e); });
+        }
+        step();
       };
       function setMode(m){
         if(!tok()){ alert('Сначала откройте свою доску по личной ссылке — из неё берётся токен доступа.'); return; }
