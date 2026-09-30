@@ -708,7 +708,8 @@
         (st.maxSeen?(' · максимум по всем источникам: '+st.maxSeen):'')+'</div></div>';
       h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-weight:700;margin-bottom:6px">1. Импорт из Trello</div>'+
         '<div class="muted small">Переносит колонки, карточки с номерами и описаниями, комментарии и историю переносов в свою базу. Вложения переезжают лениво — при первом скачивании. Импорт можно повторять: дублей не будет, данные обновятся.</div>'+
-        '<div style="margin-top:8px"><button class="btn" id="brdImport" type="button">↓ Импортировать сейчас</button> <span id="brdImpMsg" class="muted"></span></div></div>';
+        '<div style="margin-top:8px"><button class="btn" id="brdImport" type="button">↓ Импортировать сейчас</button> <span id="brdImpMsg" class="muted"></span></div>'+
+        '<div id="brdImpResult" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;line-height:1.55"></div></div>';
       h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-weight:700;margin-bottom:6px">2. Сравнить, не переключая</div>'+
         '<div class="muted small">Откройте две вкладки и сравните скорость и полноту: в шапке каждой доски показано, откуда данные и за сколько миллисекунд они пришли.</div>'+
         '<div style="margin-top:8px"><a class="btn" id="brdOpenTrello" target="_blank" style="text-decoration:none">Доска на Trello</a> '+
@@ -731,17 +732,32 @@
         if(!tok()){ alert('Сначала откройте свою доску по личной ссылке — из неё берётся токен доступа.'); return; }
         imp.disabled=true;
         var msgEl=document.getElementById('brdImpMsg');
+        var resEl=document.getElementById('brdImpResult');
+        resEl.style.display='none';
         var state={ token:tok(), phase:'lists', offset:0 };
-        var guard=0;
+        var guard=0, lastStep='';
+        // ИТОГ ИМПОРТА (решение Асхата, 09.2026): в конце — явная плашка: зелёная, если
+        // всё перенесено, красная — если нет, с этапом, где остановилось, и что делать
+        function result(ok, html){
+          resEl.style.display='';
+          resEl.style.background=ok?'#1c3329':'#3a2226';
+          resEl.style.border='1px solid '+(ok?'#2e5c44':'#6b2a2a');
+          resEl.style.color=ok?'#9ee6bd':'#f3b3b3';
+          resEl.innerHTML=html;
+        }
         function step(){
-          if(++guard>400){ imp.disabled=false; msgEl.textContent='Импорт прервался: слишком много шагов. Попробуйте ещё раз.'; return; }
+          if(++guard>400){ imp.disabled=false; msgEl.textContent='';
+            result(false,'<b>✗ Импорт не завершён</b><br>Слишком много шагов, последний этап: '+(lastStep||'—')+'.<br>Нажмите «Импортировать сейчас» ещё раз — уже перенесённое не задвоится.'); return; }
           fetch(WORKER+'/board-import-trello',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)})
             .then(function(r){return r.json();}).then(function(j){
               if(!j||!j.ok) throw new Error((j&&j.error)||'?');
-              msgEl.textContent=j.step||'…';
+              msgEl.textContent=j.step||'…'; lastStep=j.step||lastStep;
               if(j.done){
-                imp.disabled=false;
-                msgEl.textContent='Готово: карточек '+j.cards+', вложений '+j.attachments+', комментариев '+j.comments+', переносов '+j.moves+', данных модулей '+(j.pluginKeys||0)+'. Следующий номер: '+j.nextCardNumber+' · '+j.nextRepairNumber;
+                imp.disabled=false; msgEl.textContent='';
+                result(true,'<b>✓ Импорт завершён успешно — все данные перенесены</b><br>'+
+                  'Карточек: <b>'+j.cards+'</b> · вложений: <b>'+j.attachments+'</b> · комментариев: <b>'+j.comments+'</b> · переносов: <b>'+j.moves+'</b> · данных модулей: <b>'+(j.pluginKeys||0)+'</b><br>'+
+                  'Следующий номер изготовления: <b>'+j.nextCardNumber+'</b> · ремонта: <b>'+j.nextRepairNumber+'</b><br>'+
+                  '<span style="opacity:.8">Вложения переедут в ваше хранилище при первом открытии — это не ошибка.</span>');
                 load(); return;
               }
               state={ token:state.token, phase:j.phase, offset:j.offset,
@@ -749,7 +765,9 @@
                       attachments:j.attachments||state.attachments||0, comments:j.comments||state.comments||0, moves:j.moves||state.moves||0,
                       pluginKeys:j.pluginKeys||state.pluginKeys||0 };
               step();
-            }).catch(function(e){ imp.disabled=false; msgEl.textContent='Ошибка: '+(e&&e.message||e); });
+            }).catch(function(e){ imp.disabled=false; msgEl.textContent='';
+              result(false,'<b>✗ Импорт остановился с ошибкой</b><br>Этап: '+(lastStep||'начало')+'<br>Причина: '+String(e&&e.message||e).replace(/</g,'&lt;')+
+                '<br>Нажмите «Импортировать сейчас» ещё раз — уже перенесённое не задвоится, продолжит с начала без потерь.'); });
         }
         step();
       };
