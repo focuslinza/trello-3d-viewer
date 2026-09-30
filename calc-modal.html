@@ -101,6 +101,9 @@
       Сбросы ничего не меняют в базе, пока не нажата кнопка «Сохранить».
     </div>
     <div id="dxfBreakdown"></div>
+    <!-- ВЕРСИИ РАСЧЁТА (решение Асхата, 09.2026) -->
+    <div class="hint" id="verLine" style="margin:4px 0 10px"></div>
+    <div id="verBox" style="display:none;margin:0 0 12px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px"></div>
 
     <!-- ПОДГОН ПОД ДОГОВОРНУЮ СУММУ (решение Асхата, 09.2026): раньше инженер вручную
          подбирал цены реза/гибки, чтобы попасть в согласованную с клиентом сумму -->
@@ -937,6 +940,38 @@
         var rl2=document.getElementById('fitRates'); if(rl2) rl2.innerHTML=''; recompute();
       };
     })();
+    // версия расчёта, история и удаление черновика
+    function loadVersions(){
+      if(!ctx.cardId || MODE_REPAIR) return;
+      fetch(WORKER+'/calc-versions?cardId='+encodeURIComponent(ctx.cardId)).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) return;
+        var el=document.getElementById('verLine'); if(!el) return;
+        if(!j.active){ el.textContent='Новый расчёт — ещё не сохранён.'; return; }
+        var h='Версия <b>'+j.active.version+'</b>'+(j.active.savedAt?(' от '+String(j.active.savedAt).slice(0,16).replace('T',' ')):'')+
+          (j.accepted?' · <span style="color:#e8c07d" title="Изменение — только корректировкой с причиной">работа принята: '+j.acceptedWhy+'</span>':' · черновик до приёмки работы')+
+          (j.history.length?(' · <a href="#" id="verHist">история ('+j.history.length+')</a>'):'')+
+          (!j.accepted?' · <a href="#" id="verDel" style="color:#f28b82" title="Удалить ошибочный расчёт. Он останется в истории как «удалён».">удалить расчёт</a>':'');
+        el.innerHTML=h;
+        var hl=document.getElementById('verHist');
+        if(hl) hl.onclick=function(ev){ ev.preventDefault();
+          var box=document.getElementById('verBox'); box.style.display=box.style.display==='none'?'':'none';
+          box.innerHTML=j.history.map(function(v){
+            var lbl=v.status==='deleted'?'удалён':'заменён';
+            return '<div>v'+v.version+' · '+lbl+' '+String(v.replaced_at||'').slice(0,16)+' · '+Math.round(v.total||0).toLocaleString('ru-RU')+' ₸'+(v.reason?(' · '+esc(v.reason)):'')+'</div>';
+          }).join('');
+        };
+        var dl=document.getElementById('verDel');
+        if(dl) dl.onclick=function(ev){ ev.preventDefault();
+          if(!confirm('Удалить этот расчёт? Он сохранится в истории как «удалён», карточку можно будет посчитать заново.')) return;
+          fetch(WORKER+'/calc-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cardId:ctx.cardId,reason:'удалён черновик'})})
+            .then(function(r){return r.json();}).then(function(o){
+              if(!o||!o.ok){ alert(o&&o.error||'Не удалось'); return; }
+              t.set('card','shared','calcData',null).catch(function(){}); loadVersions(); alert('Расчёт удалён (в истории — v'+o.deletedVersion+').');
+            });
+        };
+      }).catch(function(){});
+    }
+    setTimeout(loadVersions, 400);
     document.getElementById('btnClose').onclick=function(){ t.closeModal(); };
     document.getElementById('btnSave').onclick=function(){
       var btn=this; var msg=document.getElementById('msg');
@@ -993,10 +1028,10 @@
           });
         return;
       }
-      // 1) save to the card (compact)
-      t.set('card','shared','calcData',calcData).then(function(){
-        // 2) log to central D1 via Worker
-        var payload={
+      // ВЕРСИИ РАСЧЁТА (решение Асхата, 09.2026): сначала база — она решает, можно ли
+      // менять расчёт. Если работа уже принята, сервер отвечает 409 и спрашивает
+      // причину корректировки; карточка обновляется только после согласия базы.
+      var payload={
           cardId:ctx.cardId, cardName:ctx.cardName, cardNumber:ctx.cardNumber, boardId:ctx.boardId,
           companyId:ctx.companyId, companyName:ctx.companyName, objectName:ctx.objectName, status:ctx.status,
           subtotal:res.subtotal, taxRate:res.taxRate, taxAmount:res.taxAmount, total:res.total, currency:'KZT',
@@ -1012,15 +1047,28 @@
           // Сервер сам её не выведет — у него в операциях только метры и штуки.
           unitsQty:dxfUnits()
         };
-        return fetch(WORKER+'/calc-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
-          .then(function(r){ return r.json(); });
+      function saveToDb(extra){
+        return fetch(WORKER+'/calc-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.assign({}, payload, extra||{})) })
+          .then(function(r){ return r.json().then(function(j){ j._status=r.status; return j; }); });
+      }
+      saveToDb().then(function(out){
+        if(out && out._status===409 && out.accepted){
+          var reason=prompt('Работа по заказу уже принята ('+(out.acceptedWhy||'')+').\n\nИзменить расчёт можно только корректировкой: разница по зарплате будет записана видимой поправкой, прежняя версия сохранится в истории.\n\nПричина корректировки:','');
+          if(!reason || !reason.trim()) { var e0=new Error('отменено — расчёт не изменён'); e0.cancel=true; throw e0; }
+          return saveToDb({ correction:true, correctionReason:reason.trim() });
+        }
+        return out;
       }).then(function(out){
-        if(out && out.ok){ msg.className='msg ok'; msg.textContent='Сохранено в карточку и в базу.'; }
-        else { msg.className='msg ok'; msg.textContent='Сохранено в карточку. База: '+((out&&out.error)||'не записано'); }
+        if(!out || !out.ok) throw new Error((out&&out.error)||'не записано');
+        return t.set('card','shared','calcData',calcData).catch(function(){}).then(function(){ return out; });
+      }).then(function(out){
+        msg.className='msg ok';
+        msg.textContent='Сохранено: версия '+(out.version||1)+
+          (out.correction?(' · корректировка, поправок по зарплате: '+(out.correction.lines||0)+(out.correction.total?(' ('+(out.correction.total>0?'+':'')+Math.round(out.correction.total).toLocaleString('ru-RU')+' ₸)'):'')):'');
         btn.disabled=false;
-        setTimeout(function(){ t.closeModal(); }, 900);
+        setTimeout(function(){ t.closeModal(); }, out.correction?2500:900);
       }).catch(function(e){
-        msg.className='msg err'; msg.textContent='Сохранено в карточку, но база недоступна: '+(e&&e.message||'сеть');
+        msg.className='msg err'; msg.textContent=(e&&e.cancel)?e.message:('Не сохранилось: '+(e&&e.message||'сеть'));
         btn.disabled=false;
       });
     };
