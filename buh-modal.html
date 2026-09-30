@@ -664,7 +664,9 @@
             p.orders.forEach(function(o){
               h+='<tr class="osub"><td></td>'+
                  '<td class="muted" style="padding-left:18px">'+(o.number?('№'+esc(o.number)+' · '):'')+esc(o.name)+
-                 (o.stages&&o.stages.length?(' <span style="font-size:11px;color:#7a8794">('+esc(o.stages.join(', '))+')</span>'):'')+'</td>'+
+                 (o.stages&&o.stages.length?(' <span style="font-size:11px;color:#7a8794">('+esc(o.stages.join(', '))+')</span>'):'')+
+                 (o.ledger==='reversal'?' <span class="pill" style="background:#3a2226;color:#f3b3b3" title="'+esc(o.note||'')+'">сторно</span>':'')+
+                 (o.ledger==='correction'?' <span class="pill" style="background:#3a2f14;color:#e8c07d" title="'+esc(o.note||'')+'">поправка</span>':'')+'</td>'+
                  '<td class="num">'+money(o.earned)+' ₸</td><td></td></tr>';
             });
           }
@@ -694,7 +696,10 @@
           '<button class="btn" id="payReopen" type="button" style="margin-left:8px;padding:3px 10px;font-size:12px">Открыть снова</button></div>';
       } else if(_fullMonth){
         h+='<div style="margin:14px 0 6px"><button class="btn" id="payClose" type="button" style="border-color:#2e5c44;color:#4bce97" title="Зафиксировать ведомость месяца как выплаченную: дальнейшие изменения процентов, порогов и цен её не пересчитают. Можно открыть снова.">🔒 Закрыть месяц '+esc(_ymP)+'</button>'+
-          ' <span class="muted" style="font-size:12px">после выплаты — чтобы ведомость больше не менялась</span></div>';
+          ' <span class="muted" style="font-size:12px">после выплаты — чтобы ведомость больше не менялась</span>'+
+          ' <button class="btn" id="ledRecalc" type="button" style="margin-left:6px" title="Сравнить зафиксированные начисления с пересчётом по текущим ставкам. Ничего не меняет, пока не нажмёте «Применить».">⚖ Сверка с текущими ставками</button>'+
+          (PAY&&PAY.ledger?' <span class="muted" style="font-size:12px" title="Сдельная записывается в журнал в момент приёмки работы (акт/сдача) и больше не пересчитывается от новых ставок">· сдельная из журнала начислений</span>':'')+
+          '</div><div id="ledBox" style="display:none;margin:8px 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:8px"></div>';
       }
       h+='<h3 style="margin:14px 0 6px">Зарплата к выдаче</h3>';
       if(!ss.length) h+='<div class="empty">Нет начислений за период.</div>';
@@ -1066,10 +1071,34 @@
         post('/payroll-close',{ ym:ym, byName:(ME&&ME.name)||'' }).then(function(){ loadPayroll(); })
           .catch(function(e){ pcB.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
       };
+      var lrB=document.getElementById('ledRecalc');
+      if(lrB) lrB.onclick=function(){
+        var ym=(PAY&&PAY.ym)||String(RANGE.to).slice(0,7);
+        var box=document.getElementById('ledBox'); box.style.display=''; box.innerHTML='Сверяю…';
+        fetch(WORKER+'/ledger-recalc?ym='+ym).then(function(r){return r.json();}).then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+          if(!j.diffs.length){ box.innerHTML='<b style="color:var(--green)">✓ Расхождений нет</b> — зафиксированные начисления совпадают с текущими ставками.'; return; }
+          var h='<div style="font-weight:700;margin-bottom:6px">Разница с текущими ставками за '+esc(ym)+': '+(j.total>0?'+':'')+money(j.total)+' ₸</div>'+
+            '<div class="muted" style="font-size:12px;margin-bottom:6px">Это начисления, принятые до изменения ставок. Применение запишет строки-поправки — их увидят и в ведомости, и работники в «Моём заработке».</div>'+
+            '<table class="tbl" style="width:100%"><thead><tr><th>Работник</th><th>Заказ</th><th class="num">Было</th><th class="num">По новым</th><th class="num">Поправка</th></tr></thead><tbody>';
+          j.diffs.forEach(function(d){ h+='<tr><td>'+esc(d.worker)+'</td><td>'+esc((d.number?('№'+d.number+' '):'')+(d.name||''))+'</td><td class="num">'+money(d.ledger)+'</td><td class="num">'+money(d.now)+'</td><td class="num" style="color:'+(d.diff<0?'#f28b82':'#4bce97')+'">'+(d.diff>0?'+':'')+money(d.diff)+'</td></tr>'; });
+          h+='</tbody></table><div style="margin-top:8px"><button class="btn" id="ledApply" type="button" style="border-color:#2e5c44;color:#9ee6bd">Применить поправки</button> <button class="btn" id="ledCancel" type="button">Не применять</button></div>';
+          box.innerHTML=h;
+          document.getElementById('ledCancel').onclick=function(){ box.style.display='none'; };
+          document.getElementById('ledApply').onclick=function(){
+            var reason=prompt('Причина поправки (увидят в ведомости и работники):','новые ставки');
+            if(reason===null) return;
+            this.disabled=true;
+            post('/ledger-recalc',{ ym:ym, apply:1, reason:reason||'новые ставки', byName:(ME&&ME.name)||'' })
+              .then(function(){ loadPayroll(); })
+              .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+          };
+        }).catch(function(e){ box.innerHTML='Ошибка: '+esc(e&&e.message||e); });
+      };
       var prB=document.getElementById('payReopen');
       if(prB) prB.onclick=function(){
         var ym=(PAY&&PAY.ym)||String(RANGE.to).slice(0,7);
-        if(!confirm('Открыть месяц '+ym+' снова? Ведомость будет пересчитана по ТЕКУЩИМ процентам и может измениться.')) return;
+        if(!confirm('Открыть месяц '+ym+' снова?\n\nСдельная останется такой, как была зафиксирована при приёмке работы. Новые ставки к прошлому применяются только через «Сверка с текущими ставками» — отдельными видимыми поправками.')) return;
         post('/payroll-close',{ ym:ym, reopen:1, byName:(ME&&ME.name)||'' }).then(function(){ loadPayroll(); })
           .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
       };
