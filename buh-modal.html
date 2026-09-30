@@ -255,8 +255,10 @@
         if(admin) return true;
         return t.member('id').then(function(me){
           return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||''))
-            .then(function(r){return r.json();}).then(function(j){ return !!(j&&j.canInvoice); })
-            .catch(function(){ return false; });
+            // ДОСТУП В БУХГАЛТЕРИЮ (решение Асхата, 09.2026): чип «Бухгалтерия»,
+            // «Выставлять счета» или «Панель руководителя» (начальник цеха)
+            .then(function(r){return r.json();}).then(function(j){ window.__PERM_DIAG={memberId:(me&&me.id)||'', resp:j}; return !!(j&&(j.canInvoice||j.canIssueInvoice||j.canDashboard)); })
+            .catch(function(e){ window.__PERM_DIAG={memberId:(me&&me.id)||'', err:(e&&e.message)||'сеть'}; return false; });
         });
       });
     }
@@ -498,6 +500,7 @@
       h+='<div class="kpi green" id="kpiPaid" title="Нажмите: куда упали деньги — по поставщикам счетов и форме наличных" style="cursor:pointer"><div class="k">Оплачено ▾</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
       h+='<div class="kpi red" title="Дебиторка по заказам периода: работа отдана, деньги не пришли"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
       h+='<div class="kpi amber" title="Заказы, где проставлены все четыре отметки: счёт выслан, оплачен, сдали, акт подписан"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
+      if(T.mismatch) h+='<div class="kpi" style="border-color:#6b2a2a" title="Колонка карточки на доске не совпадает со статусом оплаты"><div class="k">Доска ≠ статус</div><div class="v" style="color:#f3b3b3">'+T.mismatch+'</div></div>';
       h+='</div>';
       // РАЗБИВКА ОПЛАТ (решение Асхата, 09.2026): ФИРДАУС / TTMS / MetalShop / нал Kaspi / нал купюры
       if(window.SHOW_VIA && T.byVia){
@@ -558,7 +561,8 @@
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
           h+='<tr'+(closed?' class="rowclosed"':'')+'><td style="white-space:nowrap"><a href="https://trello.com/c/'+esc(r.cardId)+'" target="_blank" rel="noopener" title="Открыть карточку Trello в новой вкладке" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a> '+
              '<a href="#" class="oinfo" data-card="'+esc(r.cardId)+'" title="Счета по заказу, состав, статусы" style="color:var(--muted);text-decoration:none;font-size:12px">ⓘ</a></td>'+
-             '<td>'+esc(r.name)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span>'+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+'</td>'+
+             '<td>'+esc(r.name)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span>'+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+
+               ((r.mismatch&&r.mismatch.length)?' <span class="mism" data-card="'+esc(r.cardId)+'" title="'+esc(r.mismatch.join('; '))+' — нажмите, чтобы разобраться" style="display:inline-block;padding:1px 7px;border-radius:9px;background:#3a2226;color:#f3b3b3;font-size:11px;cursor:pointer">⚠ доска ≠ статус</span>':'')+'</td>'+
              '<td>'+esc(r.client)+'</td><td class="num">'+money(r.total)+' ₸</td>'+
              '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
              '<td style="white-space:nowrap">'+chip(r,'paid','оплачен')+
@@ -1085,6 +1089,17 @@
           }).catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); });
         };
       });
+      [].forEach.call(document.querySelectorAll('.mism'), function(el){ el.onclick=function(){
+        var id=this.getAttribute('data-card'); var r=ROWS.filter(function(x){return x.cardId===id;})[0]; if(!r) return;
+        var msg='Заказ №'+(r.number||'')+': '+r.mismatch.join('; ')+'.\n\n';
+        if(!r.paid){
+          if(confirm(msg+'Карточку перенесли в «'+(r.boardColumn||'')+'», но оплата не отмечена.\n\nОК — отметить заказ оплаченным (деньги получены).\nОтмена — оставить как есть и вернуть карточку вручную на доске.')){
+            post('/calc-paid',{cardId:id,paid:1,why:'подтверждено по сверке с доской'}).then(function(){ load(); }).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+          }
+        } else {
+          alert(msg+'Оплата отмечена, а карточка стоит в «'+(r.boardColumn||'')+'». Перенесите её на доске в нужную колонку.');
+        }
+      }; });
       var kp=document.getElementById('kpiPaid'); if(kp) kp.onclick=function(){ window.SHOW_VIA=!window.SHOW_VIA; render(); };
       [].forEach.call(document.querySelectorAll('.viaOpen'), function(el){ el.onclick=function(){ var k=this.getAttribute('data-k'); window.VIA_OPEN=(window.VIA_OPEN===k)?'':k; render(); }; });
       [].forEach.call(document.querySelectorAll('.ncash'), function(el){ el.onclick=function(){
@@ -1130,7 +1145,16 @@
 
         canUse().then(function(allowed){
       if(!allowed){
-        document.getElementById('boot').textContent='Раздел доступен руководителю и сотрудникам с правом «выставлять счета» (включается в «Зарплата / Работники»).';
+        var dg=window.__PERM_DIAG||{}, jr=dg.resp||{};
+        var why;
+        if(dg.err) why='Сервер не ответил ('+esc(dg.err)+'). Обновите страницу.';
+        else if(jr.found===false||jr.ok===false) why='Ваш Trello-аккаунт не привязан ни к одному работнику. В «Зарплата / Работники» в карточке сотрудника выберите его Trello-аккаунт в списке справа.';
+        else why='Система нашла работника: '+esc(jr.workerName||'—')+(jr.cards>1?(' (карточек с этим Trello-аккаунтом: '+jr.cards+')'):'')+'. Права: '+
+          [['Бухгалтерия',jr.canInvoice],['Выставлять счета',jr.canIssueInvoice],['Панель руководителя',jr.canDashboard],['Видит стоимость',jr.canSeeCost],['Снабжение',jr.canSupply],['CRM',jr.canCrm],['Табель',jr.canTimesheet]]
+            .map(function(p){ return p[0]+': '+(p[1]?'да':'нет'); }).join(' · ');
+        document.getElementById('boot').innerHTML='Раздел доступен руководителю и сотрудникам с чипом «Бухгалтерия», «Выставлять счета» или «Панель руководителя».'+
+          '<div class="muted" style="margin-top:8px">'+why+'</div>'+
+          '<div class="muted" style="margin-top:6px;font-size:11.5px">Ваш Trello ID: '+esc(dg.memberId||'—')+' — назовите его руководителю, если права выставлены, а доступа нет.</div>';
         return;
       }
       load();
