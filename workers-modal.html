@@ -150,6 +150,7 @@
 
     <div class="sec">
       <h3>Работники</h3>
+      <div style="margin:-4px 0 10px"><button class="btn" id="printCards" type="button" style="border-color:#2e5c44;color:#9ee6bd" title="Листок каждому сотруднику: личный QR для входа и 3–4 шага по его работе. Для дня перехода на новую систему.">🖨 Памятки и QR для перехода</button></div>
       <div id="rows"></div>
       <div class="empty" id="emptyHint" style="display:none">Пока нет работников. Добавьте первого.</div>
       <div style="margin-top:12px"><button class="btn add" id="addBtn" type="button">+ добавить работника</button></div>
@@ -220,13 +221,70 @@
     ];
     // Карточка доступа работника: QR для телефона (можно распечатать как бейдж),
     // ссылка для WhatsApp и ПИН для входа на цеховом компьютере.
+    // токен руководителя (личная ссылка, с которой открыта доска) — нужен сервером
+    // для выдачи и смены доступов (урок 10.2026)
+    function ADMIN_TOKEN(){ try{ return localStorage.getItem('ms_board_token')||''; }catch(e){ return ''; } }
+    // QR рисуется в браузере: личная ссылка не уходит на сторонний сервис
+    function drawQr(el, text, size){
+      if(!el) return;
+      function go(){ el.innerHTML=''; try{ new QRCode(el,{text:text,width:size,height:size,correctLevel:QRCode.CorrectLevel.M}); }catch(e){ el.textContent='QR недоступен'; } }
+      if(window.QRCode) return go();
+      var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload=go;
+      s.onerror=function(){ el.textContent='Не удалось загрузить генератор QR'; }; document.head.appendChild(s);
+    }
+    // ПАМЯТКИ И QR ДЛЯ ПЕРЕХОДА (решение Асхата, 10.2026): листок каждому — личный QR,
+    // как войти и что делать именно ему (по этапам и правам). Печать: 2 листка на A4.
+    function roleSteps(w){
+      var st=w.stages||[], out=[];
+      var shop=st.some(function(s){ return ['cut','bend','weld','assembly','montazh','repair','shleif','shleifCut','paint'].indexOf(s)>=0; });
+      if(w.dashboard) out.push(['Руководство','Доска: все заказы по колонкам. Перенос назад из производства — система спросит смысл: исправление, переоткрыть или переделка.','Панель руководителя: финансы, «% Уступки», «🧱 Своя доска», цели управляющему.','Зарплата и работники: доли, оклады, доступы, «Закрыть месяц» после выплаты.']);
+      if(w.acct) out.push(['Бухгалтерия','Счёт: «Изменить счёт» вместо нового номера, «Счёт на остаток», «Предоплата, %». В 1С — тот же номер.','Отметки «выслан / сдали / акт»: от «акта» зависит зарплата цеха — ставьте сразу.','Зарплаты: ведомость, удержания, «Сверка с текущими ставками».']);
+      if(st.indexOf('eng')>=0) out.push(['Инженер','Карточка → DXF / Раскрой → Калькулятор → «Сохранить». Новый DXF заменяет расчёт, старый — в истории.','Договорились о сумме — «Подогнать под договорную сумму», выберите компанию.','Маршрут: отметьте только нужные этапы — лишний этап = лишняя сдельная.']);
+      if(w.supply) out.push(['Снабжение','Заявки на закупку, касса, чеки — в разделе «Снабжение».','Ваш процент начисляется после подписания акта по заказу.']);
+      if(shop) out.push(['Цех','🔔 Колокольчик: новые заказы в производстве и упоминания @Имя.','«Мой заработок»: оклад + сдельная по каждому заказу. Сдельная — после подписания акта.','Брак/переделка оформляется с виновником — смотрите комментарии к карточке.']);
+      if(w.repairAgent) out.push(['Ремонт','«Ремонт» → новая заявка Р-N с фото. Статус и сумма видны в приложении.']);
+      if(!out.length) out.push(['Сотрудник','«Мой заработок»: оклад и начисления за месяц.','🔔 Колокольчик: важные уведомления.']);
+      return out;
+    }
+    document.getElementById('printCards').onclick=function(){
+      var btn=this; btn.disabled=true;
+      fetch(WORKER+'/worker-tokens-all',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adminToken:ADMIN_TOKEN()})})
+        .then(function(r){return r.json();}).then(function(j){
+          btn.disabled=false;
+          if(!j||!j.ok){ alert(j&&j.error||'Не удалось'); return; }
+          var base=WORKER.replace(/\/$/,'');
+          var win=window.open('','_blank'); if(!win){ alert('Разрешите всплывающие окна для печати.'); return; }
+          var css='body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;color:#111}'+
+            '.card{box-sizing:border-box;height:148mm;padding:10mm 12mm;border-bottom:1px dashed #999;page-break-inside:avoid;display:flex;gap:10mm}'+
+            '.card:nth-child(2n){page-break-after:always;border-bottom:none}'+
+            '.qr{flex:0 0 46mm;text-align:center}.qr .box{width:46mm;height:46mm}.qr .box img,.qr .box canvas{width:46mm!important;height:46mm!important}'+
+            'h2{margin:0 0 2mm;font-size:18pt}.sub{color:#555;font-size:9.5pt;margin-bottom:3mm}'+
+            'h3{margin:3mm 0 1mm;font-size:11pt}ol{margin:0;padding-left:5mm;font-size:9.5pt;line-height:1.35}li{margin:0.6mm 0}'+
+            '.how{font-size:9pt;background:#f2f4f7;border-radius:3mm;padding:2.5mm 3mm;margin-top:3mm;line-height:1.35}'+
+            '.warn{font-size:8pt;color:#a33;margin-top:2mm}@media print{.noprint{display:none}}';
+          var h='<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Памятки и QR — переход на новую систему</title><style>'+css+'</style>'+
+            '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script></head><body>'+
+            '<div class="noprint" style="padding:10px;background:#fff8e1;border-bottom:1px solid #e0c060">Листков: '+j.workers.length+'. Печать — Ctrl+P (2 на страницу A4, разрезать по пунктиру). Ссылки ЛИЧНЫЕ — раздавайте каждому в руки. <button onclick="print()">🖨 Печать</button></div>';
+          j.workers.forEach(function(w,i){
+            var app=base+'/app#mt='+w.token, roles=roleSteps(w);
+            h+='<div class="card"><div class="qr"><div class="box" id="q'+i+'"></div><div class="sub" style="margin-top:2mm">Наведите камеру телефона</div></div><div style="flex:1">'+
+              '<h2>'+esc(w.name)+'</h2><div class="sub">Личный вход в систему цеха — только для вас</div>'+
+              '<div class="how"><b>Как войти:</b> 1) наведите камеру на QR и откройте ссылку; 2) в меню браузера — «На экран Домой» (iPhone: «Поделиться → На экран Домой»); 3) дальше открывайте значок на экране, как приложение.'+
+              ((w.dashboard||w.acct||(w.stages||[]).indexOf('eng')>=0)?'<br><b>На компьютере:</b> откройте ссылку из приложения («Доска») или попросите её у руководителя.':'')+'</div>';
+            roles.forEach(function(r){ h+='<h3>'+esc(r[0])+'</h3><ol>'+r.slice(1).map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ol>'; });
+            h+='<div class="warn">Не пересылайте ссылку другим: по ней система узнаёт вас и показывает ваш заработок.</div></div></div>';
+          });
+          h+='<script>window.onload=function(){'+JSON.stringify(j.workers.map(function(w){ return base+'/app#mt='+w.token; }))+'.forEach(function(u,i){ try{ new QRCode(document.getElementById("q"+i),{text:u,width:220,height:220,correctLevel:QRCode.CorrectLevel.M}); }catch(e){} }); };<\/script></body></html>';
+          win.document.open(); win.document.write(h); win.document.close();
+        }).catch(function(e){ btn.disabled=false; alert('Сеть: '+(e&&e.message||e)); });
+    };
     function showMobileCard(w, url){
       var h='<div id="mobOvl" style="position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto">'+
         '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:14px;max-width:460px;width:100%;padding:18px">'+
         '<div style="font-weight:700;font-size:16px;margin-bottom:4px">Доступ для: '+esc(w.name||'работник')+'</div>'+
         '<div class="muted" style="font-size:12px;margin-bottom:12px">Личный кабинет в телефоне: заработок в реальном времени, отметка смены, ремонтные расчёты. Ссылка персональная.</div>'+
         '<div style="text-align:center"><div style="background:#fff;display:inline-block;padding:10px;border-radius:12px">'+
-        '<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data='+encodeURIComponent(url)+'" width="200" height="200"></div>'+
+        '<div id="mobQr" style="width:200px;height:200px"></div></div>'+
         '<div class="muted" style="font-size:11.5px;margin-top:6px">Наведите камеру телефона · можно распечатать как бейдж</div></div>'+
         '<div style="margin-top:12px"><input id="mobUrl" type="text" readonly value="'+esc(url)+'" style="width:100%;box-sizing:border-box;font-size:11.5px"></div>'+
         '<div style="margin-top:6px"><button class="btn" id="mobCopy" type="button">📋 Скопировать ссылку</button> <a class="btn" id="mobWa" target="_blank" style="text-decoration:none">Отправить в WhatsApp</a></div>'+
@@ -240,6 +298,7 @@
         '<div style="margin-top:16px;text-align:right"><button class="btn" id="mobClose" type="button">Закрыть</button></div>'+
         '</div></div>';
       var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host.firstChild);
+      drawQr(document.getElementById('mobQr'), url, 200);
       document.getElementById('mobClose').onclick=function(){ var o=document.getElementById('mobOvl'); if(o) o.remove(); };
       document.getElementById('mobCopy').onclick=function(){
         // окно живёт в iframe Trello: navigator.clipboard там запрещён и падает молча.
@@ -275,7 +334,7 @@
         var msg=document.getElementById('mobPinMsg');
         if(!lg){ msg.textContent='Укажите логин'; return; }
         msg.textContent='Сохраняю…';
-        fetch(WORKER+'/worker-creds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workerId:w.id, login:lg, password:pw||undefined})})
+        fetch(WORKER+'/worker-creds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workerId:w.id, login:lg, password:pw||undefined, adminToken:ADMIN_TOKEN()})})
           .then(function(r){return r.json();})
           .then(function(j){
             if(j&&j.ok){ msg.textContent='Сохранено ✓';
@@ -430,7 +489,7 @@
       var mob=card.querySelector('.mob');
       if(mob) mob.addEventListener('click', function(){
         var btn=this; btn.disabled=true;
-        fetch(WORKER+'/worker-token-ensure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workerId:w.id})})
+        fetch(WORKER+'/worker-token-ensure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workerId:w.id, adminToken:ADMIN_TOKEN()})})
           .then(function(r){return r.json();})
           .then(function(j){
             btn.disabled=false;
