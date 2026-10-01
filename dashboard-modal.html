@@ -698,6 +698,22 @@
     document.body.appendChild(ov);
     document.getElementById('brdBack').onclick=function(){ ov.remove(); };
     function tok(){ try{ return localStorage.getItem('ms_board_token')||''; }catch(e){ return ''; } }
+    // ИТОГ ПОСЛЕДНЕГО ИМПОРТА — хранится на сервере, виден всегда (урок 09.2026:
+    // плашка стиралась при перерисовке, закрытое окно обрывало импорт молча)
+    function lastImportHtml(li){
+      if(!li) return '<div class="muted small" style="margin-top:8px">Импорт ещё не запускался.</div>';
+      var when=String(li.at||'').slice(0,16).replace('T',' ');
+      var ageMin=li.at?Math.round((Date.now()-Date.parse(li.at))/60000):0;
+      var box=function(ok,html){ return '<div style="margin-top:10px;padding:10px 12px;border-radius:8px;line-height:1.55;background:'+(ok?'#1c3329':'#3a2226')+';border:1px solid '+(ok?'#2e5c44':'#6b2a2a')+';color:'+(ok?'#9ee6bd':'#f3b3b3')+'">'+html+'</div>'; };
+      if(li.status==='done') return box(true,'<b>✓ Последний импорт завершён успешно</b> · '+when+(li.by?(' · '+li.by):'')+'<br>'+
+        'Карточек: <b>'+li.cards+'</b> · вложений: <b>'+li.attachments+'</b> · комментариев: <b>'+li.comments+'</b> · переносов: <b>'+li.moves+'</b> · данных модулей: <b>'+(li.pluginKeys||0)+'</b>');
+      if(li.status==='error') return box(false,'<b>✗ Последний импорт остановился с ошибкой</b> · '+when+'<br>Этап: '+(li.step||'?')+'<br>Причина: '+String(li.error||'').replace(/</g,'&lt;')+'<br>Нажмите «Импортировать сейчас» ещё раз — дублей не будет.');
+      if(li.status==='running'){
+        if(ageMin>=3) return box(false,'<b>✗ Импорт не завершён</b> — прервался '+when+' (окно закрыли или пропала связь).<br>Последний шаг: '+(li.step||'?')+'<br>Нажмите «Импортировать сейчас» ещё раз — дублей не будет.');
+        return '<div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:#2b2f3a;color:#c9d3e2">⏳ Импорт идёт: '+(li.step||'…')+' · '+when+'</div>';
+      }
+      return '';
+    }
     function draw(st){
       var b=document.getElementById('brdBody'); if(!b) return;
       var mode=st.mode||'trello';
@@ -709,7 +725,8 @@
       h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-weight:700;margin-bottom:6px">1. Импорт из Trello</div>'+
         '<div class="muted small">Переносит колонки, карточки с номерами и описаниями, комментарии и историю переносов в свою базу. Вложения переезжают лениво — при первом скачивании. Импорт можно повторять: дублей не будет, данные обновятся.</div>'+
         '<div style="margin-top:8px"><button class="btn" id="brdImport" type="button">↓ Импортировать сейчас</button> <span id="brdImpMsg" class="muted"></span></div>'+
-        '<div id="brdImpResult" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;line-height:1.55"></div></div>';
+        '<div id="brdImpResult" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;line-height:1.55"></div>'+
+        lastImportHtml(st.lastImport)+'</div>';
       h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-weight:700;margin-bottom:6px">2. Сравнить, не переключая</div>'+
         '<div class="muted small">Откройте две вкладки и сравните скорость и полноту: в шапке каждой доски показано, откуда данные и за сколько миллисекунд они пришли.</div>'+
         '<div style="margin-top:8px"><a class="btn" id="brdOpenTrello" target="_blank" style="text-decoration:none">Доска на Trello</a> '+
@@ -732,6 +749,9 @@
         if(!tok()){ alert('Сначала откройте свою доску по личной ссылке — из неё берётся токен доступа.'); return; }
         imp.disabled=true;
         var msgEl=document.getElementById('brdImpMsg');
+        var keep=document.createElement('div'); keep.className='muted small'; keep.style.marginTop='6px';
+        keep.textContent='Не закрывайте это окно до конца импорта. Если закроете — нажмите кнопку ещё раз, он продолжится без дублей.';
+        imp.parentNode.appendChild(keep);
         var resEl=document.getElementById('brdImpResult');
         resEl.style.display='none';
         var state={ token:tok(), phase:'lists', offset:0 };
@@ -758,7 +778,7 @@
                   'Карточек: <b>'+j.cards+'</b> · вложений: <b>'+j.attachments+'</b> · комментариев: <b>'+j.comments+'</b> · переносов: <b>'+j.moves+'</b> · данных модулей: <b>'+(j.pluginKeys||0)+'</b><br>'+
                   'Следующий номер изготовления: <b>'+j.nextCardNumber+'</b> · ремонта: <b>'+j.nextRepairNumber+'</b><br>'+
                   '<span style="opacity:.8">Вложения переедут в ваше хранилище при первом открытии — это не ошибка.</span>');
-                load(); return;
+                setTimeout(load, 4000); return;
               }
               state={ token:state.token, phase:j.phase, offset:j.offset,
                       maxShort:j.maxShort||state.maxShort||0, cards:j.cards||state.cards||0,
