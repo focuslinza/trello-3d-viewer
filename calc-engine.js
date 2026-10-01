@@ -229,12 +229,17 @@
     var operations=inp.operations||[], materials=inp.materials||[], components=inp.components||[];
     var line=[];
     var sumOps=0, weldSSsum=0, weldBlackSum=0, cutSum=0, dxfOpsSum=0, dxfRates={};
+    // НАДБАВКА НА РАБОТЫ В РЕМОНТЕ (решение Асхата, 10.2026): «Цены и коэффициенты» →
+    // «Ремонт: надбавка на работы, %». Поднимает тариф работ (резка/гибка/сварка/свои
+    // работы); шлейфовки, считающиеся от них, растут вместе с ними. Материалы и
+    // компоненты НЕ меняются. Только в расчётах ремонта (inp.repair).
+    var WORK_K = inp.repair ? (1 + Math.max(0, coef('repairWorkPct', 0)) / 100) : 1;
 
     operations.forEach(function(op){
       var k=KIND[op.kind]; if(!k)return;
       var qty=+op.qty||0, th=+op.thickness||0;
       if(k.t==='FLAT'){ if(qty<=0) return; } else { if(qty<=0||th<=0) return; }
-      var rate = (k.t==='FLAT') ? (+k.flatRate||0) : opRate(k.t,th,qty)*k.mult*rateMultFor(k.sec);
+      var rate = ((k.t==='FLAT') ? (+k.flatRate||0) : opRate(k.t,th,qty)*k.mult*rateMultFor(k.sec)) * WORK_K;
       // спеццена для постоянных клиентов: заменяет ТОЛЬКО тариф за единицу,
       // остальная формула (остатки, расход, шлейф, инженерка) не меняется.
       // Обычная цена сохраняется рядом (standardUnit) — для анализа уступок.

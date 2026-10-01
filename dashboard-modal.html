@@ -77,6 +77,7 @@
       <button class="btn" id="financeBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">₸ Финансы</button>
       <button class="btn" id="discBtn" type="button" style="border-color:#e8c07d;color:#e8c07d" title="Где и сколько уступаем клиентам: спеццены в расчётах против тарифа">% Уступки</button>
       <button class="btn" id="boardBtn" type="button" style="border-color:#4caf7d;color:#9ee6bd" title="Своя доска: импорт из Trello, сравнение и переключение режима">🧱 Своя доска</button>
+      <button class="btn" id="goalsBtn" type="button" style="border-color:#c9a8ff;color:#c9a8ff" title="Цели управляющему на месяц и бонус за их достижение">🎯 Цели управляющему</button>
       <button class="btn" id="backupBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff" title="Автоматические резервные копии системы">🗄 Резервные копии</button>
     </div>
     <button class="btn" id="close" type="button">Закрыть</button>
@@ -299,6 +300,7 @@
     h+=coefField('Ставка резки (множитель)','rateCut', c.rateCut!=null&&c.rateCut!==''?+c.rateCut:1,'×');
     h+=coefField('Ставка гибки (множитель)','rateBend', c.rateBend!=null&&c.rateBend!==''?+c.rateBend:1,'×');
     h+=coefField('Ставка сварки (множитель)','rateWeld', c.rateWeld!=null&&c.rateWeld!==''?+c.rateWeld:1,'×');
+    h+=coefField('Ремонт: надбавка на работы клиенту (резка, гибка, сварка, свои работы; материалы не меняются)','repairWorkPct', c.repairWorkPct!=null&&c.repairWorkPct!==''?+c.repairWorkPct:0,'% (0 = без надбавки)');
     h+='</div>';
     h+='<h3 style="margin-top:18px">Доля работника от стоимости работ</h3>';
     h+='<div class="small muted" style="margin-bottom:8px">Доли (цех / сборка / монтаж, %) настраиваются в <b>«Зарплата / Работники»</b> — вместе с типами оплаты, премией и инженерным процентом.</div>';
@@ -808,6 +810,89 @@
     }
     load();
   };
+  // ЦЕЛИ УПРАВЛЯЮЩЕМУ (решение Асхата, 10.2026): учредитель ставит цели по прибыли
+  // и утверждает бонус; управляющий здесь видит только свои цели и прогресс
+  document.getElementById('goalsBtn').onclick=function(){
+    var old=document.getElementById('glOverlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='glOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column;color:var(--txt)';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#3b2f5c;color:#fff;flex:0 0 auto">'+
+      '<button id="glBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">🎯 Цели управляющему</div></div>'+
+      '<div id="glBody" style="flex:1;overflow:auto;padding:16px;max-width:820px;margin:0 auto;width:100%">Загрузка…</div>';
+    document.body.appendChild(ov);
+    document.getElementById('glBack').onclick=function(){ ov.remove(); };
+    var tok=''; try{ tok=localStorage.getItem('ms_board_token')||''; }catch(e){}
+    var ym=new Date().toISOString().slice(0,7), ME_F=null;
+    function fmt(n){ return Math.round(+n||0).toLocaleString('ru-RU'); }
+    function shiftYm(d){ var p=ym.split('-'), dt=new Date(Date.UTC(+p[0],+p[1]-1+d,1)); ym=dt.toISOString().slice(0,7); load(); }
+    function draw(g){
+      var b=document.getElementById('glBody'); if(!b) return;
+      var isF=ME_F&&ME_F.isFounder;
+      var h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><button class="btn" id="glPrev">‹</button><b style="font-size:16px">'+ym+'</b><button class="btn" id="glNext">›</button>'+
+        '<span class="muted small" style="margin-left:auto">'+(isF?'вы — учредитель':(ME_F&&ME_F.founderName?('учредитель: '+ME_F.founderName):''))+'</span></div>';
+      if(!ME_F||(!ME_F.hasFounder&&!ME_F.canClaim)) h+='';
+      if(ME_F&&!ME_F.hasFounder&&ME_F.canClaim){
+        h+='<div class="card" style="padding:12px;margin-bottom:12px">Учредитель ещё не назначен. Учредитель ставит цели управляющему и утверждает бонус; управляющий сам себе цели менять не может.'+
+          '<div style="margin-top:8px"><button class="btn" id="glClaim" style="border-color:#c9a8ff;color:#c9a8ff">Я — учредитель компании</button></div></div>';
+      }
+      if(g.noManager){ h+='<div class="muted">Не выбран управляющий: в «Зарплата и работники» → «Мотивация начальника цеха» укажите, кому (поле «Кому»).</div>'; b.innerHTML=h; wire(); return; }
+      h+='<div class="card" style="padding:14px;margin-bottom:12px"><div class="muted small">Прибыль за месяц по начислению (как в «Финансах»)</div>'+
+        '<div style="font-size:24px;font-weight:700;margin:4px 0">'+fmt(g.actual)+' ₸</div>'+
+        (g.approved?'<div style="color:#9ee6bd">✓ Бонус утверждён '+String(g.approvedAt||'').slice(0,16)+' · '+(g.approvedBy||'')+'</div>':'<div class="muted small">Бонус по текущему факту: <b>'+fmt(g.bonusIfApproved)+' ₸</b> — начислится только после утверждения учредителем</div>')+'</div>';
+      h+='<div class="card" style="padding:14px"><div style="font-weight:700;margin-bottom:8px">Цели на '+ym+'</div><div id="glRows">';
+      (g.goals.length?g.goals:[]).forEach(function(x){
+        h+='<div style="margin:8px 0"><div style="display:flex;justify-content:space-between"><span>Прибыль ≥ <b>'+fmt(x.threshold)+' ₸</b> → бонус <b>'+fmt(x.bonus)+' ₸</b></span><span style="color:'+(x.achieved?'#4bce97':'#9fadbc')+'">'+(x.achieved?'✓ достигнута':x.progress+'%')+'</span></div>'+
+          '<div style="height:6px;background:#2b2f3a;border-radius:4px;margin-top:4px"><div style="height:6px;border-radius:4px;width:'+x.progress+'%;background:'+(x.achieved?'#4bce97':'#579dff')+'"></div></div></div>';
+      });
+      if(!g.goals.length) h+='<div class="muted">Цели на этот месяц не поставлены.</div>';
+      h+='</div>';
+      if(isF&&!g.approved){
+        h+='<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><div class="muted small" style="margin-bottom:6px">Ступени: при прибыли не меньше порога — фиксированный бонус. Ступени суммируются.</div><div id="glEdit"></div>'+
+          '<button class="btn" id="glAdd" type="button">+ ступень</button> <button class="btn" id="glSave" type="button" style="border-color:#2e5c44;color:#9ee6bd">Сохранить цели</button>'+
+          ' <button class="btn" id="glApprove" type="button" style="border-color:#c9a8ff;color:#c9a8ff;margin-left:8px">Утвердить бонус по итогам месяца</button></div>';
+      }
+      h+='</div>';
+      b.innerHTML=h;
+      if(isF&&!g.approved){
+        var ed=document.getElementById('glEdit');
+        var rows=(g.goals.length?g.goals:[{threshold:'',bonus:''}]).map(function(x){ return {threshold:x.threshold,bonus:x.bonus}; });
+        function drawEd(){ ed.innerHTML=rows.map(function(r,i){ return '<div style="display:flex;gap:6px;align-items:center;margin:4px 0">прибыль ≥ <input type="number" data-i="'+i+'" data-k="threshold" value="'+(r.threshold||'')+'" style="width:140px" placeholder="1000000"> ₸ → бонус <input type="number" data-i="'+i+'" data-k="bonus" value="'+(r.bonus||'')+'" style="width:110px" placeholder="100000"> ₸ <button class="btn" data-del="'+i+'" type="button" style="padding:2px 8px">✕</button></div>'; }).join('');
+          [].forEach.call(ed.querySelectorAll('input'),function(el){ el.oninput=function(){ rows[+this.dataset.i][this.dataset.k]=+this.value||0; }; });
+          [].forEach.call(ed.querySelectorAll('[data-del]'),function(el){ el.onclick=function(){ rows.splice(+this.dataset.del,1); drawEd(); }; }); }
+        drawEd();
+        document.getElementById('glAdd').onclick=function(){ rows.push({threshold:'',bonus:''}); drawEd(); };
+        document.getElementById('glSave').onclick=function(){
+          fetch(WORKER+'/goals-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok,ym:ym,goals:rows})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); draw(j); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
+        document.getElementById('glApprove').onclick=function(){
+          if(!confirm('Утвердить бонус за '+ym+'?\nПрибыль: '+fmt(g.actual)+' ₸ · бонус: '+fmt(g.bonusIfApproved)+' ₸.\n\nПосле утверждения цели месяца менять нельзя, бонус уйдёт в ведомость.')) return;
+          fetch(WORKER+'/goals-approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok,ym:ym})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); load(); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
+      }
+      wire();
+    }
+    function wire(){
+      var p=document.getElementById('glPrev'); if(p) p.onclick=function(){ shiftYm(-1); };
+      var n=document.getElementById('glNext'); if(n) n.onclick=function(){ shiftYm(1); };
+      var c=document.getElementById('glClaim'); if(c) c.onclick=function(){
+        if(!confirm('Назначить себя учредителем? Только учредитель сможет ставить цели управляющему и утверждать его бонус.')) return;
+        fetch(WORKER+'/founder-set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok})})
+          .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); load(); })
+          .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+      };
+    }
+    function load(){
+      fetch(WORKER+'/founder-me?token='+encodeURIComponent(tok)).then(function(r){return r.json();}).then(function(f){ ME_F=f;
+        return fetch(WORKER+'/goals-get?ym='+ym).then(function(r){return r.json();});
+      }).then(function(g){ draw(g||{goals:[]}); }).catch(function(e){ document.getElementById('glBody').textContent='Ошибка: '+(e&&e.message||e); });
+    }
+    load();
+  };
   document.getElementById('discBtn').onclick=function(){
     var r=range();
     var old=document.getElementById('discOverlay'); if(old) old.remove();
@@ -944,6 +1029,7 @@
     var fb=document.getElementById('financeBtn'); if(fb) fb.style.display='none';
     var db=document.getElementById('discBtn'); if(db) db.style.display='none';
     var bb=document.getElementById('boardBtn'); if(bb) bb.style.display='none';
+    var gb=document.getElementById('goalsBtn'); if(gb) gb.style.display='none';
     t.member('id').then(function(me){
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
         .then(function(r){return r.json();});

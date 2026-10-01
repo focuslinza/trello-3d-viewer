@@ -366,6 +366,8 @@
       [].forEach.call(matLines.children, function(r){ var d=r._read(); if(d.code&&d.qty>0) materials.push(d); });
       [].forEach.call(cmpLines.children, function(r){ var d=r._read(); if(d.code&&d.qty>0) components.push(d); });
       return {
+        // ремонт: движок применяет «Ремонт: надбавка на работы, %» (решение Асхата, 10.2026)
+        repair: !!MODE_REPAIR,
         operations:operations, materials:materials, components:components,
         urgency:+document.getElementById('urg').value||0,
         // степень изобретения назначает РУКОВОДСТВО в «Счёте на оплату»; здесь только
