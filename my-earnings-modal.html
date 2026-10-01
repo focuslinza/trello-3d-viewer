@@ -135,8 +135,28 @@
     }
     if(err){ html+='<div class="muted">'+esc(err)+'</div></div>'; document.getElementById('app').innerHTML=html; wirePeriod(); return; }
 
-    html+='<div class="total">'+money(j.total)+' ₸</div>';
-    html+='<div class="small muted" style="margin-top:4px">за '+MONTHS[cur.m].toLowerCase()+' '+cur.y+'</div>';
+    // ОКЛАД + ВНЕУРОЧНЫЕ + СДЕЛЬНАЯ = ИТОГО (решение Асхата, 09.2026) — из той же
+    // ведомости, что у бухгалтера; крупная цифра — итого начислено за месяц
+    var S=j.salary||null;
+    if(S){
+      html+='<div class="total">'+money(S.total)+' ₸</div>';
+      html+='<div class="small muted" style="margin-top:4px">начислено за '+MONTHS[cur.m].toLowerCase()+' '+cur.y+(S.hasSalary?' — оклад + сдельная':'')+'</div>';
+      var row=function(l,sub,v,strong){ return '<tr><td style="padding:5px 10px 5px 0;text-align:left">'+(strong?'<b>'+l+'</b>':l)+(sub?' <span class="small muted">'+sub+'</span>':'')+'</td><td style="padding:5px 0;text-align:right;white-space:nowrap">'+(strong?'<b style="color:#4bce97">'+money(v)+' ₸</b>':money(v)+' ₸')+'</td></tr>'; };
+      var tb='<table style="margin:12px auto 0;min-width:320px;border-collapse:collapse;font-size:14px">';
+      if(S.hasSalary){
+        tb+=row('Оклад', S.noTimesheet?'(табель ещё не заполнен)':('за '+S.payDays+' из '+S.workdays+' раб. дн. · ставка '+money(S.salary)+' ₸'), S.accrued);
+        if(S.otPay) tb+=row('Внеурочные', S.otHours+' ч', S.otPay);
+      }
+      if(S.piece||!S.hasSalary) tb+=row('Сдельная','акт подписан', S.piece);
+      if(S.salesBonus) tb+=row('Бонус за продажи','', S.salesBonus);
+      tb+='<tr><td colspan="2" style="border-top:1px solid var(--line,#3a414a);padding:0"></td></tr>';
+      tb+=row('Итого начислено','', S.total, true);
+      tb+='</table>';
+      html+=tb;
+    } else {
+      html+='<div class="total">'+money(j.total)+' ₸</div>';
+      html+='<div class="small muted" style="margin-top:4px">за '+MONTHS[cur.m].toLowerCase()+' '+cur.y+'</div>';
+    }
     // выплата подтверждается сдачей заказа: показываем работнику честную разбивку
     if(j.totalDelivered!=null){
       html+='<div style="display:flex;gap:10px;justify-content:center;margin-top:12px;flex-wrap:wrap">'+
