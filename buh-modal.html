@@ -674,7 +674,8 @@
         h+='</tbody></table>';
       }
       // --- правила оплаты статусов табеля ---
-      var AP=(PAY.attPay)||{p:100,n:0,b:0,o:0,v:0};
+      var AP=(PAY.attPay)||{p:100,n:0,b:0,o:0,v:0,l:100,e:100,t:0,minDeduct:1};
+      if(AP.l==null) AP.l=100; if(AP.e==null) AP.e=100; if(AP.t==null) AP.t=0; if(AP.minDeduct==null) AP.minDeduct=1; if(AP.lateGrace==null) AP.lateGrace=15;
       h+='<h3 style="margin:18px 0 6px">Правила оплаты статусов табеля <span class="muted" style="font-weight:400;font-size:12px">— сколько % дневной ставки начисляется за день</span></h3>';
       h+='<div class="row" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
          '<label>Я явка <input class="ap" data-k="p" value="'+AP.p+'" style="width:56px;text-align:right"> %</label>'+
@@ -682,6 +683,11 @@
          '<label>О отпуск <input class="ap" data-k="o" value="'+AP.o+'" style="width:56px;text-align:right"> %</label>'+
          '<label>Н неявка <input class="ap" data-k="n" value="'+AP.n+'" style="width:56px;text-align:right"> %</label>'+
          '<label>В выходной <input class="ap" data-k="v" value="'+AP.v+'" style="width:56px;text-align:right"> %</label>'+
+         '<label title="Опоздание: день считается явкой">Оп опоздание <input class="ap" data-k="l" value="'+AP.l+'" style="width:56px;text-align:right"> %</label>'+
+         '<label title="Отпросился / ушёл раньше: день считается явкой">Уш ушёл раньше <input class="ap" data-k="e" value="'+AP.e+'" style="width:56px;text-align:right"> %</label>'+
+         '<label>От отгул <input class="ap" data-k="t" value="'+AP.t+'" style="width:56px;text-align:right"> %</label>'+
+         '<label title="Минуты опоздания и раннего ухода вычитаются из оклада по часовой ставке (оклад ÷ раб.дни ÷ 8)"><input type="checkbox" id="apMin" '+(+AP.minDeduct?'checked':'')+' style="width:auto"> вычитать время опоздания/ухода</label>'+
+         '<label title="Опоздание до этого числа минут не вычитается; больше — округляется вверх до целого часа (16–60 мин = 1 ч, 61–120 мин = 2 ч)">опоздание до <input class="ap" data-k="lateGrace" value="'+AP.lateGrace+'" style="width:46px;text-align:right"> мин — без вычета, больше — до целого часа</label>'+
          '<button class="btn" id="apSave" type="button">Сохранить правила</button><span id="apMsg" class="muted"></span></div>';
       // --- окладники ---
       // ведомость на ВСЕХ: сдельщики, окладники и «оклад + сдельная».
@@ -729,7 +735,10 @@
              '<td class="num"><b>'+p.present+'</b> / '+p.workdays+'</td>'+
              '<td class="num muted">'+p.sick+' / '+p.vacation+' / '+p.absent+' / '+(p.dayoff||0)+'</td>'+
              '<td class="num'+(p.payDays!=null?'':' muted')+'">'+(p.payDays!=null?p.payDays:'—')+'</td>'+
-             '<td class="num'+(sal?'':' muted')+'">'+(sal?(money(p.accrued)+' ₸'):'—')+'</td>'+
+             '<td class="num'+(sal?'':' muted')+'">'+(sal?(money(p.accrued)+' ₸'+
+               ((p.late||p.early||p.timeoff)?('<div class="muted" style="font-size:11px">'+
+                 (p.late?('Оп '+p.late+' '):'')+(p.early?('Уш '+p.early+' '):'')+(p.timeoff?('От '+p.timeoff+' '):'')+
+                 (p.lateDed?('· −'+money(p.lateDed)+' ₸ за '+(p.lateMin%60===0?(p.lateMin/60+' ч'):(p.lateMin+' мин'))+(p.lateRawMin&&p.lateRawMin!==p.lateMin?(' (факт '+p.lateRawMin+' мин)'):'')):'')+'</div>'):'')):'—')+'</td>'+
              '<td class="num'+(otp?'':' muted')+'"'+(otp?' title="'+(p.otHours||0)+' ч × ставка ×2"':'')+'>'+(otp?((p.otHours||0)+' ч · '+money(otp)+' ₸'):'—')+'</td>'+
              '<td class="num'+(pc?'':' muted')+'">'+(pc?(money(pc)+' ₸'):'—')+'</td>'+
              '<td class="num">'+money(pay)+' ₸</td>'+
@@ -1026,6 +1035,7 @@
       if(apBtn) apBtn.onclick=function(){
         var coef={};
         [].forEach.call(document.querySelectorAll('.ap'), function(i){ coef[i.getAttribute('data-k')]=+String(i.value).replace(',','.')||0; });
+        var am=document.getElementById('apMin'); coef.minDeduct=am&&am.checked?1:0;
         var btn=this, msg=document.getElementById('apMsg');
         btn.disabled=true; btn.textContent='Сохраняю…';
         fetch(WORKER+'/att-pay-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({coef:coef})})
