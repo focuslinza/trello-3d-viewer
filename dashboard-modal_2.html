@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Панель руководителя</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <script src="./calc-engine.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; --amber:#c99a3a; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+    .wrap{padding:16px;max-width:1000px;margin:0 auto}
+    .sec{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+    h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+    .muted{color:var(--muted)} .small{font-size:12px}
+    .period{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:14px}
+    .period button{background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px}
+    .period .lbl{min-width:190px;text-align:center;font-weight:600;font-size:15px}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+    .kpi{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px}
+    .kpi .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+    .kpi .v{font-size:24px;font-weight:800;margin-top:4px}
+    .kpi.green .v{color:var(--green)} .kpi.red .v{color:var(--red)} .kpi.amber .v{color:var(--amber)}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    .tab{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;color:var(--txt)}
+    .tab.active{border-color:var(--accent);background:#2b3a63;color:#fff}
+    table{width:100%;border-collapse:collapse;margin-top:4px}
+    th,td{padding:8px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+    th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+    td.num,th.num{text-align:right;white-space:nowrap}
+    .pill{display:inline-block;border-radius:20px;padding:1px 9px;font-size:11px}
+    .pill.paid{background:#173a26;color:#7ee0a1;border:1px solid #2c6b45}
+    .pill.unpaid{background:#3a2320;color:#e8a59d;border:1px solid #7a3a32}
+    .chartbox{position:relative;height:220px}
+    .chartbox2{position:relative;height:200px;margin-top:10px}
+    .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;gap:10px}
+    .btn{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
+    .barw{background:var(--bg);border-radius:4px;overflow:hidden;min-width:60px}
+    .barf{height:8px;background:var(--accent);border-radius:4px}
+    .prgroup{margin-bottom:14px}
+    .prgroup h4{margin:14px 0 8px;font-size:13px;color:#cdd6df}
+    .prgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+    .prf{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+    .prf label{font-size:12px;color:var(--muted);flex:1;line-height:1.2}
+    .prf input{width:96px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px;font-size:13px;text-align:right}
+    .secrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+    .secrow .sn{flex:1;min-width:160px;font-size:12.5px;color:#cdd6df}
+    .secrow label{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted)}
+    .secrow input{width:64px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:5px 6px;font-size:12.5px;text-align:right}
+    .rtwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:10px}
+    table.rtable{width:auto;min-width:100%;border-collapse:collapse;margin:0}
+    table.rtable th,table.rtable td{padding:5px 6px;border:1px solid var(--line);text-align:center;font-size:12px;white-space:nowrap}
+    table.rtable thead th{background:var(--bg);color:var(--muted);font-weight:600;font-size:10.5px;text-transform:uppercase}
+    table.rtable td.thc{background:var(--bg);color:#cdd6df;font-weight:700;text-align:left}
+    table.rtable input{width:62px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--txt);padding:3px 4px;font-size:12px;text-align:center}
+    table.rtable input:hover,table.rtable input:focus{background:var(--bg2);border-color:var(--line)}
+    table.rtable input.ov{background:#2b3a1f;border-color:#4a6b2c;color:#c8e6a0}
+    .rtlegend{display:flex;align-items:center;gap:14px;font-size:11.5px;color:var(--muted);margin:2px 0 10px}
+    .rtlegend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+    .prf .un{font-size:11px;color:var(--muted);width:22px}
+    .savebar{display:flex;gap:10px;align-items:center;margin-top:14px}
+    .btnp{background:var(--green);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:14px;cursor:pointer}
+    .btnp.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+    #prmsg{font-size:13px;color:var(--green)}
+  </style>
+</head>
+<body>
+
+  <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
+  <div class="bar">
+    <div style="display:flex;gap:10px">
+      <button class="btn" id="pricingBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">💲 Цены и коэффициенты</button>
+      <button class="btn" id="workers" type="button" style="border-color:#4f7cff;color:#a9c2ff">⚙ Зарплата / Работники</button>
+      <button class="btn" id="financeBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">₸ Финансы</button>
+      <button class="btn" id="discBtn" type="button" style="border-color:#e8c07d;color:#e8c07d" title="Где и сколько уступаем клиентам: спеццены в расчётах против тарифа">% Уступки</button>
+      <button class="btn" id="boardBtn" type="button" style="border-color:#4caf7d;color:#9ee6bd" title="Своя доска: импорт из Trello, сравнение и переключение режима">🧱 Своя доска</button>
+      <button class="btn" id="goalsBtn" type="button" style="border-color:#c9a8ff;color:#c9a8ff" title="Цели управляющему на месяц и бонус за их достижение">🎯 Цели управляющему</button>
+      <button class="btn" id="healthBtn" type="button" style="border-color:#4caf7d;color:#9ee6bd" title="Система проверяет себя: права, модули, нумерация, сбои у работников">🩺 Здоровье системы</button>
+      <button class="btn" id="backupBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff" title="Автоматические резервные копии системы">🗄 Резервные копии</button>
+    </div>
+    <button class="btn" id="close" type="button">Закрыть</button>
+  </div>
+
+<script>
+  var t = window.TrelloPowerUp.iframe();
+  var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+  var MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  var now=new Date();
+  function pad(n){ return n<10?'0'+n:''+n; }
+  function fmtDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function startOfWeek(d){ var x=new Date(d); var wd=(x.getDay()+6)%7; x.setDate(x.getDate()-wd); return x; } // неделя с понедельника
+  var RANGE = { from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now), presetKey:'month' };
+  var EXCL_WEEKENDS = false;
+  var tab='people';
+  var DATA=null;
+  var CHARTS={};
+  var PRICING_EDIT={ mat:{}, cmp:{}, coef:{}, matOstBySec:{}, matRahBySec:{}, cmpOstBySec:{}, cmpRahBySec:{}, opOstBySec:{}, opRahBySec:{}, rates:{} };
+  var CALC=window.CALC||{};
+
+  function money(v){ v=Math.round(+v||0); return v.toLocaleString('ru-RU'); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function boot(m){ var b=document.getElementById('boot'); if(b) b.textContent=m; }
+
+  function calendarDays(){ var a=new Date(RANGE.from+'T00:00:00'), b=new Date(RANGE.to+'T00:00:00'); return Math.max(1, Math.round((b-a)/86400000)+1); }
+  function periodLabel(){ return RANGE.from===RANGE.to ? RANGE.from : (RANGE.from+' — '+RANGE.to); }
+  function applyPreset(key){
+    var n=new Date(), s;
+    if(key==='today') s=new Date(n);
+    else if(key==='week') s=startOfWeek(n);
+    else if(key==='month') s=new Date(n.getFullYear(), n.getMonth(), 1);
+    else if(key==='quarter') s=new Date(n.getFullYear(), Math.floor(n.getMonth()/3)*3, 1);
+    else if(key==='year') s=new Date(n.getFullYear(), 0, 1);
+    else s=new Date(2020,0,1); // "всё время" — достаточно давняя точка отсчёта
+    RANGE.from=fmtDate(s); RANGE.to=fmtDate(n); RANGE.presetKey=key;
+    load();
+  }
+  // группируем дневные точки в недели/месяцы, если диапазон длинный — иначе график станет нечитаемым
+  function bucketDaily(daily){
+    daily = daily||[];
+    var n=daily.length;
+    if(n<=45) return { labels:daily.map(function(d){return d.date.slice(5);}), rev:daily.map(function(d){return d.revenue;}), prof:daily.map(function(d){return d.profit;}) };
+    var byKey={}, keyFn;
+    if(n<=200) keyFn=function(d){ return fmtDate(startOfWeek(new Date(d.date+'T00:00:00'))); };
+    else keyFn=function(d){ return d.date.slice(0,7); };
+    daily.forEach(function(d){ var k=keyFn(d); var b=byKey[k]||(byKey[k]={revenue:0,profit:0}); b.revenue+=d.revenue; b.profit+=d.profit; });
+    var keys=Object.keys(byKey).sort();
+    return { labels:keys, rev:keys.map(function(k){return byKey[k].revenue;}), prof:keys.map(function(k){return byKey[k].profit;}) };
+  }
+  function destroyChart(id){ if(CHARTS[id]){ CHARTS[id].destroy(); delete CHARTS[id]; } }
+  function makeLineChart(id, labels, datasets){
+    destroyChart(id); var el=document.getElementById(id); if(!el || !window.Chart) return;
+    CHARTS[id]=new Chart(el.getContext('2d'), { type:'line', data:{ labels:labels, datasets:datasets },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#c7d1db' } } },
+        scales:{ x:{ ticks:{ color:'#9fadbc', maxRotation:0 }, grid:{ color:'#2c333a' } }, y:{ ticks:{ color:'#9fadbc' }, grid:{ color:'#2c333a' } } } } });
+  }
+  function makeBarChart(id, labels, values, color, horizontal){
+    destroyChart(id); var el=document.getElementById(id); if(!el || !window.Chart) return;
+    CHARTS[id]=new Chart(el.getContext('2d'), { type:'bar', data:{ labels:labels, datasets:[{ data:values, backgroundColor: color||'#4f7cff', borderRadius:4 }] },
+      options:{ indexAxis: horizontal?'y':'x', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+        scales:{ x:{ ticks:{ color:'#9fadbc' }, grid:{ color:'#2c333a' } }, y:{ ticks:{ color:'#9fadbc' }, grid:{ color:'#2c333a' } } } } });
+  }
+
+  function isDirector(){
+    return Promise.all([ t.member('id'), t.board('memberships'), t.organization('memberships').catch(function(){return null;}) ])
+      .then(function(res){ var me=res[0]||{};
+        function adminIn(o){ var ms=((o&&o.memberships)||[]).filter(function(x){return x.idMember===me.id;})[0]; return !!(ms&&ms.memberType==='admin'); }
+        return adminIn(res[1])||adminIn(res[2]);
+      }).catch(function(){ return false; });
+  }
+
+  function range(){ return { from: RANGE.from, to: RANGE.to }; }
+
+  var PROFIT=null; // точная прибыль по оплате (страница /profit) за тот же период
+  function load(){
+    boot('Считаю показатели за '+periodLabel()+'…');
+    var r=range();
+    Promise.all([
+      fetch(WORKER+'/dashboard?from='+r.from+'&to='+r.to).then(function(x){return x.json();}),
+      fetch(WORKER+'/profit-summary?from='+r.from+'&to='+r.to).then(function(x){return x.json();}).catch(function(){return null;})
+    ]).then(function(res){
+      var j=res[0];
+      if(!j||j.error){ boot('Ошибка: '+((j&&j.error)||'?')); return; }
+      DATA=j; PROFIT=(res[1]&&res[1].ok)?res[1]:null; render();
+    }).catch(function(e){ boot('Сеть недоступна: '+(e&&e.message||e)); });
+  }
+
+  function periodBar(){
+    var presets=[['today','Сегодня'],['week','Неделя'],['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']];
+    var h='<div class="tabs" style="margin-bottom:10px">';
+    presets.forEach(function(p){ h+='<div class="tab'+(RANGE.presetKey===p[0]?' active':'')+'" data-preset="'+p[0]+'">'+p[1]+'</div>'; });
+    h+='</div>';
+    h+='<div class="period" style="justify-content:flex-start;flex-wrap:wrap;margin-bottom:8px">'+
+       '<input type="date" id="fromD" value="'+RANGE.from+'" style="background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px 8px;font-size:13px">'+
+       '<span class="muted">—</span>'+
+       '<input type="date" id="toD" value="'+RANGE.to+'" style="background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px 8px;font-size:13px">'+
+       '<button type="button" id="applyRange" class="btn" style="padding:6px 14px">Применить</button>'+
+       '<label class="small muted" style="display:flex;align-items:center;gap:6px;margin-left:8px;cursor:pointer"><input type="checkbox" id="exclWeekends"'+(EXCL_WEEKENDS?' checked':'')+'> без выходных (для средних)</label>'+
+       '</div>';
+    h+='<div class="lbl" style="text-align:left;font-weight:700;font-size:15px">'+esc(periodLabel())+'</div>';
+    return h;
+  }
+  function kpi(k,v,cls){ return '<div class="kpi '+(cls||'')+'"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>'; }
+
+  function ci(f,ph,val,w){ return '<input data-f="'+f+'" placeholder="'+esc(ph)+'" value="'+esc(val==null?'':val)+'" style="width:'+(w||90)+'px">'; }
+  function custRow(t, it, knownSections){
+    it=it||{}; knownSections=knownSections||[];
+    var pct=function(v,def){ return (v!=null&&v!=='')?Math.round(+v*1000)/10:def; };
+    var IST='background:var(--bg2);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:6px 8px';
+    // fld = a stacked field: tiny caption above the input
+    function fld(cap, inner, wrapStyle){
+      return '<div style="display:flex;flex-direction:column;gap:2px;'+(wrapStyle||'')+'">'+
+             '<span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap">'+esc(cap)+'</span>'+inner+'</div>';
+    }
+    function txt(f,val,w){ return '<input data-f="'+f+'" value="'+esc(val==null?'':val)+'" style="'+IST+';'+(w||'')+'">'; }
+    function num(f,val,w){ return '<input data-f="'+f+'" type="number" step="any" value="'+(val==null||val===''?'':val)+'" style="'+IST+';text-align:right;'+(w||'width:80px')+'">'; }
+    // Раздел выбирается из уже существующих (чтобы "Другие компоненты" и "другие
+    // компоненты" не разъезжались в два разных раздела) — либо, если ни один не
+    // подходит, выбирается "+ новый раздел…" и рядом появляется поле для ввода.
+    function secPicker(val, known){
+      var match = known.indexOf(val) >= 0;
+      var isNew = !match; // текущее значение не входит в список — либо совсем новое, либо ранее свободно введённое
+      var selHtml = '<select class="secsel" style="'+IST+';width:100%">';
+      known.forEach(function(s){ selHtml += '<option value="'+esc(s)+'"'+(match&&s===val?' selected':'')+'>'+esc(s)+'</option>'; });
+      selHtml += '<option value="__new__"'+(isNew||!known.length?' selected':'')+'>+ новый раздел…</option>';
+      selHtml += '</select>';
+      var txtHtml = '<input data-f="sec" value="'+esc(val||'')+'" placeholder="Название раздела" style="'+IST+';width:100%;margin-top:4px;'+((isNew||!known.length)?'':'display:none')+'">';
+      return '<div class="secwrap">'+selHtml+txtHtml+'</div>';
+    }
+
+    var h='<div class="custrow" data-t="'+t+'" data-code="'+esc(it.code||'')+'" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+    h+=fld('Название', txt('lbl', it.lbl, 'width:100%'), 'flex:1;min-width:170px');
+    h+=fld('Раздел', secPicker(it.sec, knownSections), 'width:190px');
+    if(t==='op'){
+      h+=fld('Ставка, ₸/ед', num('rate', it.rate, 'width:100px'));
+    } else if(t==='mat'){
+      h+=fld('Цена, ₸ за ед. (лист — м², труба/профиль — м)', num('u', it.u, 'width:100px'));
+      h+='<label style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);align-self:flex-end;padding-bottom:6px"><input type="checkbox" data-f="sheet"'+((it.sheet===undefined||it.sheet)?' checked':'')+' style="width:auto"> Лист (в DXF)</label>';
+      h+=fld('Отходы, %', num('ost', pct(it.ost,15), 'width:80px'));
+      h+=fld('Расходники, %', num('rah', pct(it.rah,4), 'width:110px'));
+    } else {
+      h+=fld('Цена, ₸/шт', num('u', it.u, 'width:100px'));
+      h+=fld('Расходники, %', num('rah', pct(it.rah,7), 'width:110px'));
+      h+=fld('Работа, ×', num('m', (it.m!=null?it.m:1), 'width:80px'));
+    }
+    h+='<button class="delcust btnp ghost" data-t="'+t+'" data-code="'+esc(it.code||'')+'" type="button" style="padding:7px 10px" title="Удалить">✕</button>';
+    h+='</div>';
+    return h;
+  }
+  function newCode(t){ return (t==='mat'?'CUSTM_':t==='cmp'?'CUSTC_':'CUSTO_')+Date.now().toString(36)+Math.floor(Math.random()*1000); }
+  function addCustom(t){
+    PRICING_EDIT=collectPricing();
+    if(t==='mat')(PRICING_EDIT.customMat=PRICING_EDIT.customMat||[]).push({code:newCode('mat'),lbl:'',sec:'',u:'',ost:0.15,rah:0.04});
+    if(t==='cmp')(PRICING_EDIT.customCmp=PRICING_EDIT.customCmp||[]).push({code:newCode('cmp'),lbl:'',sec:'',u:'',rah:0.07,m:1});
+    if(t==='op')(PRICING_EDIT.customOp=PRICING_EDIT.customOp||[]).push({code:newCode('op'),lbl:'',sec:'',rate:''});
+    render();
+  }
+  function delCustom(t, code){
+    PRICING_EDIT=collectPricing();
+    var arr = t==='mat'?'customMat':t==='cmp'?'customCmp':'customOp';
+    PRICING_EDIT[arr]=(PRICING_EDIT[arr]||[]).filter(function(x){ return x.code!==code; });
+    render();
+  }
+
+  function pnum(v){ if(v==null||v==='') return ''; var n=+v; return Math.round(n*10000)/10000; }
+  function coefField(label, key, val, un){
+    return '<div class="prf"><label>'+esc(label)+'</label><input type="number" step="any" class="cf" data-key="'+key+'" value="'+pnum(val)+'"><span class="un">'+esc(un||'')+'</span></div>';
+  }
+  // --- отступление секций материалов/компонентов: список секций в порядке появления + заводские ost/rah первого кода секции ---
+  function sectionsOf(CAT){
+    var order=[], seen={};
+    Object.keys(CAT).forEach(function(code){ var it=CAT[code]; if(!seen[it.sec]){ seen[it.sec]=1; order.push({sec:it.sec, ost:it.ost, rah:it.rah}); } });
+    return order;
+  }
+  function secOstRahRow(bucketOst, bucketRah, secInfo, overOst, overRah, opts){
+    opts=opts||{};
+    var vOst=(overOst&&overOst[secInfo.sec]!=null&&overOst[secInfo.sec]!=='')?+overOst[secInfo.sec]*100:secInfo.ost*100;
+    var vRah=(overRah&&overRah[secInfo.sec]!=null&&overRah[secInfo.sec]!=='')?+overRah[secInfo.sec]*100:secInfo.rah*100;
+    var h='<div class="secrow"><div class="sn">'+esc(secInfo.sec)+'</div>';
+    if(!opts.noOst) h+='<label>Остатки <input type="number" step="any" class="so" data-bucket="'+bucketOst+'" data-sec="'+esc(secInfo.sec)+'" value="'+pnum(vOst)+'">%</label>';
+    h+='<label>Расходники <input type="number" step="any" class="so" data-bucket="'+bucketRah+'" data-sec="'+esc(secInfo.sec)+'" value="'+pnum(vRah)+'">%</label>';
+    h+='</div>';
+    return h;
+  }
+  var TIER_LABELS_CB=['от 1','от 20','от 100','от 500'];
+  var TIER_LABELS_W =['от 1','от 6','от 11','от 16','от 21','от 51','от 101','от 301'];
+  function renderRateTable(tableCode, table, tiers, tierLabels, overrides){
+    var ths=Object.keys(table).map(Number).sort(function(a,b){return a-b;});
+    var h='<div class="rtwrap"><table class="rtable"><thead><tr><th>Толщина, мм</th>';
+    tierLabels.forEach(function(lb){ h+='<th>'+esc(lb)+'<br>шт/м</th>'; });
+    h+='</tr></thead><tbody>';
+    ths.forEach(function(th){
+      h+='<tr><td class="thc">'+th+'</td>';
+      table[th].forEach(function(def,idx){
+        var ov=overrides&&overrides[th]&&overrides[th][idx];
+        var val=(ov!=null&&ov!=='')?ov:def;
+        var isOv=(ov!=null&&ov!==''&&+ov!==def);
+        h+='<td><input type="number" step="any" class="rt'+(isOv?' ov':'')+'" data-table="'+tableCode+'" data-th="'+th+'" data-idx="'+idx+'" data-def="'+def+'" value="'+pnum(val)+'"></td>';
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+    return h;
+  }
+  function renderPricing(){
+    var MAT=CALC.MAT||{}, CMP=CALC.CMP||{};
+    var P=PRICING_EDIT||{}; var c=P.coef||{}, pm=P.mat||{}, pc=P.cmp||{};
+    var h='<h3>Коэффициенты (общие)</h3><div class="prgrid">';
+    h+=coefField('Налог','taxRate', c.taxRate!=null&&c.taxRate!==''? (+c.taxRate*100):16,'%');
+    h+=coefField('Бонус агенту за оформленную заявку на ремонт','repairAgentBonus', c.repairAgentBonus!=null&&c.repairAgentBonus!==''?+c.repairAgentBonus:300,'₸');
+    h+=coefField('Шлейфовка реза (зачистка кромки после лазера)','shleifCutRate', c.shleifCutRate!=null&&c.shleifCutRate!==''? (+c.shleifCutRate*100):20,'% от резки');
+    h+=coefField('Шлейф / сборка (% от сварки)','shleifRate', c.shleifRate!=null&&c.shleifRate!==''?(+c.shleifRate*100):50,'%');
+    h+=coefField('Электрохимобработка шва (% от сварки; 0 = выкл.)','electrochemRate', c.electrochemRate!=null&&c.electrochemRate!==''?(+c.electrochemRate*100):0,'% от сварки');
+    h+=coefField('Монтаж (выезд): наценка клиенту','montazhPct', c.montazhPct!=null&&c.montazhPct!==''?(+c.montazhPct*100):100,'% от сварки+шлейфовок');
+    h+=coefField('Монтаж: минимум по строке (спасает заказы «только выезд»)','montazhMin', c.montazhMin!=null&&c.montazhMin!==''?+c.montazhMin:0,'₸ (0 = выкл.)');
+    h+=coefField('Внеурочный выезд: окладная часовая ставка','mzOtClientRate', c.mzOtClientRate!=null&&c.mzOtClientRate!==''?+c.mzOtClientRate:900,'₸/ч на человека');
+    h+=coefField('Внеурочный выезд: множитель клиенту','mzOtClientMult', c.mzOtClientMult!=null&&c.mzOtClientMult!==''?+c.mzOtClientMult:4,'× от ставки');
+    h+=coefField('Внеурочный выезд: множитель работнику','mzOtWorkerMult', c.mzOtWorkerMult!=null&&c.mzOtWorkerMult!==''?+c.mzOtWorkerMult:2,'× (остальное — компании)');
+    h+=coefField('Ставка резки (множитель)','rateCut', c.rateCut!=null&&c.rateCut!==''?+c.rateCut:1,'×');
+    h+=coefField('Ставка гибки (множитель)','rateBend', c.rateBend!=null&&c.rateBend!==''?+c.rateBend:1,'×');
+    h+=coefField('Ставка сварки (множитель)','rateWeld', c.rateWeld!=null&&c.rateWeld!==''?+c.rateWeld:1,'×');
+    h+=coefField('Ремонт: надбавка на работы клиенту (резка, гибка, сварка, свои работы; материалы не меняются)','repairWorkPct', c.repairWorkPct!=null&&c.repairWorkPct!==''?+c.repairWorkPct:0,'% (0 = без надбавки)');
+    h+='</div>';
+    h+='<h3 style="margin-top:18px">Доля работника от стоимости работ</h3>';
+    h+='<div class="small muted" style="margin-bottom:8px">Доли (цех / сборка / монтаж, %) настраиваются в <b>«Зарплата / Работники»</b> — вместе с типами оплаты, премией и инженерным процентом.</div>';
+    h+='<div class="small muted" style="margin-top:6px">Множитель ставок поднимает или опускает сразу всю таблицу ставок ниже (резка/гибка используют одну таблицу с разным множителем, сварка — свою). Отдельные ячейки таблицы можно поправить точечно — см. «Таблицы ставок» ниже.</div>';
+
+    // --- остатки / расходники: теперь по каждому разделу отдельно, а не одной цифрой на всё ---
+    h+='<h3 style="margin-top:18px">Остатки и расходники — работы (резка / гибка / сварка)</h3>';
+    h+='<div class="small muted" style="margin-bottom:8px">У каждого вида работ — свой процент. «Остатки» обычно 0% для работ (относится к материалу, не к труду). Если для какого-то вида работ здесь ничего не задано, используется значение по умолчанию ниже.</div>';
+    ['РЕЗКА','ГИБКА','СВАРКА'].forEach(function(sec){
+      h+=secOstRahRow('opOstBySec','opRahBySec',{sec:sec,ost:0,rah:0.07}, P.opOstBySec, P.opRahBySec, {});
+    });
+    h+=coefField('Расходники на работы — по умолчанию (если не задано выше)','opRah', c.opRah!=null&&c.opRah!==''?(+c.opRah*100):7,'%');
+
+    h+='<h3 style="margin-top:18px">Остатки и расходники — материалы (по разделам)</h3>';
+    h+='<div class="small muted" style="margin-bottom:8px">«Остатки» — надбавка на обрезки при раскрое; «Расходники» — сопутствующие затраты. У листов обычно 15% отходов, у труб/профиля — 20%.</div>';
+    sectionsOf(MAT).forEach(function(s){ h+=secOstRahRow('matOstBySec','matRahBySec',s, P.matOstBySec, P.matRahBySec, {}); });
+
+    h+='<h3 style="margin-top:18px">Остатки и расходники — компоненты (по разделам)</h3>';
+    sectionsOf(CMP).forEach(function(s){ h+=secOstRahRow('cmpOstBySec','cmpRahBySec',s, P.cmpOstBySec, P.cmpRahBySec, {}); });
+
+    // --- таблицы ставок (Excel-подобные) ---
+    h+='<h3 style="margin-top:20px">Таблица ставок — РЕЗКА листа (₸ за м, по толщине и объёму заказа)</h3>';
+    h+='<div class="rtlegend"><span><span class="sw" style="background:#2b3a1f;border:1px solid #4a6b2c"></span>изменённая ячейка</span><span>Резка трубы/профиля — эта же таблица ×3</span></div>';
+    h+=renderRateTable('CUT', CALC.CUTBEND, CALC.CUTBEND_TIERS, TIER_LABELS_CB, (P.rates&&(P.rates.CUT||P.rates.CB))||{});
+    h+='<h3 style="margin-top:18px">Таблица ставок — ГИБКА листа (₸ за шт, по толщине и объёму заказа)</h3>';
+    h+='<div class="rtlegend"><span><span class="sw" style="background:#2b3a1f;border:1px solid #4a6b2c"></span>изменённая ячейка</span><span>Гибка трубы — эта же таблица ×3; прут — ×1</span></div>';
+    h+=renderRateTable('BEND', CALC.BEND, CALC.CUTBEND_TIERS, TIER_LABELS_CB, (P.rates&&(P.rates.BEND||P.rates.CB))||{});
+
+    h+='<h3 style="margin-top:18px">Таблица ставок — сварка нержавейка (₸ за см шва, по толщине и объёму)</h3>';
+    h+=renderRateTable('SS', CALC.WELD_SS, CALC.WELD_TIERS, TIER_LABELS_W, (P.rates&&P.rates.SS)||{});
+
+    h+='<h3 style="margin-top:18px">Таблица ставок — сварка чёрный металл (₸ за см шва, по толщине и объёму)</h3>';
+    h+=renderRateTable('BL', CALC.WELD_BLACK, CALC.WELD_TIERS, TIER_LABELS_W, (P.rates&&P.rates.BL)||{});
+
+    // group materials by section (цены за единицу)
+    function priceRows(CAT, over, cls){
+      var bySec={}; Object.keys(CAT).forEach(function(code){ var it=CAT[code]; (bySec[it.sec]=bySec[it.sec]||[]).push(code); });
+      var out='';
+      Object.keys(bySec).forEach(function(sec){
+        out+='<div class="prgroup"><h4>'+esc(sec)+'</h4><div class="prgrid">';
+        bySec[sec].forEach(function(code){
+          var it=CAT[code]; var val=(over[code]!=null&&over[code]!=='')?over[code]:it.u;
+          out+='<div class="prf"><label>'+esc(it.lbl)+'</label><input type="number" step="any" class="'+cls+'" data-code="'+code+'" value="'+pnum(val)+'"><span class="un">₸</span></div>';
+        });
+        out+='</div></div>';
+      });
+      return out;
+    }
+    h+='<h3 style="margin-top:16px">Цены материалов (₸ за м²/п.м)</h3>'+priceRows(MAT, pm, 'mp');
+    h+='<h3 style="margin-top:6px">Цены компонентов (₸ за шт / краска за м²)</h3>'+priceRows(CMP, pc, 'cp');
+
+    // --- custom (added) items ---
+    var cm=P.customMat||[], cc=P.customCmp||[], co=P.customOp||[];
+    // известные разделы = разделы из заводского каталога + уже введённые пользователем
+    // свои разделы этого же типа (чтобы предлагать то, что реально используется)
+    function uniq(list){ var seen={}, out=[]; list.forEach(function(s){ if(s&&!seen[s]){ seen[s]=1; out.push(s); } }); return out; }
+    var matSections = uniq(sectionsOf(MAT).map(function(s){return s.sec;}).concat(cm.map(function(it){return it.sec;})));
+    var cmpSections = uniq(sectionsOf(CMP).map(function(s){return s.sec;}).concat(cc.map(function(it){return it.sec;})));
+    var opSections = uniq(co.map(function(it){return it.sec;}));
+
+    h+='<h3 style="margin-top:18px">Свои материалы</h3>';
+    h+='<div class="small muted" style="margin-bottom:6px">Добавляйте материалы, которых нет выше — они появятся в калькуляторе. <b>Цена указывается за единицу, в которой вводится количество в калькуляторе: листовые — за м², трубы/профили — за погонный метр</b> (не за целый лист!). «Отходы %» — надбавка на обрезки (обычно 15, для труб/профилей 20). «Расходники %» — сопутствующие затраты (обычно 4). Итог = цена × кол-во × (1+отходы) × (1+расходники).</div>';
+    cm.forEach(function(it){ h+=custRow('mat', it, matSections); });
+    h+='<button class="btnp ghost" data-add="mat" type="button" style="margin-top:4px">+ материал</button>';
+
+    h+='<h3 style="margin-top:16px">Свои компоненты</h3>';
+    cc.forEach(function(it){ h+=custRow('cmp', it, cmpSections); });
+    h+='<button class="btnp ghost" data-add="cmp" type="button" style="margin-top:4px">+ компонент</button>';
+
+    h+='<h3 style="margin-top:16px">Свои работы (фиксированная ставка за единицу)</h3>';
+    co.forEach(function(it){ h+=custRow('op', it, opSections); });
+    h+='<button class="btnp ghost" data-add="op" type="button" style="margin-top:4px">+ работа</button>';
+
+    h+='<div class="savebar"><button class="btnp" id="prSave" type="button">Сохранить цены</button><button class="btnp ghost" id="prReset" type="button">Сбросить к заводским</button><span id="prmsg"></span></div>';
+    h+='<div class="small muted" style="margin-top:8px">После сохранения новые цены применяются во всех новых расчётах автоматически. Ранее сохранённые заказы не пересчитываются.</div>';
+    return h;
+  }
+  function collectPricing(){
+    var P={ mat:{}, cmp:{}, coef:{}, customMat:[], customCmp:[], customOp:[],
+            matOstBySec:{}, matRahBySec:{}, cmpOstBySec:{}, cmpRahBySec:{}, opOstBySec:{}, opRahBySec:{}, rates:{} };
+    [].forEach.call(document.querySelectorAll('.cf'), function(el){
+      var k=el.getAttribute('data-key'), v=el.value;
+      if(v===''){ return; }
+      v=+v;
+      if(k==='taxRate'||k==='shleifRate'||k==='shleifCutRate'||k==='electrochemRate'||k==='montazhPct'||k==='opRah'||k==='shareShop'||k==='shareAssembly'||k==='shareMontazh') P.coef[k]=v/100;
+      else P.coef[k]=v;
+    });
+    // доли работников редактируются в «Зарплата / Работники» — при сохранении цен
+    // переносим сохранённые значения, чтобы не затереть их
+    ['shareShop','shareAssembly','shareMontazh'].forEach(function(k){
+      if (P.coef[k]===undefined && PRICING_EDIT.coef && PRICING_EDIT.coef[k]!==undefined && PRICING_EDIT.coef[k]!=='') P.coef[k]=+PRICING_EDIT.coef[k];
+    });
+    [].forEach.call(document.querySelectorAll('.mp'), function(el){ if(el.value!=='') P.mat[el.getAttribute('data-code')]=+el.value; });
+    [].forEach.call(document.querySelectorAll('.cp'), function(el){ if(el.value!=='') P.cmp[el.getAttribute('data-code')]=+el.value; });
+    // проценты по разделам (остатки/расходники для материалов, компонентов, работ)
+    [].forEach.call(document.querySelectorAll('.so'), function(el){
+      var v=el.value; if(v==='') return;
+      var bucket=el.getAttribute('data-bucket'), sec=el.getAttribute('data-sec');
+      P[bucket][sec]=(+v)/100;
+    });
+    // ячейки таблиц ставок — сохраняем только те, что реально отличаются от заводского значения
+    [].forEach.call(document.querySelectorAll('.rt'), function(el){
+      var v=el.value; if(v==='') return;
+      var def=+el.getAttribute('data-def');
+      if(+v===def) return; // не изменено — не засоряем сохранение
+      var tbl=el.getAttribute('data-table'), th=el.getAttribute('data-th'), idx=+el.getAttribute('data-idx');
+      P.rates[tbl]=P.rates[tbl]||{};
+      P.rates[tbl][th]=P.rates[tbl][th]||[];
+      P.rates[tbl][th][idx]=+v;
+    });
+    // custom items
+    function fv(row,f){ var el=row.querySelector('[data-f="'+f+'"]'); return el?el.value:''; }
+    [].forEach.call(document.querySelectorAll('.custrow'), function(row){
+      var t=row.getAttribute('data-t'), code=row.getAttribute('data-code');
+      var lbl=fv(row,'lbl').trim(); if(!lbl) return;
+      var sec=fv(row,'sec').trim();
+      if(t==='mat'){ var shc=row.querySelector('[data-f="sheet"]');
+        P.customMat.push({ code:code, lbl:lbl, sec:sec||'ДРУГИЕ МАТЕРИАЛЫ', u:+fv(row,'u')||0, ost:(+fv(row,'ost')||0)/100, rah:(+fv(row,'rah')||0)/100, sheet:(shc?!!shc.checked:undefined) }); }
+      else if(t==='cmp') P.customCmp.push({ code:code, lbl:lbl, sec:sec||'ДРУГИЕ КОМПОНЕНТЫ', u:+fv(row,'u')||0, ost:0, rah:(+fv(row,'rah')||0)/100, m:(fv(row,'m')!==''?+fv(row,'m'):1) });
+      else if(t==='op') P.customOp.push({ code:code, lbl:lbl, sec:sec||'РАБОТЫ', rate:+fv(row,'rate')||0 });
+    });
+    return P;
+  }
+  function savePricing(){
+    var P=collectPricing();
+    var msg=document.getElementById('prmsg'); msg.textContent='Сохранение…';
+    fetch(WORKER+'/pricing-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pricing:P, knownCustom:window.__KNOWN_CUSTOM||{}}) })
+      .then(function(r){return r.json();}).then(function(j){
+        if(j&&j.ok){ PRICING_EDIT=P; msg.textContent='Сохранено ✓ Новые расчёты будут по этим ценам.'; }
+        else msg.textContent='Ошибка: '+((j&&j.error)||'?');
+      }).catch(function(e){ msg.textContent='Сеть: '+(e&&e.message||e); });
+  }
+  function resetPricing(){
+    if(!confirm('Сбросить все цены и коэффициенты к заводским (исходным)? Ваши изменения удалятся.')) return;
+    fetch(WORKER+'/pricing-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pricing:{}}) })
+      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ PRICING_EDIT={mat:{},cmp:{},coef:{},matOstBySec:{},matRahBySec:{},cmpOstBySec:{},cmpRahBySec:{},opOstBySec:{},opRahBySec:{},rates:{}}; render(); } });
+  }
+
+  // ---- ЖУРНАЛ ДЕЙСТВИЙ ----
+  // Кто и что делал на цеховых ПК: сервер пишет каждое действие MES с именем
+  // вошедшего по QR-заслону. Действия БЕЗ входа — подсвечены красным: это работа
+  // в обход заслона, повод спросить. Вход/выход — приглушённо, для контекста.
+  var ACTLOG=null, ACTLOG_KEY='', ACT_WORKER='';
+  function loadActLog(){
+    var key=RANGE.from+'|'+RANGE.to;
+    if(ACTLOG && ACTLOG_KEY===key) return;
+    ACTLOG_KEY=key; ACTLOG=null;
+    fetch(WORKER+'/action-log?from='+RANGE.from+'&to='+RANGE.to)
+      .then(function(r){return r.json();})
+      .then(function(j){ ACTLOG=(j&&j.rows)||[]; if(tab==='actlog') render(); })
+      .catch(function(){ ACTLOG=[]; if(tab==='actlog') render(); });
+  }
+  var MACH=null;
+  function loadMachines(){
+    if(MACH!==null) return;
+    fetch(WORKER+'/machine-activity?from='+RANGE.from+'&to='+RANGE.to)
+      .then(function(r){return r.json();})
+      .then(function(j){ MACH=(j&&j.rows)||[]; if(tab==='machines') render(); })
+      .catch(function(){ MACH=[]; if(tab==='machines') render(); });
+  }
+  function renderMachines(){
+    loadMachines();
+    if(MACH===null) return '<div class="muted">Загружаю события станков…</div>';
+    var un=MACH.filter(function(r){ return !r.matched_card_id; });
+    var h='<h3>Активность станков</h3>';
+    h+='<div class="muted" style="margin-bottom:8px;font-size:12px">Агент на компьютере станка сообщает, какие файлы открывались в CypCut. Файл сверяется с DXF заказов: найден — привязка к заказу, не найден — <b style="color:#f28b82">красный флаг</b>. Левый заказ невозможен без файла на станке.</div>';
+    h+='<div class="cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
+    h+='<div class="card" style="min-width:150px"><div class="muted" style="font-size:11px;text-transform:uppercase">Файлов за период</div><div style="font-size:17px;font-weight:700">'+MACH.length+'</div></div>';
+    h+='<div class="card" style="min-width:150px"><div class="muted" style="font-size:11px;text-transform:uppercase">Не из заказов</div><div style="font-size:17px;font-weight:700;color:'+(un.length?'#f28b82':'#4bce97')+'">'+un.length+'</div></div>';
+    h+='</div>';
+    if(!MACH.length) return h+'<div class="muted">Событий нет. Либо станок молчал, либо агент ещё не установлен на его компьютер (файл stanok-agent — инструкция в переписке).</div>';
+    h+='<table><thead><tr><th>Когда открыт</th><th>Станок</th><th>Файл</th><th>Заказ</th></tr></thead><tbody>';
+    MACH.forEach(function(r){
+      var ok0=!!r.matched_card_id;
+      h+='<tr'+(ok0?'':' style="background:rgba(242,139,130,.07)"')+'><td class="small">'+esc(r.opened_at||'')+'</td><td class="small">'+esc(r.machine||'')+'</td>'+
+         '<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis">'+esc(r.file_name||'')+'</td>'+
+         '<td>'+(ok0?((r.matched_no?('№'+esc(r.matched_no)+' · '):'')+esc(r.matched_name||'')):'<b style="color:#f28b82">НЕ ИЗ ЗАКАЗОВ</b>')+'</td></tr>';
+    });
+    h+='</tbody></table>';
+    return h;
+  }
+  function renderActLog(){
+    loadActLog();
+    if(ACTLOG===null) return '<div class="muted">Загружаю журнал…</div>';
+    var names={};
+    ACTLOG.forEach(function(r){ if(r.worker_name) names[r.worker_name]=1; });
+    var h='<div style="margin-bottom:8px"><select id="actWho" style="background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px 8px">'+
+      '<option value="">— все люди —</option>'+
+      Object.keys(names).sort().map(function(n){ return '<option'+(ACT_WORKER===n?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+
+      '<option value="__anon__"'+(ACT_WORKER==='__anon__'?' selected':'')+'>только без входа (обход)</option>'+
+      '</select></div>';
+    var rows=ACTLOG.filter(function(r){
+      if(ACT_WORKER==='__anon__') return !r.worker_name && r.action!=='вход' && r.action!=='выход';
+      if(ACT_WORKER) return r.worker_name===ACT_WORKER;
+      return true;
+    });
+    if(!rows.length) return h+'<div class="muted">Записей за период нет. Журнал наполняется, когда на цеховых ПК работают через QR-заслон.</div>';
+    h+='<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr>'+
+       '<th style="text-align:left;padding:6px;color:var(--muted)">Время</th>'+
+       '<th style="text-align:left;padding:6px;color:var(--muted)">Компьютер</th>'+
+       '<th style="text-align:left;padding:6px;color:var(--muted)">Кто</th>'+
+       '<th style="text-align:left;padding:6px;color:var(--muted)">Действие</th></tr></thead><tbody>';
+    rows.slice(0,500).forEach(function(r){
+      var sys=(r.action==='вход'||r.action==='выход');
+      var anon=!r.worker_name && !sys;
+      var st=anon?'color:#e5534b':'';
+      if(sys) st='color:var(--muted)';
+      h+='<tr style="border-top:1px solid var(--line);'+st+'">'+
+         '<td style="padding:5px 6px;white-space:nowrap">'+esc(String(r.at||'').slice(5,16))+'</td>'+
+         '<td style="padding:5px 6px">'+esc(r.pc_name||'—')+'</td>'+
+         '<td style="padding:5px 6px">'+(r.worker_name?esc(r.worker_name):(sys?'':'<b>без входа</b>'))+'</td>'+
+         '<td style="padding:5px 6px">'+esc(r.action||'')+(r.detail&&r.detail!==r.action?' <span class="muted">'+esc(String(r.detail).slice(0,60))+'</span>':'')+'</td></tr>';
+    });
+    h+='</tbody></table>';
+    if(rows.length>500) h+='<div class="muted" style="margin-top:6px">Показаны первые 500 — сузьте период.</div>';
+    return h;
+  }
+  function render(){
+    var h='';
+    if(tab==='pricing'){
+      h+='<div class="sec" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+         '<div style="font-weight:700;font-size:15px;color:#e6edf3">💲 Цены и коэффициенты</div>'+
+         '<button class="btn" id="backToReports" type="button">← Назад к отчётам</button>'+
+         '</div>';
+      h+='<div class="sec">'+renderTab()+'</div>';
+      document.getElementById('app').innerHTML=h;
+      var bb=document.getElementById('backToReports'); if(bb) bb.onclick=function(){ tab='people'; render(); };
+    } else {
+      var T=DATA.totals||{};
+      h+='<div class="sec">'+periodBar();
+      h+='<div class="kpis">';
+      h+=kpi('Выручка', money(T.revenue)+' ₸');
+      h+=kpi('Зарплата (сдельная)', money(T.payroll)+' ₸', 'amber');
+      h+=kpi('Материалы', money(T.materials)+' ₸', 'amber');
+      h+=kpi('Прибыль (ориентир)', money(T.profit)+' ₸', T.profit>=0?'green':'red');
+      h+='</div>';
+      h+='<div class="kpis" style="margin-top:12px">';
+      h+=kpi('Заказов за период', T.orders);
+      h+=kpi('Оплачено', money(T.paidRev)+' ₸ · '+T.paidCount+' зак.', 'green');
+      h+=kpi('Не оплачено', money(T.unpaidRev)+' ₸ · '+T.unpaidCount+' зак.', 'red');
+      h+='</div>';
+      // РЕАЛЬНЫЕ цифры по сданным заказам (дата сдачи в периоде): что фактически
+      // должно быть выплачено и заработано, а не просто начислено по этапам
+      var DL = DATA.delivered || { count:0, revenue:0, piece:0, profit:0 };
+      h+='<div class="kpis" style="margin-top:12px">';
+      h+=kpi('Сдано за период', DL.count + ' зак. · ' + money(DL.revenue) + ' ₸');
+      h+=kpi('ЗП (сдельная) по сданным — к выплате', money(DL.piece)+' ₸', 'amber');
+      h+=kpi('Прибыль по сданным (ориентир)', money(DL.profit)+' ₸', DL.profit>=0?'green':'red');
+      h+='</div>';
+      if(PROFIT){
+        var P=PROFIT;
+        var expenses=(P.cash||0)+(P.fixed||0)+(P.tax||0)+(P.taxProfit||0);
+        h+='<div class="kpis" style="margin-top:12px">';
+        h+='<div class="kpi amber" title="Наличные из снабжения (газ, электроды, маски, диски) '+money(P.cash)+' ₸ + постоянные за '+P.days+' дн. (аренда, свет, оклады, амортизация — '+money(P.fixedMonthly)+' ₸/мес) '+money(P.fixed)+' ₸ + налог с оборота '+P.taxPercent+'% '+money(P.tax)+' ₸ + налог с прибыли '+(P.taxProfitPercent||0)+'% '+money(P.taxProfit||0)+' ₸"><div class="k">Расходы: нал + постоянные + налоги</div><div class="v">'+money(expenses)+' ₸</div>'+
+           '<div style="font-size:11px;color:var(--muted);margin-top:4px">нал '+money(P.cash)+' · пост. '+money(P.fixed)+' · налоги '+money((P.tax||0)+(P.taxProfit||0))+'</div></div>';
+        h+='<div class="kpi '+(P.net>=0?'green':'red')+'" title="По оплате: выручка, пришедшая деньгами в периоде ('+money(P.revenue)+' ₸, '+P.orders+' зак.'+(P.repairs?(' + '+P.repairs+' рем.'):'')+') минус сдельная ЗП (вкл. инженеров), материалы, наличные, постоянные и налог. Именно из неё считается премия заместителя."><div class="k">Чистая прибыль (по оплате)</div><div class="v">'+money(P.net)+' ₸</div>'+
+           (P.bonusPercent>0?('<div style="font-size:11px;color:var(--muted);margin-top:4px">премия'+(P.bonusName?(' '+esc(P.bonusName)):'')+' '+P.bonusPercent+'%: '+money(P.bonus)+' ₸</div>'):'<div style="font-size:11px;color:var(--muted);margin-top:4px">настройки: страница /profit</div>')+'</div>';
+        h+='</div>';
+      }
+      h+='<div class="kpis" style="margin-top:12px">';
+      h+=kpi('Средний чек', money(T.avgOrderValue)+' ₸');
+      h+=kpi('Средний срок заказа', T.avgLeadDays!=null?(T.avgLeadDays+' дн.'):'—', 'amber');
+      h+=kpi('Узкое место (этап)', T.bottleneck?(esc(T.bottleneck.label)+' · '+T.bottleneck.avgHours+' ч/зак.'):'—', 'amber');
+      h+=kpi(EXCL_WEEKENDS?'Выручка / раб. день':'Выручка / день', money(T.revenue/(EXCL_WEEKENDS?(T.workingDays||1):calendarDays()))+' ₸');
+      h+='</div>';
+      h+='<div class="small muted" style="margin-top:10px">«Прибыль (ориентир)» = выручка − сдельная зарплата − материалы. Без учёта аренды, налогов и прочих накладных — это грубый ориентир маржи. «Расходы» и «Чистая прибыль (по оплате)» берутся из модуля «Финансы» (/profit): выручка там считается по дате оплаты, поэтому может отличаться от «Выручки» выше (та — по дате расчёта, включая долги). «Узкое место» — этап, который в среднем занимает больше всего часов на заказ (по данным авто-отслеживания резки/гибки/сварки/инженера).</div>';
+      h+='</div>';
+
+      h+='<div class="sec"><h3>Выручка и прибыль по периоду</h3><div class="chartbox"><canvas id="chartTrend"></canvas></div></div>';
+      if(T.bottleneck){
+        h+='<div class="sec"><h3>Среднее время на этап (часы на заказ) — где затор</h3><div class="chartbox" style="height:'+Math.max(120,(DATA.stageTime||[]).length*40)+'px"><canvas id="chartStageTime"></canvas></div></div>';
+      }
+
+      h+='<div class="tabs">';
+      [['people','По людям'],['orders','По заказам'],['stages','По этапам'],['clients','По клиентам'],['actlog','Журнал'],['machines','Станки']].forEach(function(x){
+        h+='<div class="tab'+(tab===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
+      });
+      h+='</div>';
+      h+='<div class="sec">'+renderTab()+'</div>';
+
+      document.getElementById('app').innerHTML=h;
+      [].forEach.call(document.querySelectorAll('[data-preset]'), function(el){ el.onclick=function(){ applyPreset(this.getAttribute('data-preset')); }; });
+      var ar=document.getElementById('applyRange'); if(ar) ar.onclick=function(){
+        var f=document.getElementById('fromD').value, t2=document.getElementById('toD').value;
+        if(!f||!t2) return;
+        if(f>t2){ var tmp=f; f=t2; t2=tmp; }
+        RANGE.from=f; RANGE.to=t2; RANGE.presetKey='custom'; ACTLOG=null; ACTLOG_KEY=''; load();
+      };
+      var ew=document.getElementById('exclWeekends'); if(ew) ew.onchange=function(){ EXCL_WEEKENDS=this.checked; render(); };
+      [].forEach.call(document.querySelectorAll('.tab[data-tab]'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
+      var aw=document.getElementById('actWho'); if(aw) aw.onchange=function(){ ACT_WORKER=this.value; render(); };
+      renderCharts();
+    }
+    var ps=document.getElementById('prSave'); if(ps) ps.onclick=savePricing;
+    var pr=document.getElementById('prReset'); if(pr) pr.onclick=resetPricing;
+    [].forEach.call(document.querySelectorAll('[data-add]'), function(b){ b.onclick=function(){ addCustom(this.getAttribute('data-add')); }; });
+    [].forEach.call(document.querySelectorAll('.delcust'), function(b){ b.onclick=function(){ delCustom(this.getAttribute('data-t'), this.getAttribute('data-code')); }; });
+    [].forEach.call(document.querySelectorAll('.secsel'), function(sel){
+      var txt = sel.parentElement.querySelector('[data-f="sec"]');
+      if(!txt) return;
+      sel.onchange=function(){
+        if(sel.value==='__new__'){ txt.style.display=''; txt.value=''; txt.focus(); }
+        else { txt.style.display='none'; txt.value=sel.value; }
+      };
+    });
+  }
+
+  function barCell(val,max){ var w=max>0?Math.round(100*val/max):0; return '<div class="barw"><div class="barf" style="width:'+w+'%"></div></div>'; }
+
+  function renderCharts(){
+    if(!DATA || !window.Chart) return;
+    Object.keys(CHARTS).forEach(function(id){ if(!document.getElementById(id)) destroyChart(id); });
+    var b=bucketDaily(DATA.daily||[]);
+    makeLineChart('chartTrend', b.labels, [
+      { label:'Выручка', data:b.rev, borderColor:'#4f7cff', backgroundColor:'rgba(79,124,255,.15)', tension:.25, fill:true },
+      { label:'Прибыль', data:b.prof, borderColor:'#3aa657', backgroundColor:'rgba(58,166,87,.15)', tension:.25, fill:true }
+    ]);
+    var st=(DATA.stageTime||[]).slice().sort(function(a,b){return b.avgHours-a.avgHours;});
+    if(st.length) makeBarChart('chartStageTime', st.map(function(s){return s.label;}), st.map(function(s){return s.avgHours;}), '#c99a3a', true);
+
+    if(tab==='people'){
+      var w=(DATA.byWorker||[]).slice(0,10);
+      if(w.length) makeBarChart('chartWorkers', w.map(function(x){return x.name;}), w.map(function(x){return x.earned;}), '#4f7cff', true);
+    }
+    if(tab==='stages'){
+      var s=DATA.byStage||[];
+      if(s.length) makeBarChart('chartStages', s.map(function(x){return x.name;}), s.map(function(x){return x.earned;}), '#3aa657', true);
+    }
+    if(tab==='clients'){
+      var c=(DATA.byClient||[]).slice(0,8);
+      if(c.length) makeBarChart('chartClients', c.map(function(x){return x.name;}), c.map(function(x){return x.revenue;}), '#c99a3a', true);
+    }
+  }
+
+  function renderTab(){
+    if(tab==='actlog') return renderActLog();
+    if(tab==='machines') return renderMachines();
+    if(tab==='people'){
+      var a=DATA.byWorker||[]; if(!a.length) return '<div class="muted">Нет начислений за период.</div>';
+      var max=a[0].earned||1;
+      var h='<h3>Заработок по работникам</h3><table><thead><tr><th>Работник</th><th class="num">Заработал</th><th class="num">Заказов</th><th class="num">Часов</th><th class="num">₸/час</th><th>Доля</th></tr></thead><tbody>';
+      a.forEach(function(w){ h+='<tr><td>'+esc(w.name)+'</td><td class="num">'+money(w.earned)+' ₸</td><td class="num">'+w.orders+'</td><td class="num">'+(w.hours||'—')+'</td><td class="num">'+(w.perHour?money(w.perHour)+' ₸':'—')+'</td><td style="width:140px">'+barCell(w.earned,max)+'</td></tr>'; });
+      h+='</tbody></table><div class="chartbox2"><canvas id="chartWorkers"></canvas></div>';
+      return h;
+    }
+    if(tab==='stages'){
+      var a=DATA.byStage||[]; if(!a.length) return '<div class="muted">Нет данных.</div>';
+      var max=a[0].earned||1;
+      var h='<h3>Зарплата по этапам</h3><table><thead><tr><th>Этап</th><th class="num">Сумма</th><th>Доля</th></tr></thead><tbody>';
+      a.forEach(function(s){ h+='<tr><td>'+esc(s.name)+'</td><td class="num">'+money(s.earned)+' ₸</td><td style="width:200px">'+barCell(s.earned,max)+'</td></tr>'; });
+      h+='</tbody></table><div class="chartbox2"><canvas id="chartStages"></canvas></div>';
+      var st=DATA.stageTime||[];
+      if(st.length){
+        h+='<h3 style="margin-top:18px">Время на этап (авто-отслеживание по движению карточек)</h3>';
+        h+='<table><thead><tr><th>Этап</th><th class="num">Заказов</th><th class="num">Часов всего</th><th class="num">Часов на заказ (в среднем)</th></tr></thead><tbody>';
+        st.forEach(function(s){ h+='<tr><td>'+esc(s.label)+'</td><td class="num">'+s.orders+'</td><td class="num">'+s.totalHours+'</td><td class="num" style="'+(s===st[0]?'color:#e8c07d;font-weight:700':'')+'">'+s.avgHours+'</td></tr>'; });
+        h+='</tbody></table><div class="small muted" style="margin-top:8px">Самый долгий этап в среднем на заказ подсвечен — это ваше текущее «узкое место» (bottleneck).</div>';
+      }
+      return h;
+    }
+    if(tab==='clients'){
+      var a=DATA.byClient||[]; if(!a.length) return '<div class="muted">Нет данных.</div>';
+      var h='<h3>Выручка по клиентам</h3><table><thead><tr><th>Клиент</th><th class="num">Выручка</th><th class="num">Заказов</th><th class="num">Оплачено</th><th class="num">Не оплачено</th></tr></thead><tbody>';
+      a.forEach(function(c){ h+='<tr><td>'+esc(c.name)+'</td><td class="num">'+money(c.revenue)+' ₸</td><td class="num">'+c.orders+'</td><td class="num">'+money(c.paidRev)+'</td><td class="num">'+money(c.unpaidRev)+'</td></tr>'; });
+      h+='</tbody></table><div class="chartbox2"><canvas id="chartClients"></canvas></div>';
+      return h;
+    }
+    if(tab==='pricing'){ return renderPricing(); }
+    // orders
+    var a=DATA.byOrder||[]; if(!a.length) return '<div class="muted">Нет заказов за период.</div>';
+    var h='<h3>Аналитика по заказам</h3><table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Выручка</th><th class="num">Зарплата</th><th class="num">Материалы</th><th class="num">Прибыль</th><th>Оплата</th></tr></thead><tbody>';
+    a.forEach(function(o){
+      h+='<tr><td class="small">'+esc(o.number||'—')+'</td><td>'+esc(o.name)+'</td><td class="small muted">'+esc(o.client)+'</td>'+
+         '<td class="num">'+money(o.revenue)+'</td><td class="num">'+money(o.payroll)+'</td><td class="num">'+money(o.materials)+'</td>'+
+         '<td class="num" style="color:'+(o.profit>=0?'#7ee0a1':'#e8a59d')+'">'+money(o.profit)+'</td>'+
+         '<td>'+(o.paid?'<span class="pill paid">оплачен'+(o.paidAt?' '+o.paidAt.slice(0,10):'')+'</span>':'<span class="pill unpaid">не оплачен</span>')+'</td></tr>';
+    });
+    return h+'</tbody></table>';
+  }
+
+  document.getElementById('close').onclick=function(){ t.closeModal(); };
+  document.getElementById('workers').onclick=function(){
+    t.modal({ url:'./workers-modal.html?t='+Date.now(), fullscreen:true, title:'Зарплата и работники', accentColor:'#1f6ce8' });
+  };
+  // ОТЧЁТ «УСТУПКИ» (решение Асхата, 09.2026): спеццены из расчётов против тарифа —
+  // по операциям/толщинам (где торг стал нормой → тариф завышен), по клиентам, по инженерам
+  // СВОЯ ДОСКА (этап ухода от Trello, решение Асхата, 09.2026): импорт, сравнение
+  // и переключение источника карточек — всё в одном окне, без ручных адресов
+  // ЗДОРОВЬЕ СИСТЕМЫ (решение Асхата, 10.2026: «система сама находит и исправляет
+  // ошибки»): сервер проверяет себя, безопасное чинит сразу, остальное — списком;
+  // окна работников сами присылают сюда свои сбои
+  document.getElementById('healthBtn').onclick=function(){
+    var old=document.getElementById('hlOverlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='hlOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column;color:var(--txt)';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#2e5c44;color:#fff;flex:0 0 auto">'+
+      '<button id="hlBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">🩺 Здоровье системы</div>'+
+      '<button id="hlRun" type="button" style="background:transparent;border:1px solid #9ee6bd;border-radius:6px;color:#fff;font-size:13px;cursor:pointer;padding:5px 10px">↻ Проверить ещё раз</button></div>'+
+      '<div id="hlBody" style="flex:1;overflow:auto;padding:16px;max-width:900px;margin:0 auto;width:100%">Проверяю…</div>';
+    document.body.appendChild(ov);
+    document.getElementById('hlBack').onclick=function(){ ov.remove(); };
+    function esc(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    var KIND={ error:'ошибка в окне', http:'сервер не ответил', stuck:'зависло, перезапущено', perm:'права не определились' };
+    function run(){
+      var body=document.getElementById('hlBody'); body.textContent='Проверяю…';
+      var tok=''; try{ tok=localStorage.getItem('ms_board_token')||''; }catch(e){}
+      fetch(WORKER+'/health',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminToken: tok }) })
+        .then(function(r){ return r.json(); }).then(function(j){
+          if(!j || !j.ok){ body.innerHTML='<div style="color:#f87168">'+esc((j&&j.error)||'проверка не выполнилась')+'</div>'; return; }
+          var ic={ ok:'✅', warn:'⚠️', bad:'❌' }, h='';
+          if(j.fixed && j.fixed.length) h+='<div style="background:#1c3329;border:1px solid #2e5c44;border-radius:8px;padding:10px 12px;margin-bottom:12px"><b>Исправлено автоматически:</b><br>'+j.fixed.map(esc).join('<br>')+'</div>';
+          h+=(j.checks||[]).map(function(c){
+            return '<div style="display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line,#3a414a)"><div>'+(ic[c.level]||'•')+'</div><div><b>'+esc(c.title)+'</b>'+(c.detail?'<div style="font-size:12px;color:var(--muted,#9fadbc);margin-top:2px">'+esc(c.detail)+'</div>':'')+'</div></div>';
+          }).join('');
+          var er=j.errors||[];
+          if(er.length){
+            h+='<div style="margin-top:16px;font-weight:700">Сбои у работников за 7 дней</div><div style="font-size:12px;color:var(--muted,#9fadbc);margin:2px 0 8px">Окна сами сообщают о сбоях и сами повторяют запрос. Повторяется изо дня в день — значит, нужна правка: перешлите этот список Claude.</div>'+
+              '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+              '<tr style="color:var(--muted,#9fadbc)"><td style="padding:4px">Когда</td><td>Окно</td><td>Что</td><td>Кто</td><td style="text-align:right">Раз</td></tr>'+
+              er.map(function(e){ return '<tr style="border-top:1px solid var(--line,#3a414a)"><td style="padding:5px 4px;white-space:nowrap">'+esc((function(){ try{ return new Date(String(e.last_at).replace(' ','T')+'Z').toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(x){ return e.day; } })())+'</td><td>'+esc(String(e.module).replace('.html',''))+'</td><td>'+esc(KIND[e.kind]||e.kind)+'<div style="color:var(--muted,#9fadbc)">'+esc(e.msg)+'</div></td><td>'+esc(e.worker||'')+'</td><td style="text-align:right">'+(+e.n||1)+'</td></tr>'; }).join('')+'</table>';
+          }
+          body.innerHTML=h;
+        }).catch(function(e){ body.innerHTML='<div style="color:#f87168">Нет связи с сервером: '+esc(e&&e.message||e)+'</div>'; });
+    }
+    document.getElementById('hlRun').onclick=run;
+    run();
+  };
+  document.getElementById('boardBtn').onclick=function(){
+    var old=document.getElementById('brdOverlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='brdOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column;color:var(--txt)';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#2e5c44;color:#fff;flex:0 0 auto">'+
+      '<button id="brdBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">🧱 Своя доска — уход от Trello</div></div>'+
+      '<div id="brdBody" style="flex:1;overflow:auto;padding:16px;max-width:900px;margin:0 auto;width:100%">Загрузка…</div>';
+    document.body.appendChild(ov);
+    document.getElementById('brdBack').onclick=function(){ ov.remove(); };
+    function tok(){ try{ return localStorage.getItem('ms_board_token')||''; }catch(e){ return ''; } }
+    // ИТОГ ПОСЛЕДНЕГО ИМПОРТА — хранится на сервере, виден всегда (урок 09.2026:
+    // плашка стиралась при перерисовке, закрытое окно обрывало импорт молча)
+    function lastImportHtml(li){
+      if(!li) return '<div class="muted small" style="margin-top:8px">Импорт ещё не запускался.</div>';
+      var when=String(li.at||'').slice(0,16).replace('T',' ');
+      var ageMin=li.at?Math.round((Date.now()-Date.parse(li.at))/60000):0;
+      var box=function(ok,html){ return '<div style="margin-top:10px;padding:10px 12px;border-radius:8px;line-height:1.55;background:'+(ok?'#1c3329':'#3a2226')+';border:1px solid '+(ok?'#2e5c44':'#6b2a2a')+';color:'+(ok?'#9ee6bd':'#f3b3b3')+'">'+html+'</div>'; };
+      if(li.status==='done') return box(true,'<b>✓ Последний импорт завершён успешно</b> · '+when+(li.by?(' · '+li.by):'')+'<br>'+
+        'Карточек: <b>'+li.cards+'</b> · вложений: <b>'+li.attachments+'</b> · комментариев: <b>'+li.comments+'</b> · переносов: <b>'+li.moves+'</b> · данных модулей: <b>'+(li.pluginKeys||0)+'</b>');
+      if(li.status==='error') return box(false,'<b>✗ Последний импорт остановился с ошибкой</b> · '+when+'<br>Этап: '+(li.step||'?')+'<br>Причина: '+String(li.error||'').replace(/</g,'&lt;')+'<br>Нажмите «Импортировать сейчас» ещё раз — дублей не будет.');
+      if(li.status==='running'){
+        if(ageMin>=3) return box(false,'<b>✗ Импорт не завершён</b> — прервался '+when+' (окно закрыли или пропала связь).<br>Последний шаг: '+(li.step||'?')+'<br>Нажмите «Импортировать сейчас» ещё раз — дублей не будет.');
+        return '<div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:#2b2f3a;color:#c9d3e2">⏳ Импорт идёт: '+(li.step||'…')+' · '+when+'</div>';
+      }
+      return '';
+    }
+    function draw(st){
+      var b=document.getElementById('brdBody'); if(!b) return;
+      var mode=st.mode||'trello';
+      var h='';
+      h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-size:15px;font-weight:700">Сейчас карточки берутся из: '+
+        (mode==='db'?'<span style="color:#9ee6bd">своей базы</span>':'<span style="color:#e8c07d">Trello</span>')+'</div>'+
+        '<div class="muted" style="margin-top:4px">Следующий номер изготовления: <b>'+(st.nextCardNumber||'—')+'</b> · следующий номер ремонта: <b>'+(st.nextRepairNumber||'—')+'</b>'+
+        (st.maxSeen?(' · максимум по всем источникам: '+st.maxSeen):'')+'</div></div>';
+      h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-weight:700;margin-bottom:6px">1. Импорт из Trello</div>'+
+        '<div class="muted small">Переносит колонки, карточки с номерами и описаниями, комментарии и историю переносов в свою базу. Вложения переезжают лениво — при первом скачивании. Импорт можно повторять: дублей не будет, данные обновятся.</div>'+
+        '<div style="margin-top:8px"><button class="btn" id="brdImport" type="button">↓ Импортировать сейчас</button> <span id="brdImpMsg" class="muted"></span></div>'+
+        '<div id="brdImpResult" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;line-height:1.55"></div>'+
+        lastImportHtml(st.lastImport)+'</div>';
+      h+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-weight:700;margin-bottom:6px">2. Сравнить, не переключая</div>'+
+        '<div class="muted small">Откройте две вкладки и сравните скорость и полноту: в шапке каждой доски показано, откуда данные и за сколько миллисекунд они пришли.</div>'+
+        '<div style="margin-top:8px"><a class="btn" id="brdOpenTrello" target="_blank" style="text-decoration:none">Доска на Trello</a> '+
+        '<a class="btn" id="brdOpenDb" target="_blank" style="text-decoration:none;border-color:#2e5c44;color:#9ee6bd">Своя доска (db=1)</a></div></div>';
+      h+='<div class="card" style="padding:14px"><div style="font-weight:700;margin-bottom:6px">3. Переключение источника</div>'+
+        '<div class="muted small">Меняет источник для всех сразу. Переключайте, только когда сравнили и убедились, что своя доска полная и быстрая. Обратно — в любой момент, данные Trello при этом не трогаются.</div>'+
+        '<div style="margin-top:8px">'+
+          (mode==='db'
+            ? '<button class="btn" id="brdToTrello" type="button">← Вернуть Trello</button>'
+            : '<button class="btn" id="brdToDb" type="button" style="border-color:#2e5c44;color:#9ee6bd">Переключить на свою базу →</button>')+
+        ' <span id="brdModeMsg" class="muted"></span></div></div>';
+      b.innerHTML=h;
+      var t=encodeURIComponent(tok());
+      document.getElementById('brdOpenTrello').href=WORKER+'/board?token='+t;
+      document.getElementById('brdOpenDb').href=WORKER+'/board?token='+t+'&db=1';
+      var imp=document.getElementById('brdImport');
+      // ИМПОРТ ПОРЦИЯМИ (урок 09.2026: один большой вызов упирался в лимит
+      // Cloudflare «Too many API requests») — идём этапами, показывая прогресс
+      if(imp) imp.onclick=function(){
+        if(!tok()){ alert('Сначала откройте свою доску по личной ссылке — из неё берётся токен доступа.'); return; }
+        imp.disabled=true;
+        var msgEl=document.getElementById('brdImpMsg');
+        var keep=document.createElement('div'); keep.className='muted small'; keep.style.marginTop='6px';
+        keep.textContent='Не закрывайте это окно до конца импорта. Если закроете — нажмите кнопку ещё раз, он продолжится без дублей.';
+        imp.parentNode.appendChild(keep);
+        var resEl=document.getElementById('brdImpResult');
+        resEl.style.display='none';
+        var state={ token:tok(), phase:'lists', offset:0 };
+        var guard=0, lastStep='';
+        // ИТОГ ИМПОРТА (решение Асхата, 09.2026): в конце — явная плашка: зелёная, если
+        // всё перенесено, красная — если нет, с этапом, где остановилось, и что делать
+        function result(ok, html){
+          resEl.style.display='';
+          resEl.style.background=ok?'#1c3329':'#3a2226';
+          resEl.style.border='1px solid '+(ok?'#2e5c44':'#6b2a2a');
+          resEl.style.color=ok?'#9ee6bd':'#f3b3b3';
+          resEl.innerHTML=html;
+        }
+        function step(){
+          if(++guard>400){ imp.disabled=false; msgEl.textContent='';
+            result(false,'<b>✗ Импорт не завершён</b><br>Слишком много шагов, последний этап: '+(lastStep||'—')+'.<br>Нажмите «Импортировать сейчас» ещё раз — уже перенесённое не задвоится.'); return; }
+          fetch(WORKER+'/board-import-trello',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)})
+            .then(function(r){return r.json();}).then(function(j){
+              if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+              msgEl.textContent=j.step||'…'; lastStep=j.step||lastStep;
+              if(j.done){
+                imp.disabled=false; msgEl.textContent='';
+                result(true,'<b>✓ Импорт завершён успешно — все данные перенесены</b><br>'+
+                  'Карточек: <b>'+j.cards+'</b> · вложений: <b>'+j.attachments+'</b> · комментариев: <b>'+j.comments+'</b> · переносов: <b>'+j.moves+'</b> · данных модулей: <b>'+(j.pluginKeys||0)+'</b><br>'+
+                  'Следующий номер изготовления: <b>'+j.nextCardNumber+'</b> · ремонта: <b>'+j.nextRepairNumber+'</b><br>'+
+                  '<span style="opacity:.8">Вложения переедут в ваше хранилище при первом открытии — это не ошибка.</span>');
+                setTimeout(load, 4000); return;
+              }
+              state={ token:state.token, phase:j.phase, offset:j.offset,
+                      maxShort:j.maxShort||state.maxShort||0, cards:j.cards||state.cards||0,
+                      attachments:j.attachments||state.attachments||0, comments:j.comments||state.comments||0, moves:j.moves||state.moves||0,
+                      pluginKeys:j.pluginKeys||state.pluginKeys||0 };
+              step();
+            }).catch(function(e){ imp.disabled=false; msgEl.textContent='';
+              result(false,'<b>✗ Импорт остановился с ошибкой</b><br>Этап: '+(lastStep||'начало')+'<br>Причина: '+String(e&&e.message||e).replace(/</g,'&lt;')+
+                '<br>Нажмите «Импортировать сейчас» ещё раз — уже перенесённое не задвоится, продолжит с начала без потерь.'); });
+        }
+        step();
+      };
+      function setMode(m){
+        if(!tok()){ alert('Сначала откройте свою доску по личной ссылке — из неё берётся токен доступа.'); return; }
+        if(!confirm(m==='db'?'Переключить всех на свою базу? Карточки будут создаваться и двигаться в системе, Trello останется как есть.':'Вернуть источником Trello?')) return;
+        fetch(WORKER+'/board-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok(),mode:m})})
+          .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); load(); })
+          .catch(function(e){ document.getElementById('brdModeMsg').textContent='Ошибка: '+(e&&e.message||e); });
+      }
+      var b1=document.getElementById('brdToDb'); if(b1) b1.onclick=function(){ setMode('db'); };
+      var b2=document.getElementById('brdToTrello'); if(b2) b2.onclick=function(){ setMode('trello'); };
+    }
+    function load(){
+      fetch(WORKER+'/card-seq?token='+encodeURIComponent(tok()))
+        .then(function(r){return r.json();}).then(function(j){ draw(j&&j.ok?j:{}); })
+        .catch(function(){ draw({}); });
+    }
+    load();
+  };
+  // ЦЕЛИ УПРАВЛЯЮЩЕМУ (решение Асхата, 10.2026): учредитель ставит цели по прибыли
+  // и утверждает бонус; управляющий здесь видит только свои цели и прогресс
+  document.getElementById('goalsBtn').onclick=function(){
+    var old=document.getElementById('glOverlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='glOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column;color:var(--txt)';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#3b2f5c;color:#fff;flex:0 0 auto">'+
+      '<button id="glBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">🎯 Цели управляющему</div></div>'+
+      '<div id="glBody" style="flex:1;overflow:auto;padding:16px;max-width:820px;margin:0 auto;width:100%">Загрузка…</div>';
+    document.body.appendChild(ov);
+    document.getElementById('glBack').onclick=function(){ ov.remove(); };
+    var tok=''; try{ tok=localStorage.getItem('ms_board_token')||''; }catch(e){}
+    var ym=new Date().toISOString().slice(0,7), ME_F=null;
+    function fmt(n){ return Math.round(+n||0).toLocaleString('ru-RU'); }
+    function shiftYm(d){ var p=ym.split('-'), dt=new Date(Date.UTC(+p[0],+p[1]-1+d,1)); ym=dt.toISOString().slice(0,7); load(); }
+    function draw(g){
+      var b=document.getElementById('glBody'); if(!b) return;
+      var isF=ME_F&&ME_F.isFounder;
+      var h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><button class="btn" id="glPrev">‹</button><b style="font-size:16px">'+ym+'</b><button class="btn" id="glNext">›</button>'+
+        '<span class="muted small" style="margin-left:auto">'+(isF?'вы — учредитель':(ME_F&&ME_F.founderName?('учредитель: '+ME_F.founderName):''))+'</span></div>';
+      if(!ME_F||(!ME_F.hasFounder&&!ME_F.canClaim)) h+='';
+      if(ME_F&&!ME_F.hasFounder&&ME_F.canClaim){
+        h+='<div class="card" style="padding:12px;margin-bottom:12px">Учредитель ещё не назначен. Учредитель ставит цели управляющему и утверждает бонус; управляющий сам себе цели менять не может.'+
+          '<div style="margin-top:8px"><button class="btn" id="glClaim" style="border-color:#c9a8ff;color:#c9a8ff">Я — учредитель компании</button></div></div>';
+      }
+      if(g.noManager){ h+='<div class="muted">Не выбран управляющий: в «Зарплата и работники» → «Мотивация начальника цеха» укажите, кому (поле «Кому»).</div>'; b.innerHTML=h; wire(); return; }
+      h+='<div class="card" style="padding:14px;margin-bottom:12px"><div class="muted small">Прибыль за месяц по начислению (как в «Финансах»)</div>'+
+        '<div style="font-size:24px;font-weight:700;margin:4px 0">'+fmt(g.actual)+' ₸</div>'+
+        (g.approved?'<div style="color:#9ee6bd">✓ Бонус утверждён '+String(g.approvedAt||'').slice(0,16)+' · '+(g.approvedBy||'')+'</div>':'<div class="muted small">Бонус по текущему факту: <b>'+fmt(g.bonusIfApproved)+' ₸</b> — начислится только после утверждения учредителем</div>')+'</div>';
+      h+='<div class="card" style="padding:14px"><div style="font-weight:700;margin-bottom:8px">Цели на '+ym+'</div><div id="glRows">';
+      (g.goals.length?g.goals:[]).forEach(function(x){
+        h+='<div style="margin:8px 0"><div style="display:flex;justify-content:space-between"><span>Прибыль ≥ <b>'+fmt(x.threshold)+' ₸</b> → бонус <b>'+fmt(x.bonus)+' ₸</b></span><span style="color:'+(x.achieved?'#4bce97':'#9fadbc')+'">'+(x.achieved?'✓ достигнута':x.progress+'%')+'</span></div>'+
+          '<div style="height:6px;background:#2b2f3a;border-radius:4px;margin-top:4px"><div style="height:6px;border-radius:4px;width:'+x.progress+'%;background:'+(x.achieved?'#4bce97':'#579dff')+'"></div></div></div>';
+      });
+      if(!g.goals.length) h+='<div class="muted">Цели на этот месяц не поставлены.</div>';
+      h+='</div>';
+      if(isF&&!g.approved){
+        h+='<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><div class="muted small" style="margin-bottom:6px">Ступени: при прибыли не меньше порога — фиксированный бонус. Ступени суммируются.</div><div id="glEdit"></div>'+
+          '<button class="btn" id="glAdd" type="button">+ ступень</button> <button class="btn" id="glSave" type="button" style="border-color:#2e5c44;color:#9ee6bd">Сохранить цели</button>'+
+          ' <button class="btn" id="glApprove" type="button" style="border-color:#c9a8ff;color:#c9a8ff;margin-left:8px">Утвердить бонус по итогам месяца</button></div>';
+      }
+      h+='</div>';
+      b.innerHTML=h;
+      if(isF&&!g.approved){
+        var ed=document.getElementById('glEdit');
+        var rows=(g.goals.length?g.goals:[{threshold:'',bonus:''}]).map(function(x){ return {threshold:x.threshold,bonus:x.bonus}; });
+        function drawEd(){ ed.innerHTML=rows.map(function(r,i){ return '<div style="display:flex;gap:6px;align-items:center;margin:4px 0">прибыль ≥ <input type="number" data-i="'+i+'" data-k="threshold" value="'+(r.threshold||'')+'" style="width:140px" placeholder="1000000"> ₸ → бонус <input type="number" data-i="'+i+'" data-k="bonus" value="'+(r.bonus||'')+'" style="width:110px" placeholder="100000"> ₸ <button class="btn" data-del="'+i+'" type="button" style="padding:2px 8px">✕</button></div>'; }).join('');
+          [].forEach.call(ed.querySelectorAll('input'),function(el){ el.oninput=function(){ rows[+this.dataset.i][this.dataset.k]=+this.value||0; }; });
+          [].forEach.call(ed.querySelectorAll('[data-del]'),function(el){ el.onclick=function(){ rows.splice(+this.dataset.del,1); drawEd(); }; }); }
+        drawEd();
+        document.getElementById('glAdd').onclick=function(){ rows.push({threshold:'',bonus:''}); drawEd(); };
+        document.getElementById('glSave').onclick=function(){
+          fetch(WORKER+'/goals-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok,ym:ym,goals:rows})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); draw(j); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
+        document.getElementById('glApprove').onclick=function(){
+          if(!confirm('Утвердить бонус за '+ym+'?\nПрибыль: '+fmt(g.actual)+' ₸ · бонус: '+fmt(g.bonusIfApproved)+' ₸.\n\nПосле утверждения цели месяца менять нельзя, бонус уйдёт в ведомость.')) return;
+          fetch(WORKER+'/goals-approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok,ym:ym})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); load(); })
+            .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+        };
+      }
+      wire();
+    }
+    function wire(){
+      var p=document.getElementById('glPrev'); if(p) p.onclick=function(){ shiftYm(-1); };
+      var n=document.getElementById('glNext'); if(n) n.onclick=function(){ shiftYm(1); };
+      var c=document.getElementById('glClaim'); if(c) c.onclick=function(){
+        if(!confirm('Назначить себя учредителем? Только учредитель сможет ставить цели управляющему и утверждать его бонус.')) return;
+        fetch(WORKER+'/founder-set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok})})
+          .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); load(); })
+          .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+      };
+    }
+    function load(){
+      fetch(WORKER+'/founder-me?token='+encodeURIComponent(tok)).then(function(r){return r.json();}).then(function(f){ ME_F=f;
+        return fetch(WORKER+'/goals-get?ym='+ym).then(function(r){return r.json();});
+      }).then(function(g){ draw(g||{goals:[]}); }).catch(function(e){ document.getElementById('glBody').textContent='Ошибка: '+(e&&e.message||e); });
+    }
+    load();
+  };
+  document.getElementById('discBtn').onclick=function(){
+    var r=range();
+    var old=document.getElementById('discOverlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='discOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column;color:var(--txt)';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#8a6d00;color:#fff;flex:0 0 auto">'+
+      '<button id="discBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">% Уступки клиентам: '+r.from+' — '+r.to+'</div></div>'+
+      '<div id="discBody" style="flex:1;overflow:auto;padding:16px;max-width:980px;margin:0 auto;width:100%">Загрузка…</div>';
+    document.body.appendChild(ov);
+    document.getElementById('discBack').onclick=function(){ ov.remove(); };
+    fetch(WORKER+'/discount-report?from='+r.from+'&to='+r.to).then(function(x){return x.json();}).then(function(j){
+      var b=document.getElementById('discBody'); if(!b) return;
+      if(!j||j.error){ b.textContent='Ошибка: '+((j&&j.error)||'?'); return; }
+      function m(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
+      var h='';
+      h+='<div class="card" style="padding:14px;margin-bottom:14px"><div style="font-size:15px;font-weight:700">Итого за период</div>'+
+        '<div class="muted" style="margin-top:4px">Расчётов: <b>'+j.orders+'</b> · с уступкой: <b>'+j.ordersWithDiscount+'</b> · работы по тарифу: <b>'+m(j.totalStandard)+' ₸</b> · уступлено: <b style="color:#e8c07d">'+m(j.totalDiscount)+' ₸ ('+j.pct+'%)</b></div>'+
+        '<div class="small muted" style="margin-top:6px">Как читать: если по какой-то операции уступка стала нормой (частота 50%+), тариф выше рынка — его лучше снизить и убрать торг. Где уступок нет — есть запас поднять.</div></div>';
+      if(!j.ordersWithDiscount){ h+='<div class="muted">За период спеццены в расчётах не использовались. Окошко «спец. ₸/ед» — в строке операции калькулятора (видно тем, кто видит стоимость).</div>'; b.innerHTML=h; return; }
+      h+='<h3>По операциям и толщинам</h3><table><thead><tr><th>Операция</th><th class="num">Расчётов</th><th class="num">С уступкой</th><th class="num">Частота</th><th class="num">По тарифу</th><th class="num">Уступлено</th><th class="num">%</th></tr></thead><tbody>';
+      (j.byOp||[]).filter(function(o){return o.disc>0;}).forEach(function(o){
+        h+='<tr><td>'+esc(o.key)+'</td><td class="num">'+o.orders+'</td><td class="num">'+o.discounted+'</td><td class="num" style="color:'+(o.freq>=50?'#f28b82':'inherit')+'">'+o.freq+'%</td><td class="num">'+m(o.std)+'</td><td class="num" style="color:#e8c07d">'+m(o.disc)+'</td><td class="num">'+o.pct+'%</td></tr>';
+      });
+      h+='</tbody></table>';
+      h+='<h3>По клиентам</h3><table><thead><tr><th>Клиент</th><th class="num">Заказов с уступкой</th><th class="num">По тарифу</th><th class="num">Уступлено</th><th class="num">%</th></tr></thead><tbody>';
+      (j.byClient||[]).forEach(function(c){ h+='<tr><td>'+esc(c.name)+'</td><td class="num">'+c.orders+'</td><td class="num">'+m(c.std)+'</td><td class="num" style="color:#e8c07d">'+m(c.disc)+'</td><td class="num">'+c.pct+'%</td></tr>'; });
+      h+='</tbody></table>';
+      h+='<h3>По инженерам (кто согласовал)</h3><table><thead><tr><th>Инженер</th><th class="num">Заказов</th><th class="num">Уступлено</th><th class="num">%</th></tr></thead><tbody>';
+      (j.byEngineer||[]).forEach(function(c){ h+='<tr><td>'+esc(c.name)+'</td><td class="num">'+c.orders+'</td><td class="num" style="color:#e8c07d">'+m(c.disc)+'</td><td class="num">'+c.pct+'%</td></tr>'; });
+      h+='</tbody></table>';
+      h+='<h3>Заказы с уступкой</h3><table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">По тарифу</th><th class="num">Уступлено</th><th class="num">%</th><th>Дата</th></tr></thead><tbody>';
+      (j.list||[]).forEach(function(o){ h+='<tr><td>'+esc(o.number)+'</td><td>'+esc(o.name)+'</td><td>'+esc(o.client)+'</td><td class="num">'+m(o.std)+'</td><td class="num" style="color:#e8c07d">'+m(o.disc)+'</td><td class="num">'+o.pct+'%</td><td class="small muted">'+esc(o.date)+'</td></tr>'; });
+      h+='</tbody></table>';
+      b.innerHTML=h;
+    }).catch(function(e){ var b=document.getElementById('discBody'); if(b) b.textContent='Сеть: '+(e&&e.message||e); });
+  };
+  document.getElementById('financeBtn').onclick=function(){
+    var r=range();
+    // открываем страницу «Финансы» в этом же окне: оверлей с iframe поверх панели
+    var old=document.getElementById('finOverlay'); if(old) old.remove();
+    var ov=document.createElement('div');
+    ov.id='finOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
+      '<button id="finBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">₸ Финансы: чистая прибыль</div>'+
+      '<button id="finX" type="button" title="Закрыть" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px;line-height:1">✕</button></div>'+
+      '<iframe src="'+WORKER+'/profit?from='+r.from+'&to='+r.to+'" style="flex:1;border:0;width:100%"></iframe>';
+    document.body.appendChild(ov);
+    var finClose=function(){ ov.remove(); load(); }; // вернувшись, пересчитать плитки
+    document.getElementById('finBack').onclick=finClose;
+    document.getElementById('finX').onclick=finClose;
+  };
+  document.getElementById('backupBtn').onclick=function(){
+    var ov=document.createElement('div');
+    ov.id='bkOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;flex-direction:column';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55)">'+
+      '<button id="bkBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">🗄 Резервные копии</div>'+
+      '<button id="bkX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
+      '<div style="flex:1;overflow:auto;padding:18px 22px" id="bkBody">Загрузка…</div>';
+    document.body.appendChild(ov);
+    var closeBk=function(){ ov.remove(); };
+    document.getElementById('bkBack').onclick=closeBk;
+    document.getElementById('bkX').onclick=closeBk;
+    drawBackups();
+  };
+
+  function drawBackups(){
+    var body=document.getElementById('bkBody'); if(!body) return;
+    fetch(WORKER+'/backup-list').then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+      var rows=(j.backups||[]);
+      var h='';
+      h+= j.r2
+        ? '<div style="background:#16301f;border:1px solid #2f6b45;border-radius:10px;padding:10px 14px;margin-bottom:12px;color:#9ee6bd">✅ Копии выгружаются в отдельное хранилище R2 — база не разрастается, сканы и резюме входят в копию целиком.</div>'
+        : '<div style="background:#3a2f16;border:1px solid #6b5a2f;border-radius:10px;padding:10px 14px;margin-bottom:12px;color:#e8d59e">⚠ Хранилище R2 не подключено — копии лежат в самой базе, файлы (сканы, резюме) в них не входят. Подключение занимает пару минут: Cloudflare → R2 → создать бакет → в настройках воркера добавить привязку с именем <b>BACKUPS</b>.</div>';
+      h+='<div class="muted" style="margin-bottom:12px">Копии создаются автоматически: <b>каждый день</b> — заказы, маршруты, счета, ремонты с комментариями, табель, снабжение; <b>раз в неделю (воскресенье)</b> — вся система целиком плюс слепок доски Trello (списки, карточки, комментарии, вложения). Хранятся 14 дневных и 8 недельных копий. '+
+        (j.r2 ? 'Полная копия всегда включает сканы и резюме целиком — они лежат в хранилище, а не в базе.'
+              : 'Сканы и резюме в регулярные копии не входят (только их описания) — чтобы база не разрасталась; для полного архива с файлами нажмите «Полную + файлы» и сохраните файл у себя.')+'</div>';
+      h+='<div style="display:flex;gap:8px;margin-bottom:16px">'+
+         '<button class="btn" id="bkNowD" type="button">Сделать дневную копию сейчас</button>'+
+         '<button class="btn" id="bkNowF" type="button">Полную копию сейчас</button>'+
+         (j.r2 ? '' : '<button class="btn" id="bkNowFF" type="button" title="Включая сканы, резюме и чеки — файл получится тяжёлым, скачайте его и храните у себя">Полную + файлы</button>')+
+         '<span id="bkMsg" class="muted" style="align-self:center"></span></div>';
+      if(!rows.length){ h+='<div class="muted">Копий пока нет — первая появится по расписанию или по кнопке выше.</div>'; }
+      else{
+        h+='<table style="width:100%;border-collapse:collapse"><thead><tr>'+
+           '<th style="text-align:left;padding:6px">Когда</th><th style="text-align:left">Тип</th><th style="text-align:left">Где</th>'+
+           '<th style="text-align:right">Записей</th><th style="text-align:right">Размер</th><th></th></tr></thead><tbody>';
+        rows.forEach(function(b){
+          h+='<tr><td style="padding:6px">'+esc(String(b.at||'').slice(0,16))+'</td>'+
+             '<td>'+(b.kind==='full'?'<b style="color:#4bce97">полная</b>':'дневная')+(b.withFiles?' <span class="muted">+файлы</span>':'')+'</td>'+
+             '<td class="muted">'+(b.storage==='r2'?'хранилище':'база')+'</td>'+
+             '<td style="text-align:right">'+(b.rows||0).toLocaleString('ru-RU')+'</td>'+
+             '<td style="text-align:right">'+(b.sizeKb||0)+' КБ</td>'+
+             '<td style="text-align:right"><a href="'+WORKER+'/backup-download?id='+b.id+'" target="_blank" style="color:#579dff;text-decoration:none">скачать</a></td></tr>';
+        });
+        h+='</tbody></table>';
+      }
+      body.innerHTML=h;
+      var run=function(kind){
+        var msg=document.getElementById('bkMsg'); msg.textContent='Создаю копию…';
+        fetch(WORKER+'/backup-run?kind='+kind).then(function(r){return r.json();}).then(function(res){
+          if(!res||!res.ok) throw new Error((res&&res.error)||'ошибка');
+          msg.textContent='Готово ✓'; drawBackups();
+        }).catch(function(e){ msg.textContent='Ошибка: '+(e&&e.message||e); });
+      };
+      document.getElementById('bkNowD').onclick=function(){ run('daily'); };
+      document.getElementById('bkNowF').onclick=function(){ run('full'); };
+      var ff=document.getElementById('bkNowFF'); if(ff) ff.onclick=function(){ run('full&withFiles=1'); };
+    }).catch(function(e){ body.innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+  }
+
+  document.getElementById('pricingBtn').onclick=function(){
+    tab='pricing'; render();
+  };
+
+  isDirector().then(function(admin){
+    if(admin){
+      fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
+        if(j&&j.ok&&j.pricing){ var p=j.pricing;
+          try{ window.__KNOWN_CUSTOM={ mat:(p.customMat||[]).map(function(x){return x.code;}), cmp:(p.customCmp||[]).map(function(x){return x.code;}), op:(p.customOp||[]).map(function(x){return x.code;}) }; }catch(e){}
+          PRICING_EDIT={ mat:p.mat||{}, cmp:p.cmp||{}, coef:p.coef||{}, customMat:p.customMat||[], customCmp:p.customCmp||[], customOp:p.customOp||[],
+          matOstBySec:p.matOstBySec||{}, matRahBySec:p.matRahBySec||{}, cmpOstBySec:p.cmpOstBySec||{}, cmpRahBySec:p.cmpRahBySec||{}, opOstBySec:p.opOstBySec||{}, opRahBySec:p.opRahBySec||{}, rates:p.rates||{} }; }
+      }).catch(function(){}).then(load);
+      return;
+    }
+    // не админ: проверяем право «Панель руководителя» (начальник цеха и т.п.)
+    var wb=document.getElementById('workers'); if(wb) wb.style.display='none';
+    var pb=document.getElementById('pricingBtn'); if(pb) pb.style.display='none';
+    var fb=document.getElementById('financeBtn'); if(fb) fb.style.display='none';
+    var db=document.getElementById('discBtn'); if(db) db.style.display='none';
+    var bb=document.getElementById('boardBtn'); if(bb) bb.style.display='none';
+    var gb=document.getElementById('goalsBtn'); if(gb) gb.style.display='none';
+    t.member('id').then(function(me){
+      return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
+        .then(function(r){return r.json();});
+    }).then(function(j){
+      if(j && j.canDashboard){ load(); }
+      else boot('Панель доступна руководителю и сотрудникам с правом «Панель руководителя» (включается в «Зарплата / Работники»).');
+    }).catch(function(){ boot('Панель доступна только руководителю (администратору доски).'); });
+  });
+</script>
+</body>
+</html>
