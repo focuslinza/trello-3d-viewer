@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Маршрут заказа</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    html[data-color-mode="light"] { --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --ok:#1f845a; --okbg:#e3fcef; --act:#0c66e4; --actbg:#e9f2ff; --blk:#c9372c; --blkbg:#ffeceb; }
+    html[data-color-mode="dark"]  { --txt:#c7d1db; --muted:#9fadbc; --chip:#2c333a; --line:#3a414a; --ok:#4bce97; --okbg:#1c3329; --act:#85b8ff; --actbg:#1c2b41; --blk:#f87168; --blkbg:#42221f; }
+    html { --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --ok:#1f845a; --okbg:#e3fcef; --act:#0c66e4; --actbg:#e9f2ff; --blk:#c9372c; --blkbg:#ffeceb; }
+    html,body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--txt);font-size:13px}
+    #wrap{padding:6px 4px}
+    .hdr{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 2px 8px;font-size:12px;color:var(--muted)}
+    .pill{background:var(--chip);border-radius:10px;padding:2px 9px;font-weight:600}
+    .pill.done{background:var(--okbg);color:var(--ok)}
+    .pill.blk{background:var(--blkbg);color:var(--blk)}
+    .oprow{display:flex;align-items:center;gap:8px;padding:5px 2px;flex-wrap:wrap}
+    .st{flex:0 0 auto;border:1px solid var(--line);background:var(--chip);border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;color:var(--muted);min-width:96px;text-align:center}
+    .st.active{background:var(--actbg);color:var(--act);border-color:var(--act)}
+    .st.done{background:var(--okbg);color:var(--ok);border-color:var(--ok)}
+    .nm{flex:1;min-width:110px;font-weight:600}
+    .nm .blkline{font-weight:400;font-size:11.5px;color:var(--blk);margin-top:1px}
+    select{background:var(--chip);border:1px solid var(--line);border-radius:6px;color:var(--txt);padding:4px 6px;font-size:12px;max-width:150px}
+    .blkbtn{flex:0 0 auto;border:1px solid var(--line);background:var(--chip);border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;color:var(--muted)}
+    .blkbtn.on{background:var(--blkbg);color:var(--blk);border-color:var(--blk)}
+    .btn{background:var(--act);color:#fff;border:none;border-radius:4px;padding:6px 14px;font-size:12.5px;font-weight:600;cursor:pointer}
+    .lnk{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;padding:2px 4px}
+    .chk{display:flex;align-items:center;gap:8px;padding:4px 2px}
+    .muted{color:var(--muted);font-size:12px}
+    #msg{font-size:12px;color:var(--ok);margin-left:8px}
+  </style>
+</head>
+<body>
+  <div id="wrap"><div class="muted">Загрузка…</div></div>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    var OPS = [
+      { key:'eng',     label:'Инженер' },
+      { key:'cut',     label:'Резка' },
+      { key:'bend',    label:'Гибка' },
+      { key:'weld',    label:'Сварка' },
+      { key:'shleif',  label:'Шлейфовка / сборка' },
+      { key:'paint',   label:'Покраска' },
+      { key:'montazh', label:'Монтаж' }
+    ];
+    // ПУСТОЙ МАРШРУТ ПО УМОЛЧАНИЮ (решение Асхата, 09.2026): раньше резка, гибка,
+    // сварка и шлейфовка были отмечены заранее — инженер забывал снять лишнее,
+    // и рабочий отмечал несуществующий этап. Теперь отмечает только инженер.
+    var DEFAULT_CHECKED = {};
+    var STATUS_NEXT = { queued:'active', active:'done', done:'queued' };
+    var STATUS_LBL  = { queued:'○ в очереди', active:'▶ в работе', done:'✓ готово' };
+    var ROUTE=null, WORKERS=[], CARD_ID=null, CARD_META={name:'',url:'',num:''}, editing=false;
+    var HAS_CALC=false, NOENG_CONFIRM=false; // есть расчёт → инженер работал; подтверждение маршрута без инженера
+
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function summaryOf(route){
+      var ops=(route&&route.ops)||[];
+      var d=ops.filter(function(o){return o.status==='done';}).length;
+      var blocked=ops.filter(function(o){return o.block&&o.block.reason;});
+      return { d:d, t:ops.length, b:blocked.length?1:0, r:blocked.length?String(blocked[0].block.reason).slice(0,60):'' };
+    }
+
+    function save(){
+      if(!ROUTE || !CARD_ID) return Promise.resolve();
+      SAVING=true; LAST_EDIT=Date.now();
+      ROUTE.updatedAt=Date.now();
+      var msg=document.getElementById('msg'); if(msg) msg.textContent='…';
+      return fetch(WORKER+'/route-save',{ method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ cardId: CARD_ID, route: ROUTE })
+      }).then(function(r){ return r.json(); }).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+        // мини-сводка на карточке — из неё строится бейдж на лицевой стороне
+        return t.set('card','shared','routeSummary', summaryOf(ROUTE)).catch(function(){});
+      }).then(function(){ if(msg){ msg.textContent='Сохранено ✓'; setTimeout(function(){ if(msg) msg.textContent=''; },2500); } })
+      .catch(function(e){ if(msg){ msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--blk)'; } }).then(function(x){ SAVING=false; return x; }, function(e){ SAVING=false; throw e; });
+    }
+
+    function renderEditor(){
+      var el=document.getElementById('wrap');
+      var existing={}; ((ROUTE&&ROUTE.ops)||[]).forEach(function(o){ existing[o.key]=o; });
+      var h='<div class="muted" style="margin-bottom:6px">Отметьте операции, нужные <b>для этого</b> заказа (порядок — как в списке). По умолчанию не отмечено ничего: лишний этап в маршруте — это лишняя сдельная и путаница в цехе.</div>';
+      OPS.forEach(function(op){
+        var on = ROUTE ? !!existing[op.key] : !!DEFAULT_CHECKED[op.key];
+        // расчёт на карточке уже есть → инженер точно работал: в новом маршруте
+        // отмечаем его этап заранее, чтобы начисление не потерялось
+        if (op.key==='eng' && !ROUTE && HAS_CALC) on = true;
+        h+='<label class="chk"><input type="checkbox" data-k="'+op.key+'"'+(on?' checked':'')+'> '+esc(op.label)+'</label>';
+      });
+      h+='<div style="margin-top:8px"><button class="btn" id="mk" type="button">'+(ROUTE?'Обновить состав':'Создать маршрут')+'</button>'+(ROUTE?' <button class="lnk" id="cancel" type="button">Отмена</button>':'')+'<span id="msg"></span></div>';
+      el.innerHTML=h;
+      document.getElementById('mk').onclick=function(){
+        var ops=[];
+        [].forEach.call(document.querySelectorAll('input[data-k]'), function(cb){
+          if(!cb.checked) return;
+          var k=cb.getAttribute('data-k');
+          var meta=OPS.filter(function(o){return o.key===k;})[0];
+          ops.push(existing[k] || { key:k, label:meta.label, status:'queued', workerId:null, workerName:'', block:null });
+        });
+        if(!ops.length){ var m0=document.getElementById('msg'); if(m0){ m0.textContent=' Выберите хотя бы одну операцию.'; m0.style.color='var(--blk)'; } return; }
+        var hasEng = ops.some(function(o){ return o.key==='eng'; });
+        if (HAS_CALC && !hasEng && !NOENG_CONFIRM) {
+          // расчёт есть, а этап «Инженер» сняли — просим осознанного подтверждения
+          var warn=document.getElementById('noengWarn');
+          if(!warn){
+            var d=document.createElement('div');
+            d.id='noengWarn';
+            d.style.cssText='margin-top:8px;padding:8px 10px;border:1px solid #8a5a2c;border-radius:8px;font-size:12px;line-height:1.5;background:rgba(138,90,44,.12)';
+            d.innerHTML='⚠ В заказе есть расчёт — значит, инженер работал, но этап «Инженер» не отмечен: исполнитель не получит начисление.'+
+              '<div style="margin-top:6px;display:flex;gap:8px">'+
+              '<button class="btn" id="noengAdd" type="button">Добавить инженера</button>'+
+              '<button class="lnk" id="noengGo" type="button">Создать без инженера</button></div>';
+            document.getElementById('mk').parentNode.appendChild(d);
+            document.getElementById('noengAdd').onclick=function(){
+              var cb=document.querySelector('input[data-k="eng"]'); if(cb) cb.checked=true;
+              d.remove(); NOENG_CONFIRM=false;
+              document.getElementById('mk').click();
+            };
+            document.getElementById('noengGo').onclick=function(){
+              NOENG_CONFIRM=true; d.remove();
+              document.getElementById('mk').click();
+            };
+            t.sizeTo('#wrap').catch(function(){});
+          }
+          return;
+        }
+        NOENG_CONFIRM=false;
+        ROUTE = ROUTE || { createdAt: Date.now() };
+        ROUTE.ops = ops;
+        editing=false;
+        save().then(renderRoute);
+      };
+      var c=document.getElementById('cancel'); if(c) c.onclick=function(){ editing=false; renderRoute(); };
+      t.sizeTo('#wrap');
+    }
+
+    function renderRoute(){
+      var el=document.getElementById('wrap');
+      if(!ROUTE || !ROUTE.ops || !ROUTE.ops.length){ return renderEditor(); }
+      var s=summaryOf(ROUTE);
+      var h='<div class="hdr"><span class="pill'+(s.d===s.t?' done':'')+'">готово '+s.d+' из '+s.t+'</span>';
+      if(s.b) h+='<span class="pill blk">⛔ '+esc(s.r)+'</span>';
+      h+='<span style="flex:1"></span><button class="lnk" id="rework" type="button" style="color:#e8987d" title="Переделка/рекламация: переоткрыть этапы, зафиксировать причину и виновника">↩ Переделка</button> <button class="lnk" id="edit" type="button">✎ состав</button><span id="msg"></span></div>';
+      h+='<div id="rwHost"></div>';
+      // соответствие этапа маршрута → этап в карточке работника: в списке
+      // только потенциально причастные (у кого отмечен этот этап). Текущий
+      // сохранённый исполнитель показывается всегда; нет подходящих — все.
+      var OP2STAGE={ eng:'eng', cut:'cut', bend:'bend', weld:'weld', shleif:'assembly', assembly:'assembly', paint:'assembly', components:'assembly', montazh:'montazh' };
+      ROUTE.ops.forEach(function(o,i){
+        var stKey=OP2STAGE[o.key]||null;
+        var pool=WORKERS.filter(function(w){
+          if(String(o.workerId)===String(w.id)) return true;                    // выбранный — всегда
+          if(!stKey) return true;                                              // неизвестный этап — не фильтруем
+          return (w.stages||[]).indexOf(stKey)>=0;
+        });
+        if(!pool.some(function(w){ return String(o.workerId)!==String(w.id); })) pool=WORKERS; // подходящих нет — показываем всех
+        var wsel='<select data-i="'+i+'" class="wsel"><option value="">— исполнитель —</option>';
+        pool.forEach(function(w){
+          wsel+='<option value="'+w.id+'"'+(String(o.workerId)===String(w.id)?' selected':'')+'>'+esc(w.name)+'</option>';
+        });
+        wsel+='</select>';
+        h+='<div class="oprow">'+
+           '<button class="st '+esc(o.status)+'" data-i="'+i+'" type="button">'+STATUS_LBL[o.status]+'</button>'+
+           '<div class="nm">'+esc(o.label)+(o.rework?(' <span style="font-size:10.5px;color:#e8987d" title="Этап переоткрыт на переделку">↩ переделка'+(o.rework>1?(' ×'+o.rework):'')+'</span>'):'')+(o.block&&o.block.reason?('<div class="blkline">⛔ '+esc(o.block.reason)+'</div>'):'')+'</div>'+
+           wsel+
+           '<button class="blkbtn'+(o.block?' on':'')+'" data-i="'+i+'" type="button" title="Блокировка: нет материала и т.п.">⛔</button>'+
+           '</div>';
+      });
+      el.innerHTML=h;
+      document.getElementById('edit').onclick=function(){ editing=true; renderEditor(); };
+      document.getElementById('rework').onclick=function(){ renderReworkForm(); };
+      loadReworkHistory();
+      [].forEach.call(document.querySelectorAll('.st'), function(b){
+        b.onclick=function(){
+          LAST_EDIT=Date.now();
+          var o=ROUTE.ops[+this.getAttribute('data-i')];
+          o.status=STATUS_NEXT[o.status]||'queued';
+          // дата «готово» — по ней начисление ложится в месяц сдачи работы
+          if(o.status==='done') o.doneAt=Date.now(); else delete o.doneAt;
+          save().then(renderRoute);
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.wsel'), function(sel){
+        sel.onchange=function(){
+          LAST_EDIT=Date.now();
+          var o=ROUTE.ops[+this.getAttribute('data-i')];
+          o.workerId=this.value||null;
+          var w=WORKERS.filter(function(x){return String(x.id)===String(sel.value);})[0];
+          o.workerName=w?w.name:'';
+          save();
+        };
+      });
+      [].forEach.call(document.querySelectorAll('.blkbtn'), function(b){
+        b.onclick=function(){
+          var i=+this.getAttribute('data-i');
+          var o=ROUTE.ops[i];
+          if(o.block){
+            // снятие блокировки — материал привезли, работаем дальше
+            o.block=null;
+            save().then(renderRoute);
+            return;
+          }
+          // постановка блокировки: обязательно создаётся заявка на снабжение,
+          // чтобы снабженец сразу увидел, что купить (окно всё сделает само)
+          t.modal({
+            title: 'Блокировка: нет материала',
+            url: './supply-block-modal.html?t=' + Date.now(),
+            fullscreen: false,
+            accentColor: '#c9372c',
+            args: { data: { cardId: CARD_ID, cardName: CARD_META.name, cardNumber: CARD_META.num,
+                            cardUrl: CARD_META.url, opIndex: i, opLabel: o.label } }
+          });
+        };
+      });
+      t.sizeTo('#wrap');
+    }
+
+    function renderReworkForm(){
+      var host=document.getElementById('rwHost');
+      if(!host) return;
+      var stgs=ROUTE.ops.map(function(o,i){
+        return '<label style="display:inline-flex;align-items:center;gap:5px;margin-right:10px;font-size:12px"><input type="checkbox" class="rwst" value="'+esc(o.key)+'"'+(o.status==='done'?' checked':'')+'> '+esc(o.label)+'</label>';
+      }).join('');
+      var wopts='<option value="">— кто виноват —</option>';
+      WORKERS.forEach(function(w){ wopts+='<option value="'+w.id+'">'+esc(w.name)+'</option>'; });
+      host.innerHTML='<div style="margin:8px 0;padding:10px;border:1px solid #7a4a3a;border-radius:8px;background:rgba(122,74,58,.10);font-size:12.5px">'+
+        '<div style="font-weight:700;margin-bottom:6px">↩ Переделка / рекламация</div>'+
+        '<div style="margin-bottom:6px"><input id="rwReason" placeholder="причина (трещина по шву, клиент сменил размер…)" style="width:100%;box-sizing:border-box"></div>'+
+        '<div style="margin-bottom:6px">Виновник: <select id="rwFault">'+
+          '<option value="client">Клиент (доп. работы — в счёт)</option>'+
+          '<option value="worker">Работник (переделка бесплатно; материал: 50% из ЗП / 50% предприятие)</option>'+
+          '<option value="mixed">Цех + клиент (материал: 50% клиенту / 25% из ЗП / 25% предприятие)</option>'+
+        '</select> <select id="rwWorker" style="display:none">'+wopts+'</select></div>'+
+        '<div style="margin-bottom:6px">Переоткрыть этапы: '+stgs+'</div>'+
+        '<div style="margin-bottom:8px">Испорченный материал, ₸: <input id="rwMat" type="number" min="0" step="500" style="width:110px" placeholder="0"></div>'+
+        '<button class="btn" id="rwGo" type="button">Создать переделку</button> '+
+        '<button class="lnk" id="rwCancel" type="button">Отмена</button> <span id="rwMsg"></span></div>';
+      var faultSel=document.getElementById('rwFault');
+      faultSel.onchange=function(){ document.getElementById('rwWorker').style.display=(this.value==='client')?'none':''; };
+      document.getElementById('rwCancel').onclick=function(){ host.innerHTML=''; t.sizeTo('#wrap').catch(function(){}); loadReworkHistory(); };
+      document.getElementById('rwGo').onclick=function(){
+        var fault=faultSel.value;
+        var culprit=document.getElementById('rwWorker').value||null;
+        var msg=document.getElementById('rwMsg');
+        if((fault==='worker'||fault==='mixed') && !culprit){ msg.textContent=' Выберите виновного работника.'; msg.style.color='#e8987d'; return; }
+        var stages=[].map.call(document.querySelectorAll('.rwst:checked'), function(c){ return c.value; });
+        if(!stages.length){ msg.textContent=' Отметьте хотя бы один этап.'; msg.style.color='#e8987d'; return; }
+        var mat=+document.getElementById('rwMat').value||0;
+        this.disabled=true; msg.textContent=' Создаю…'; msg.style.color='';
+        fetch(WORKER+'/rework-create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+          cardId:CARD_ID, reason:document.getElementById('rwReason').value.trim(), fault:fault,
+          culpritWorkerId:culprit, stages:stages, materialCost:mat, createdBy:(typeof MEMBER_NAME!=='undefined'&&MEMBER_NAME)||''
+        })}).then(function(r){return r.json();}).then(function(j){
+          if(!j||!j.ok){ msg.textContent=' Ошибка: '+((j&&j.error)||'не создано'); msg.style.color='#e8987d'; document.getElementById('rwGo').disabled=false; return; }
+          host.innerHTML='<div style="margin:8px 0;padding:8px 10px;border:1px solid #2e5c44;border-radius:8px;font-size:12.5px;color:#7ee2b8">✅ Переделка создана: этапов переоткрыто — '+j.reopened+'. Флажок «Сдали» снят — деньги участников вернулись в «в работе» до пересдачи.'+
+            (fault==='client'?' Откройте калькулятор и добавьте доп. работы/материалы — сумма пойдёт в счёт клиенту.':'')+
+            (fault==='mixed'&&mat>0?(' Добавьте клиенту в калькуляцию 50% материала: '+Math.round(mat*0.5).toLocaleString('ru-RU')+' ₸.'):'')+
+            ' Не забудьте вернуть карточку в «В производстве».</div>';
+          load(); // перезагрузить маршрут с переоткрытыми этапами
+        }).catch(function(e){ msg.textContent=' Ошибка сети'; msg.style.color='#e8987d'; document.getElementById('rwGo').disabled=false; });
+      };
+      t.sizeTo('#wrap').catch(function(){});
+    }
+
+    function loadReworkHistory(){
+      var host=document.getElementById('rwHost');
+      if(!host || host.innerHTML) return;
+      fetch(WORKER+'/rework-list?cardId='+encodeURIComponent(CARD_ID)).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok||!j.reworks||!j.reworks.length) return;
+        var FLBL={client:'клиент', worker:'работник', mixed:'цех + клиент'};
+        var h='<div style="margin-top:6px;font-size:11.5px;color:#7a8794">История переделок:</div>';
+        j.reworks.forEach(function(r){
+          var wname=''; WORKERS.forEach(function(w){ if(String(w.id)===String(r.culpritWorkerId)) wname=w.name; });
+          h+='<div style="font-size:11.5px;color:#9aa7b4;margin-top:2px">↩ '+r.createdAt.slice(0,10)+' · '+esc(r.reason||'без причины')+' · вина: '+(FLBL[r.fault]||r.fault)+(wname?(' ('+esc(wname)+')'):'')+
+             (r.materialCost?(' · материал '+Math.round(r.materialCost).toLocaleString('ru-RU')+' ₸'+(r.deduction.worker?(' → вычет '+Math.round(r.deduction.worker).toLocaleString('ru-RU')+' ₸'):'')):'')+'</div>';
+        });
+        host.innerHTML=h;
+        t.sizeTo('#wrap').catch(function(){});
+      }).catch(function(){});
+    }
+
+    var loading=false;
+    var SAVING=false;        // запрос сохранения в полёте — перечитку не пускаем
+    var LAST_EDIT=0;         // недавняя локальная правка — отставший re-render Trello
+                             // не должен затирать её старыми данными с сервера
+    function loadAll(){
+      if(loading || editing || SAVING || (Date.now()-LAST_EDIT < 4000)) return Promise.resolve();
+      loading=true;
+      return t.card('id','name','url','idShort').then(function(c){
+        CARD_ID=c.id;
+        CARD_META={ name:(c&&c.name)||'', url:(c&&c.url)||'', num:(c&&c.idShort)!=null?String(c.idShort):'' };
+        if (CARD_ID) {
+          fetch(WORKER+'/calc-get?cardId='+encodeURIComponent(CARD_ID))
+            .then(function(r){return r.json();})
+            .then(function(j){ HAS_CALC=!!(j&&j.ok&&j.row); })
+            .catch(function(){});
+        }
+        return Promise.all([
+          fetch(WORKER+'/route-get?cardId='+encodeURIComponent(CARD_ID)).then(function(r){return r.json();}).catch(function(){return {_err:1};}),
+          fetch(WORKER+'/workers-names').then(function(r){return r.json();}).catch(function(){return {};})
+        ]);
+      }).then(function(res){
+        // маршрут не прочитался (сбой связи) — НЕ показываем «Создать маршрут»
+        // поверх существующего: сообщаем и повторяем сами через 3 с
+        if((res[0]&&res[0]._err) || (res[0]&&res[0].error)){
+          if(!ROUTE){ document.getElementById('wrap').innerHTML='<div class="muted">Связь с сервером медленная — повторяю…</div>'; t.sizeTo('#wrap'); }
+          setTimeout(function(){ loadAll(); }, 3000);
+          return;
+        }
+        ROUTE=(res[0]&&res[0].ok&&res[0].route)||ROUTE;
+        WORKERS=(res[1]&&res[1].ok&&res[1].workers)||WORKERS||[];
+        renderRoute();
+      }).catch(function(e){
+        document.getElementById('wrap').innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>';
+        t.sizeTo('#wrap');
+      }).then(function(){ loading=false; }, function(){ loading=false; });
+    }
+
+    t.render(loadAll);
+    setInterval(loadAll, 15000);
+    window.addEventListener('focus', loadAll);
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden) loadAll(); });
+  </script>
+</body>
+</html>

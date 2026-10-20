@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Калькулятор стоимости</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    html[data-color-mode="light"] { --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; }
+    html[data-color-mode="dark"]  { --txt:#c7d1db; --muted:#9fadbc; --chip:#2c333a; --line:#3c4149; }
+    html { --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; }
+    html, body { margin:0; padding:0; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    #wrap { padding:6px 4px; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .total { font-size:13px; color:var(--txt); }
+    .total b { font-size:16px; }
+    .muted { color:var(--muted); font-size:12px; }
+    .btn { flex:0 0 auto; background:#0c66e4; color:#fff; border:none; border-radius:3px; padding:6px 14px; font-size:12px; font-weight:600; cursor:pointer; height:32px; display:inline-flex; align-items:center; }
+    .btn:hover { background:#0055cc; }
+  </style>
+</head>
+<body>
+  <div id="wrap"><div class="muted">Загрузка…</div></div>
+  <script src="./config.js"></script>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    function fmt(n){ return (Math.round((+n||0))).toLocaleString('ru-RU'); }
+
+    var CARD = { id:null, board:'', name:'', status:'' };
+
+    function openCalc(){
+      return t.modal({
+        url: './calc-modal.html?t=' + Date.now(),
+            title: 'Калькулятор стоимости', accentColor: '#1f6ce8',
+        fullscreen: true,
+        args: { cardId: CARD.id, boardId: CARD.board, cardName: CARD.name, status: CARD.status }
+      });
+    }
+    function openEarnings(){
+      return t.modal({
+        url: './earnings-modal.html?t=' + Date.now(),
+            title: 'Заработок по заказу', accentColor: '#1f6ce8',
+        fullscreen: true,
+        args: { cardId: CARD.id }
+      });
+    }
+    function openInvoice(){
+      return t.modal({
+        url: './invoice-modal.html?t=' + Date.now(),
+            title: 'Счёт на оплату', accentColor: '#1f6ce8',
+        fullscreen: true,
+        args: { cardId: CARD.id, boardId: CARD.board }
+      });
+    }
+    function isDirector(){
+      return Promise.all([
+        t.member('id'),
+        t.board('memberships'),
+        t.organization('memberships').catch(function(){ return null; })
+      ]).then(function(res){
+        var me=res[0]||{};
+        function adminIn(o){ var ms=((o&&o.memberships)||[]).filter(function(x){return x.idMember===me.id;})[0]; return !!(ms&&ms.memberType==='admin'); }
+        return adminIn(res[1]) || adminIn(res[2]);
+      }).catch(function(){ return false; });
+    }
+
+    var renderGen = 0;
+    t.render(function(){
+      var myGen = ++renderGen;
+      // capture card id/name with the minimal field set (matches the working DXF section)
+      return t.card('id','name').then(function(card){
+        CARD.id = card && card.id || null;
+        CARD.name = card && card.name || '';
+        // тихая синхронизация: карточку переименовали — обновить название заказа
+        // в бухгалтерии/аналитике (сервер меняет только при реальном отличии)
+        if (CARD.id && CARD.name) {
+          try { fetch(WORKER+'/calc-meta-update', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ cardId: CARD.id, cardName: CARD.name }) }).catch(function(){}); } catch(e){}
+        }
+      }).catch(function(){}).then(function(){
+        return t.board('id').then(function(b){ CARD.board=(b&&b.id)||''; }).catch(function(){});
+      }).then(function(){
+        // list (status) is optional — fire-and-forget so it can never block the chain
+        try { t.list('name').then(function(l){ CARD.status=(l&&l.name)||''; }).catch(function(){}); } catch(e){}
+        return t.get('card','shared','calcData', null);
+      }).then(function(d){
+        if (myGen !== renderGen) return; // устарело — подоспела более новая перерисовка
+        var el=document.getElementById('wrap');
+        el.innerHTML='';
+        var row=document.createElement('div'); row.className='row';
+        var left=document.createElement('div');
+        if (d && d.total!=null){
+          left.className='total';
+          left.innerHTML='Итого: <b>'+fmt(d.total)+' ₸</b><div class="muted">с налогом '+(Math.round((d.taxRate||0.16)*100))+'% · обновлено '+(d.savedAt? new Date(d.savedAt).toLocaleDateString('ru-RU'):'')+'</div>';
+        } else {
+          left.className='muted';
+          left.textContent='Расчёт ещё не сделан.';
+        }
+        var btn=document.createElement('button'); btn.className='btn'; btn.type='button';
+        btn.textContent = (d && d.total!=null) ? 'Открыть расчёт' : 'Открыть калькулятор';
+        btn.addEventListener('click', openCalc);
+        row.appendChild(left); row.appendChild(btn); el.appendChild(row);
+        // director: earnings; director OR allowed worker: invoice
+        // ОБРАЗЕЦ ↔ ПАРТИЯ (решение Асхата, 09.2026): кнопка создаёт вторую карточку
+        // и связывает её с образцом — ничего не нужно таскать по колонкам и выбирать руками
+        function addSampleBtn(){
+          fetch(WORKER+'/sample-link?cardId='+encodeURIComponent(CARD.id))
+            .then(function(r){ return r.json(); })
+            .then(function(j){
+              if(!j || !j.ok) return;
+              var row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
+              var lbl=document.createElement('div'); lbl.className='muted';
+              if(j.sample){
+                lbl.innerHTML='Партия по образцу <b>#'+(j.sample.number||'')+'</b> — '+(j.sample.name||'').slice(0,60);
+                row.appendChild(lbl); el.appendChild(row); return;
+              }
+              if(j.batch){
+                lbl.innerHTML='Образец. Партия по нему: карточка <b>#'+(j.batch.number||'')+'</b>';
+                row.appendChild(lbl); el.appendChild(row); return;
+              }
+              lbl.textContent='Клиент одобрил образец?';
+              var b=document.createElement('button'); b.className='btn'; b.type='button'; b.style.background='#8a6d00';
+              b.textContent='Партия по этому образцу';
+              b.title='Создать отдельную карточку на партию: копия этой (вложения, чек-листы, клиент), расчёт переносится черновиком на 1 изделие — останется поменять количество. Карточки будут связаны.';
+              b.addEventListener('click', function(){
+                if(!confirm('Создать карточку «Партия по образцу»? Она появится в колонке «Согласование», связь с этим образцом проставится автоматически.')) return;
+                b.disabled=true; b.textContent='Создаю…';
+                fetch(WORKER+'/order-from-sample',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:CARD.id, byName:'' }) })
+                  .then(function(r){ return r.json(); })
+                  .then(function(jj){
+                    if(!jj || !jj.ok) throw new Error((jj && jj.error) || 'сервер не подтвердил');
+                    alert('Создана карточка #'+(jj.number||'')+' в «Согласовании».'+(jj.hadCalc?' Расчёт образца перенесён черновиком — откройте калькулятор и поставьте количество партии.':' Расчёта у образца не было — посчитайте партию в калькуляторе.'));
+                    location.reload();
+                  })
+                  .catch(function(e){ b.disabled=false; b.textContent='Партия по этому образцу'; alert('Не удалось: '+(e&&e.message||e)); });
+              });
+              row.appendChild(lbl); row.appendChild(b); el.appendChild(row);
+            }).catch(function(){});
+        }
+        function addInvoiceBtn(){
+          var row3=document.createElement('div'); row3.className='row'; row3.style.marginTop='8px';
+          var lbl3=document.createElement('div'); lbl3.className='muted'; lbl3.textContent='Счёт на оплату (можно объединить несколько заказов клиента)';
+          var ib=document.createElement('button'); ib.className='btn'; ib.type='button'; ib.style.background='#1f845a';
+          ib.textContent='Счёт на оплату';
+          ib.addEventListener('click', openInvoice);
+          row3.appendChild(lbl3); row3.appendChild(ib); el.appendChild(row3);
+          // «Счета (PDF)» переехали внутрь окна «Счёт на оплату» — кнопка справа
+          // от итоговой суммы (решение Асхата, 08.2026)
+        }
+        // связь с лидом продаж: если карточка создана кнопкой «На расчёт»,
+        // начальник цеха видит здесь кнопку «Расчёт готов» — цена уедет продажнику
+        function addSalesBtn(lead, me){
+          var row5=document.createElement('div'); row5.className='row'; row5.style.marginTop='8px';
+          var lbl5=document.createElement('div'); lbl5.className='muted';
+          var sb=document.createElement('button'); sb.className='btn'; sb.type='button'; sb.style.background='#a54800';
+          if (lead.calc_status==='ready'){
+            lbl5.textContent='Лид продаж «'+(lead.title||'')+'»: цена '+fmt(lead.calc_price)+' ₸ уже у продажника';
+            sb.textContent='Обновить цену';
+          } else {
+            lbl5.textContent='Заказ пришёл из отдела продаж («'+(lead.title||'')+'»)';
+            sb.textContent='✅ Расчёт готов';
+          }
+          sb.addEventListener('click', function(){
+            var note = prompt('Комментарий для продажника (срок, условия). Можно оставить пустым:', '');
+            if (note === null) return; // передумал
+            sb.disabled = true; sb.textContent = 'Отправка…';
+            fetch(WORKER+'/sales-calc-ready', { method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ cardId: CARD.id, memberId: (me&&me.id)||'', note: note||'' }) })
+            .then(function(x){ return x.json(); })
+            .then(function(j){
+              if (j.error){ alert(j.error); sb.disabled=false; sb.textContent='✅ Расчёт готов'; return; }
+              lbl5.textContent='Цена '+fmt(j.price)+' ₸ отправлена продажнику ✓';
+              sb.textContent='Обновить цену'; sb.disabled=false;
+            })
+            .catch(function(e){ alert('Ошибка сети: '+e.message); sb.disabled=false; sb.textContent='✅ Расчёт готов'; });
+          });
+          row5.appendChild(lbl5); row5.appendChild(sb); el.appendChild(row5);
+        }
+        function checkSalesLink(allowed, me){
+          if (!allowed || !CARD.id) return Promise.resolve();
+          return fetch(WORKER+'/sales-by-card?cardId='+encodeURIComponent(CARD.id))
+            .then(function(x){ return x.json(); })
+            .then(function(j){
+              if (myGen !== renderGen) return;
+              if (j && j.found && j.lead && !j.lead.archived) addSalesBtn(j.lead, me);
+            }).catch(function(){});
+        }
+        return Promise.all([ isDirector(), t.member('id').catch(function(){return {};}) ]).then(function(r){
+          if (myGen !== renderGen) return; // устарело
+          var admin=r[0], me=r[1]||{};
+          function addEarningsBtn(){
+            var row2=document.createElement('div'); row2.className='row'; row2.style.marginTop='8px';
+            var lbl=document.createElement('div'); lbl.className='muted'; lbl.textContent='Заработок и эффективность по этому заказу';
+            var eb=document.createElement('button'); eb.className='btn'; eb.type='button'; eb.style.background='#5a4a8a';
+            eb.textContent='Заработок по заказу';
+            eb.addEventListener('click', openEarnings);
+            row2.appendChild(lbl); row2.appendChild(eb); el.appendChild(row2);
+          }
+          if(admin){ addEarningsBtn(); addInvoiceBtn(); addSampleBtn(); return checkSalesLink(true, me).then(function(){ return t.sizeTo('#wrap'); }); }
+          // не админ: кнопки по правам из базы работников. «Заработок по заказу» —
+          // начальнику цеха (чип «Панель руководителя» или «Видит стоимость»):
+          // именно там расставляются исполнители этапов и их доли.
+          // права читаем с повтором: разовый сбой связи раньше молча прятал кнопки
+          // (урок 10.2026, Ораз). Нет id работника — сразу сигнал в «Здоровье системы».
+          if(!me.id && window.__msReport) window.__msReport('perm','calc-section: пустой id работника');
+          function perms(n){ return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||'')).then(function(x){ if(!x.ok) throw new Error('HTTP '+x.status); return x.json(); })
+            .catch(function(e){ if(n>0) return new Promise(function(r){ setTimeout(r,2000); }).then(function(){ return perms(n-1); }); throw e; }); }
+          return perms(2).then(function(j){
+            if (myGen !== renderGen) return; // устарело
+            if(j&&(j.canDashboard||j.canSeeCost)) addEarningsBtn();
+            if(j&&(j.canIssueInvoice||j.canInvoice)) addInvoiceBtn();
+            if(j&&(j.canDashboard||j.canSeeCost)) addSampleBtn(); // партия по образцу — инженер/начальник цеха
+            return checkSalesLink(!!(j&&(j.canDashboard||j.canSeeCost)), me);
+          }).catch(function(){}).then(function(){ if (myGen !== renderGen) return; return t.sizeTo('#wrap'); });
+        });
+      });
+    });
+  </script>
+</body>
+</html>
