@@ -49,11 +49,11 @@
         var ICON_BASE = window.location.href.replace(/[^/]*(\?.*)?$/, '');
         // «Мой заработок» видят все; «CRM» и «Панель руководителя» — только руководитель (админ доски/пространства)
         function isAdmin(){
-          return Promise.all([
+          return withTimeout(Promise.all([
             t.member('id'),
             t.board('memberships'),
             t.organization('memberships').catch(function(){ return null; })
-          ]).then(function(res){
+          ]), 1200).then(function(res){
             var me = res[0] || {};
             function adminIn(o){
               var ms = ((o && o.memberships) || []).filter(function(x){ return x.idMember === me.id; })[0];
@@ -152,13 +152,28 @@
             });
           }
         };
+        // ПРАВА ДЛЯ КНОПОК (урок 10.2026: у Ораза кнопки не появлялись вовсе). Trello ждёт
+        // ответ от кнопок доски всего несколько секунд; если сервер отвечает медленно или
+        // сеть подтормаживает, Trello молча выбрасывает ВСЕ кнопки. Поэтому: последние
+        // известные права запоминаются в браузере и отдаются сразу, а сервер спрашивается
+        // с ограничением 2,5 с; ответ обновляет запомненное к следующему открытию.
+        var NOPERM = { canInvoice:false, canSupply:false, canCrm:false, canTimesheet:false, canDashboard:false, canRepair:false };
+        function withTimeout(p, ms){ return Promise.race([p, new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('timeout')); }, ms); })]); }
         function perms(){
           var W = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
-          return t.member('id').then(function(me){
-            return fetch(W + '/worker-perms?memberId=' + encodeURIComponent((me && me.id) || ''))
+          return withTimeout(t.member('id'), 1500).then(function(me){
+            var key = 'ms_perms_' + ((me && me.id) || '');
+            var cached = null; try { cached = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) {}
+            var live = fetch(W + '/worker-perms?memberId=' + encodeURIComponent((me && me.id) || ''))
               .then(function(r){ return r.json(); })
-              .then(function(j){ return { canInvoice: !!(j && j.canInvoice), canSupply: !!(j && j.canSupply), canCrm: !!(j && j.canCrm), canTimesheet: !!(j && j.canTimesheet), canDashboard: !!(j && j.canDashboard), canRepair: !!(j && j.canRepair) }; });
-          }).catch(function(){ return { canInvoice:false, canSupply:false, canCrm:false, canTimesheet:false, canDashboard:false, canRepair:false }; });
+              .then(function(j){
+                var p = { canInvoice: !!(j && (j.canInvoice || j.canIssueInvoice)), canSupply: !!(j && j.canSupply), canCrm: !!(j && j.canCrm), canTimesheet: !!(j && j.canTimesheet), canDashboard: !!(j && j.canDashboard), canRepair: !!(j && j.canRepair) };
+                try { localStorage.setItem(key, JSON.stringify(p)); } catch (e) {}
+                return p;
+              });
+            if (cached) { live.catch(function(){}); return cached; }
+            return withTimeout(live, 2000);
+          }).catch(function(){ return NOPERM; });
         }
         // директорские разделы собраны в ОДНУ кнопку-меню: чем меньше кнопок в шапке,
         // тем выше шанс, что Trello покажет подписи текстом, а не свернёт в иконки
@@ -174,9 +189,11 @@
             }
           };
         }
-        return isAdmin().then(function(admin){
+        // админство и права спрашиваем ОДНОВРЕМЕННО — общий ответ укладывается в ~2 с
+        return Promise.all([isAdmin(), perms()]).then(function(r){
+          var admin = r[0];
           if (admin) return [earnBtn, repairBtn, supBtn, tabelBtn, salesBtn, mgmtBtn([dashBtn, buhBtn, crmBtn])];
-          return perms().then(function(p){
+          return Promise.resolve(r[1]).then(function(p){
             var out = [earnBtn, repairBtn, supBtn]; // ремонт и снабжение (канбан заявок) — любой работник;
             // внутри «Снабжения» инструмент/наличные/цены видят только снабженец и руководство
             if (p.canTimesheet || p.canInvoice) out.push(tabelBtn); // табель: начальник цеха (заполняет) и бухгалтер (смотрит)
