@@ -79,6 +79,7 @@
     var r=monthRange();
     var u=WORKER+'/my-earnings?memberId='+encodeURIComponent(memberId)+'&from='+r.from+'&to='+r.to+(VIEW_AS?('&asWorkerId='+encodeURIComponent(VIEW_AS)):'');
     fetch(u).then(function(x){return x.json();}).then(function(j){
+      if(j && j.protected){ render(null, (j.error||'Доступ закрыт')+' Откройте «Мой заработок» со своей доски или в приложении по личной ссылке.'); return; }
       if(!j || j.error){ render(null, 'Ошибка: '+((j&&j.error)||'?')); return; }
       if(!j.linked){ render(null, 'linked_false'); return; }
       render(j, null);
@@ -140,22 +141,47 @@
     var S=j.salary||null;
     if(S){
       html+='<div class="total">'+money(S.total)+' ₸</div>';
-      html+='<div class="small muted" style="margin-top:4px">начислено за '+MONTHS[cur.m].toLowerCase()+' '+cur.y+(S.hasSalary?' — оклад + сдельная':'')+'</div>';
+      html+='<div class="small muted" style="margin-top:4px">начислено за '+MONTHS[cur.m].toLowerCase()+' '+cur.y+(S.asOf?(' на '+S.asOf.slice(8,10)+'.'+S.asOf.slice(5,7)+' (месяц не закончен)'):'')+(j.salaryOnly?' — оклад по табелю':(S.hasSalary?' — оклад + сдельная':''))+'</div>';
       var row=function(l,sub,v,strong){ return '<tr><td style="padding:5px 10px 5px 0;text-align:left">'+(strong?'<b>'+l+'</b>':l)+(sub?' <span class="small muted">'+sub+'</span>':'')+'</td><td style="padding:5px 0;text-align:right;white-space:nowrap">'+(strong?'<b style="color:#4bce97">'+money(v)+' ₸</b>':money(v)+' ₸')+'</td></tr>'; };
       var tb='<table style="margin:12px auto 0;min-width:320px;border-collapse:collapse;font-size:14px">';
       if(S.hasSalary){
-        tb+=row('Оклад', S.noTimesheet?'(табель ещё не заполнен)':('за '+S.payDays+' из '+S.workdays+' раб. дн. · ставка '+money(S.salary)+' ₸'), S.accrued);
+        tb+=row('Оклад', S.noTimesheet?'(табель ещё не заполнен)':('за '+S.payDays+' из '+S.workdays+' раб. дн.'+(S.asOf?(' по '+S.asOf.slice(8,10)+'.'+S.asOf.slice(5,7)):'')+' · ставка '+money(S.salary)+' ₸'), S.accrued);
         if(S.otPay) tb+=row('Внеурочные', S.otHours+' ч', S.otPay);
       }
-      if(S.piece||!S.hasSalary) tb+=row('Сдельная','акт подписан', S.piece);
+      if(!j.salaryOnly && (S.piece||!S.hasSalary)) tb+=row('Сдельная','акт подписан', S.piece);
       if(S.salesBonus) tb+=row('Бонус за продажи','', S.salesBonus);
+      if(S.goalBonus) tb+=row('Бонус за цели','утверждён учредителем', S.goalBonus);
       tb+='<tr><td colspan="2" style="border-top:1px solid var(--line,#3a414a);padding:0"></td></tr>';
       tb+=row('Итого начислено','', S.total, true);
       tb+='</table>';
       html+=tb;
-    } else {
-      html+='<div class="total">'+money(j.total)+' ₸</div>';
+      // цели учредителя: прогресс по ступеням
+      var G=S.goals;
+      if(G&&G.goals&&G.goals.length){
+        var gh='<div style="margin:14px auto 0;max-width:460px;text-align:left;padding:10px 12px;border:1px solid #4a3f6b;border-radius:10px;background:#221d33">'+
+          '<div class="small" style="color:#c9a8ff;font-weight:700;margin-bottom:6px">🎯 Цели на месяц · прибыль '+money(G.actual)+' ₸'+(G.approved?' · ✓ итог утверждён':'')+'</div>';
+        G.goals.forEach(function(x){
+          gh+='<div class="small" style="display:flex;justify-content:space-between;margin-top:6px"><span>прибыль ≥ '+money(x.threshold)+' ₸ → '+money(x.bonus)+' ₸</span><span style="color:'+(x.achieved?'#4bce97':'#9fadbc')+'">'+(x.achieved?'✓':x.progress+'%')+'</span></div>'+
+            '<div style="height:5px;background:#2b2f3a;border-radius:4px;margin-top:3px"><div style="height:5px;border-radius:4px;width:'+x.progress+'%;background:'+(x.achieved?'#4bce97':'#8f7ad8')+'"></div></div>';
+        });
+        if(!G.approved) gh+='<div class="small muted" style="margin-top:6px">Бонус начисляется после утверждения учредителем по итогам месяца.</div>';
+        html+=gh+'</div>';
+      }
+    } else if(!j.salaryOnly) {
+      // оклад не посчитался (сбой/долгий ответ) — не показываем «всё вместе с будущим»
+      html+='<div class="total">'+money(j.totalDelivered||0)+' ₸</div>';
+      html+='<div class="small" style="margin-top:4px;color:#e8c07d">Оклад сейчас не посчитался — откройте окно ещё раз через минуту.</div>';
+      if(window.__msReport) window.__msReport('error','my-earnings: нет блока оклада');
       html+='<div class="small muted" style="margin-top:4px">за '+MONTHS[cur.m].toLowerCase()+' '+cur.y+'</div>';
+    }
+    // ТОЛЬКО ОКЛАД (10.2026): сдельной нет — блоки «к выплате / в работе», «по дням»
+    // и «по заказам» не показываются
+    if(j.salaryOnly){
+      if(!S) html+='<div class="small muted" style="margin-top:8px">Табель за месяц ещё не заполнен.</div>';
+      html+='<div class="small muted" style="margin-top:10px;max-width:440px;margin-left:auto;margin-right:auto">Оплата — оклад по табелю: начисляется за отработанные дни, внеурочные — отдельно.</div></div>';
+      document.getElementById('app').innerHTML=html;
+      var vs0=document.getElementById('viewAs'); if(vs0) vs0.onchange=function(){ VIEW_AS=this.value||''; load(); };
+      wirePeriod(); return;
     }
     // выплата подтверждается сдачей заказа: показываем работнику честную разбивку
     if(j.totalDelivered!=null){

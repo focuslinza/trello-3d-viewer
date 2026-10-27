@@ -298,10 +298,17 @@
             .catch(function(){});
         }
         return Promise.all([
-          fetch(WORKER+'/route-get?cardId='+encodeURIComponent(CARD_ID)).then(function(r){return r.json();}).catch(function(){return {};}),
+          fetch(WORKER+'/route-get?cardId='+encodeURIComponent(CARD_ID)).then(function(r){return r.json();}).catch(function(){return {_err:1};}),
           fetch(WORKER+'/workers-names').then(function(r){return r.json();}).catch(function(){return {};})
         ]);
       }).then(function(res){
+        // маршрут не прочитался (сбой связи) — НЕ показываем «Создать маршрут»
+        // поверх существующего: сообщаем и повторяем сами через 3 с
+        if((res[0]&&res[0]._err) || (res[0]&&res[0].error)){
+          if(!ROUTE){ document.getElementById('wrap').innerHTML='<div class="muted">Связь с сервером медленная — повторяю…</div>'; t.sizeTo('#wrap'); }
+          setTimeout(function(){ loadAll(); }, 3000);
+          return;
+        }
         ROUTE=(res[0]&&res[0].ok&&res[0].route)||ROUTE;
         WORKERS=(res[1]&&res[1].ok&&res[1].workers)||WORKERS||[];
         renderRoute();

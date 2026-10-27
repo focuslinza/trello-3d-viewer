@@ -167,11 +167,22 @@
           var engInfo = '';
           if (s.worksParts) {
             var wp = s.worksParts;
-            if (wp) {
+            if (wp && wp.perFile) {
+              // пофайловая схема (как в «Моём заработке» и ведомости): полный % с одной
+              // штуки каждого DXF + тиражный % с остальных копий этого файла
+              engInfo = '<div class="stages" style="margin-top:3px">по файлам: '+wp.perFile.map(function(f){
+                  return esc(f.name)+' — '+fmt(f.unitCost)+' ₸/шт × '+f.copies;
+                }).join('; ')+
+                ' · '+wp.engPct+'% с первой штуки каждого файла'+(wp.qty>wp.perFile.length?(' + '+wp.tiragePct+'% с остальных копий'):'')+
+                (wp.invStage>0?(' + '+wp.invSharePct+'% от «Степени изобретения» '+fmt(wp.invStage)+' ₸ ('+fmt(wp.invEarn)+' ₸)'):'')+
+                '<br>Сварка, шлейфовка и монтаж в базу инженера не входят.'+
+                (wp.minApplied?('<br><b>Начислен минимум за заказ '+fmt(wp.minApplied)+' ₸</b> (по формуле вышло '+fmt(wp.formulaEarn)+' ₸)'):'')+'</div>';
+            } else if (wp) {
               engInfo = '<div class="stages" style="margin-top:3px">работы заказа: <b>'+fmt(wp.worksBase)+' ₸</b>'+
                 ' · копий (авто по DXF): '+wp.qty+' · '+wp.engPct+'% с первой копии ('+fmt(Math.round(wp.perUnit*wp.engPct/100))+' ₸)'+
                 (wp.qty>1?(' + '+wp.tiragePct+'% с остальных '+(wp.qty-1)+' копий ('+fmt(Math.round((wp.worksBase-wp.perUnit)*wp.tiragePct/100))+' ₸)'):'')+
-                (wp.invStage>0?(' + '+wp.invSharePct+'% от «Степени изобретения» '+fmt(wp.invStage)+' ₸ ('+fmt(wp.invEarn)+' ₸)'):'')+'</div>';
+                (wp.invStage>0?(' + '+wp.invSharePct+'% от «Степени изобретения» '+fmt(wp.invStage)+' ₸ ('+fmt(wp.invEarn)+' ₸)'):'')+
+                (wp.minApplied?('<br><b>Начислен минимум за заказ '+fmt(wp.minApplied)+' ₸</b> (по формуле вышло '+fmt(wp.formulaEarn)+' ₸)'):'')+'</div>';
             }
           }
           var earnCell = s.paintOutside ? '<span class="muted">на стороне</span>'

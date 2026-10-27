@@ -78,6 +78,7 @@
       <button class="btn" id="discBtn" type="button" style="border-color:#e8c07d;color:#e8c07d" title="Где и сколько уступаем клиентам: спеццены в расчётах против тарифа">% Уступки</button>
       <button class="btn" id="boardBtn" type="button" style="border-color:#4caf7d;color:#9ee6bd" title="Своя доска: импорт из Trello, сравнение и переключение режима">🧱 Своя доска</button>
       <button class="btn" id="goalsBtn" type="button" style="border-color:#c9a8ff;color:#c9a8ff" title="Цели управляющему на месяц и бонус за их достижение">🎯 Цели управляющему</button>
+      <button class="btn" id="healthBtn" type="button" style="border-color:#4caf7d;color:#9ee6bd" title="Система проверяет себя: права, модули, нумерация, сбои у работников">🩺 Здоровье системы</button>
       <button class="btn" id="backupBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff" title="Автоматические резервные копии системы">🗄 Резервные копии</button>
     </div>
     <button class="btn" id="close" type="button">Закрыть</button>
@@ -689,6 +690,46 @@
   // по операциям/толщинам (где торг стал нормой → тариф завышен), по клиентам, по инженерам
   // СВОЯ ДОСКА (этап ухода от Trello, решение Асхата, 09.2026): импорт, сравнение
   // и переключение источника карточек — всё в одном окне, без ручных адресов
+  // ЗДОРОВЬЕ СИСТЕМЫ (решение Асхата, 10.2026: «система сама находит и исправляет
+  // ошибки»): сервер проверяет себя, безопасное чинит сразу, остальное — списком;
+  // окна работников сами присылают сюда свои сбои
+  document.getElementById('healthBtn').onclick=function(){
+    var old=document.getElementById('hlOverlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='hlOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column;color:var(--txt)';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#2e5c44;color:#fff;flex:0 0 auto">'+
+      '<button id="hlBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">🩺 Здоровье системы</div>'+
+      '<button id="hlRun" type="button" style="background:transparent;border:1px solid #9ee6bd;border-radius:6px;color:#fff;font-size:13px;cursor:pointer;padding:5px 10px">↻ Проверить ещё раз</button></div>'+
+      '<div id="hlBody" style="flex:1;overflow:auto;padding:16px;max-width:900px;margin:0 auto;width:100%">Проверяю…</div>';
+    document.body.appendChild(ov);
+    document.getElementById('hlBack').onclick=function(){ ov.remove(); };
+    function esc(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    var KIND={ error:'ошибка в окне', http:'сервер не ответил', stuck:'зависло, перезапущено', perm:'права не определились' };
+    function run(){
+      var body=document.getElementById('hlBody'); body.textContent='Проверяю…';
+      var tok=''; try{ tok=localStorage.getItem('ms_board_token')||''; }catch(e){}
+      fetch(WORKER+'/health',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminToken: tok }) })
+        .then(function(r){ return r.json(); }).then(function(j){
+          if(!j || !j.ok){ body.innerHTML='<div style="color:#f87168">'+esc((j&&j.error)||'проверка не выполнилась')+'</div>'; return; }
+          var ic={ ok:'✅', warn:'⚠️', bad:'❌' }, h='';
+          if(j.fixed && j.fixed.length) h+='<div style="background:#1c3329;border:1px solid #2e5c44;border-radius:8px;padding:10px 12px;margin-bottom:12px"><b>Исправлено автоматически:</b><br>'+j.fixed.map(esc).join('<br>')+'</div>';
+          h+=(j.checks||[]).map(function(c){
+            return '<div style="display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line,#3a414a)"><div>'+(ic[c.level]||'•')+'</div><div><b>'+esc(c.title)+'</b>'+(c.detail?'<div style="font-size:12px;color:var(--muted,#9fadbc);margin-top:2px">'+esc(c.detail)+'</div>':'')+'</div></div>';
+          }).join('');
+          var er=j.errors||[];
+          if(er.length){
+            h+='<div style="margin-top:16px;font-weight:700">Сбои у работников за 7 дней</div><div style="font-size:12px;color:var(--muted,#9fadbc);margin:2px 0 8px">Окна сами сообщают о сбоях и сами повторяют запрос. Повторяется изо дня в день — значит, нужна правка: перешлите этот список Claude.</div>'+
+              '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+              '<tr style="color:var(--muted,#9fadbc)"><td style="padding:4px">Когда</td><td>Окно</td><td>Что</td><td>Кто</td><td style="text-align:right">Раз</td></tr>'+
+              er.map(function(e){ return '<tr style="border-top:1px solid var(--line,#3a414a)"><td style="padding:5px 4px;white-space:nowrap">'+esc((function(){ try{ return new Date(String(e.last_at).replace(' ','T')+'Z').toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(x){ return e.day; } })())+'</td><td>'+esc(String(e.module).replace('.html',''))+'</td><td>'+esc(KIND[e.kind]||e.kind)+'<div style="color:var(--muted,#9fadbc)">'+esc(e.msg)+'</div></td><td>'+esc(e.worker||'')+'</td><td style="text-align:right">'+(+e.n||1)+'</td></tr>'; }).join('')+'</table>';
+          }
+          body.innerHTML=h;
+        }).catch(function(e){ body.innerHTML='<div style="color:#f87168">Нет связи с сервером: '+esc(e&&e.message||e)+'</div>'; });
+    }
+    document.getElementById('hlRun').onclick=run;
+    run();
+  };
   document.getElementById('boardBtn').onclick=function(){
     var old=document.getElementById('brdOverlay'); if(old) old.remove();
     var ov=document.createElement('div'); ov.id='brdOverlay';

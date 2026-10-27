@@ -96,6 +96,11 @@
         <label style="font-size:12.5px;font-weight:700" title="Когда сдельная (и проценты от работ) попадает в зарплату: в месяц сдачи заказа или в месяц подписания акта. Заказы, сданные до даты перехода, остаются по сдаче — повторно не начисляются.">Сдельная начисляется
           <select id="pieceBasis" style="margin-left:6px"><option value="delivered">по сдаче заказа</option><option value="act">после подписания акта</option></select></label>
         <span id="pieceBasisFromLbl" class="muted" style="font-size:11.5px;margin-left:8px"></span>
+        <div style="margin-top:8px">
+        <label style="font-size:12.5px;font-weight:700" title="С выбранного месяца сдельная не начисляется и не показывается работникам: платится оклад по табелю + внеурочные. Прошлые месяцы не меняются. Меняет только учредитель.">Только оклад, без сдельной, с месяца
+          <input id="salaryOnlyFrom" type="month" style="margin-left:6px"></label>
+        <span class="muted" style="font-size:11.5px;margin-left:8px">пусто = сдельная работает</span>
+        </div>
       </div>
       <label style="font-size:12.5px">Монтажная бригада, % <input id="shareMontazh" type="number" min="0" max="100" step="0.1" style="width:80px"></label>
       </div>
@@ -427,6 +432,9 @@
         '<label title="Сколько процентов от этапа «Степень изобретения» (начисляется клиенту в смете) получает инженер как сдельную. По умолчанию 40%.">от «Степени изобретения», % '+
           '<input class="engInvPct" type="number" min="0" max="100" step="1" style="width:70px" value="'+(FIN.engInventionShare!=null?FIN.engInventionShare:40)+'">'+
         '</label>'+
+        '<label title="Если по формуле за заказ вышло меньше — инженеру начисляется этот минимум (повторные партии, мелкие детали). 0 = выключено. Действует на работу, принятую после сохранения.">минимум за заказ, ₸ '+
+          '<input class="engMinOrd" type="number" min="0" step="100" style="width:80px" value="'+(FIN.engMinOrder||0)+'">'+
+        '</label>'+
         '<label title="Личная доля инженера от строки «Срочность» заказа (клиент платит за скорость цеха). 0 = не начислять. Раньше поле не было выведено в панель, а в базе стояло значение — отсюда строки «Доля от срочности» в ведомости.">% от срочности '+
           '<input class="engUrgPct" type="number" min="0" max="100" step="1" style="width:70px" value="'+(w.urgency_percent!=null?w.urgency_percent:0)+'">'+
         '</label><span class="muted" style="font-size:11.5px">копийность определяется автоматически: Σ деталей резки ÷ число DXF на карточке; все ставки меняются руководством в любой момент</span>';
@@ -520,7 +528,7 @@
       var showDel = document.getElementById('showDeleted') && document.getElementById('showDeleted').checked;
       return fetch(WORKER+'/fin-get').then(function(r){return r.json();}).then(function(j){
         var f=(j&&j.fin)||j||{};
-        FIN={ engPercent:+f.engPercent||0, engTiragePercent:(f.engTiragePercent!==undefined&&f.engTiragePercent!==null&&f.engTiragePercent!=='')?+f.engTiragePercent:null, engInventionShare:(f.engInventionShare!==undefined&&f.engInventionShare!==null&&f.engInventionShare!=='')?+f.engInventionShare:40 };
+        FIN={ engPercent:+f.engPercent||0, engTiragePercent:(f.engTiragePercent!==undefined&&f.engTiragePercent!==null&&f.engTiragePercent!=='')?+f.engTiragePercent:null, engInventionShare:(f.engInventionShare!==undefined&&f.engInventionShare!==null&&f.engInventionShare!=='')?+f.engInventionShare:40, engMinOrder:+f.engMinOrder||0 };
       }).catch(function(){}).then(function(){
         // доли работников (цех/сборка/монтаж) из настроек цен
         return fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
@@ -534,6 +542,7 @@
           putBlank('shareElectrochem', c.shareElectrochem); putBlank('shareComponents', c.shareComponents);
           putBlank('shareRepair', c.shareRepair);
           var pbSel=document.getElementById('pieceBasis'); if(pbSel){ pbSel.value=(c.pieceBasis==='act'?'act':'delivered'); }
+          var soEl=document.getElementById('salaryOnlyFrom'); if(soEl){ soEl.value=(c.salaryOnlyFrom===undefined||c.salaryOnlyFrom===null)?'2026-10':(c.salaryOnlyFrom==='off'?'':c.salaryOnlyFrom); soEl.setAttribute('data-orig', c.salaryOnlyFrom||''); }
           var pbL=document.getElementById('pieceBasisFromLbl'); if(pbL){ pbL.textContent=(c.pieceBasis==='act'&&c.pieceBasisFrom)?('по акту — заказы, сданные с '+c.pieceBasisFrom+'; более ранние оставлены по сдаче'):''; }
           putBlank('bossOnTimeBonus', c.bossOnTimeBonus); putBlank('bossOnTimePct', c.bossOnTimePct); putBlank('bossLeadDays', c.bossLeadDays); putBlank('bossReworkPct', c.bossReworkPct);
           window.__BOSS_ID=c.bossWorkerId||'';
@@ -693,6 +702,8 @@
         if(engVal!==null) fin.engPercent=engVal;
         if(engTirVal!==undefined) fin.engTiragePercent=engTirVal;
         if(engInvVal!==undefined) fin.engInventionShare=engInvVal;
+        var engMinVal; cards.some(function(c){ var el=c.querySelector('.engMinOrd'); if(el && el.value!==''){ engMinVal=Math.max(0,Math.round(+el.value||0)); return true; } return false; });
+        if(engMinVal!==undefined) fin.engMinOrder=engMinVal;
         return fetch(WORKER+'/fin-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fin:fin})})
           .then(function(r){return r.json();})
           .then(function(j){ if(!j||!j.ok) errs.push('настройки мотивации: '+((j&&j.error)||'не сохранились')); })
@@ -701,7 +712,7 @@
             // ещё не отрисован), ошибка попадает в общий список, а не роняет всю цепочку
             try {
               var sh={ shareMontazh:+document.getElementById('shareMontazh').value||0,
-                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value, pieceBasis:(document.getElementById('pieceBasis')||{}).value,
+                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value, pieceBasis:(document.getElementById('pieceBasis')||{}).value, salaryOnlyFrom:(document.getElementById('salaryOnlyFrom')||{}).value||'',
                        bossWorkerId:document.getElementById('bossWorkerId').value, bossOnTimeBonus:document.getElementById('bossOnTimeBonus').value, bossOnTimePct:document.getElementById('bossOnTimePct').value, bossLeadDays:document.getElementById('bossLeadDays').value, bossReworkPct:document.getElementById('bossReworkPct').value,
                        capPerOrder:+document.getElementById('capPerOrder').value||0,
                        capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),
@@ -737,7 +748,7 @@
       msg.textContent=''; msg.style.color='';
       try {
         var sh={ shareMontazh:+document.getElementById('shareMontazh').value||0,
-                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value, pieceBasis:(document.getElementById('pieceBasis')||{}).value,
+                       shareCut:document.getElementById('shareCut').value, shareBend:document.getElementById('shareBend').value, shareWeld:document.getElementById('shareWeld').value, sharePaint:document.getElementById('sharePaint').value, shareShleifCut:document.getElementById('shareShleifCut').value, shareShleifWeld:document.getElementById('shareShleifWeld').value, shareElectrochem:document.getElementById('shareElectrochem').value, shareComponents:document.getElementById('shareComponents').value, shareRepair:document.getElementById('shareRepair').value, pieceBasis:(document.getElementById('pieceBasis')||{}).value, salaryOnlyFrom:(document.getElementById('salaryOnlyFrom')||{}).value||'',
                        bossWorkerId:document.getElementById('bossWorkerId').value, bossOnTimeBonus:document.getElementById('bossOnTimeBonus').value, bossOnTimePct:document.getElementById('bossOnTimePct').value, bossLeadDays:document.getElementById('bossLeadDays').value, bossReworkPct:document.getElementById('bossReworkPct').value,
                  capPerOrder:+document.getElementById('capPerOrder').value||0,
                  capOverWorksPct:(document.getElementById('capOverWorksPct').value==='')?1:(+document.getElementById('capOverWorksPct').value||0),

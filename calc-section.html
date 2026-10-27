@@ -200,7 +200,12 @@
           // не админ: кнопки по правам из базы работников. «Заработок по заказу» —
           // начальнику цеха (чип «Панель руководителя» или «Видит стоимость»):
           // именно там расставляются исполнители этапов и их доли.
-          return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||'')).then(function(x){return x.json();}).then(function(j){
+          // права читаем с повтором: разовый сбой связи раньше молча прятал кнопки
+          // (урок 10.2026, Ораз). Нет id работника — сразу сигнал в «Здоровье системы».
+          if(!me.id && window.__msReport) window.__msReport('perm','calc-section: пустой id работника');
+          function perms(n){ return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(me.id||'')).then(function(x){ if(!x.ok) throw new Error('HTTP '+x.status); return x.json(); })
+            .catch(function(e){ if(n>0) return new Promise(function(r){ setTimeout(r,2000); }).then(function(){ return perms(n-1); }); throw e; }); }
+          return perms(2).then(function(j){
             if (myGen !== renderGen) return; // устарело
             if(j&&(j.canDashboard||j.canSeeCost)) addEarningsBtn();
             if(j&&(j.canIssueInvoice||j.canInvoice)) addInvoiceBtn();
