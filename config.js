@@ -44,7 +44,12 @@
     window.fetch = function (input, init) {
       var u = (typeof input === 'string') ? input : (input && input.url) || '';
       var ours = u.indexOf(window.WORKER_URL) === 0 || u.charAt(0) === '/';
-      var p = wf(input, init);
+      // ПРАВА — С ПОВТОРОМ во ВСЕХ окнах (урок 10.2026): разовый сбой связи при запросе
+      // прав раньше выглядел как «нет доступа». До 3 попыток с паузой 1,5 с.
+      var p = (ours && u.indexOf('/worker-perms') >= 0) ? (function attempt(n){
+        return wf(input, init).then(function (r) { if (r && r.status >= 500 && n > 0) throw new Error('HTTP ' + r.status); return r; })
+          .catch(function (e) { if (n > 0) return new Promise(function (ok) { setTimeout(ok, 1500); }).then(function () { return attempt(n - 1); }); throw e; });
+      })(2) : wf(input, init);
       if (!ours || u.indexOf('/client-error') >= 0) return p;
       var path = u.replace(window.WORKER_URL, '').split('?')[0];
       return p.then(function (r) { if (r && r.status >= 500) report('http', path + ' → HTTP ' + r.status); return r; },

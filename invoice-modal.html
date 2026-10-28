@@ -117,16 +117,37 @@
   // «Счёт на оплату» — только для начальства: право «Выставлять счета» или
   // «Видит суммы (бухгалтер)», либо админ доски Trello
   var MY_MEMBER_ID = '';
+  // ПРАВА С ПОВТОРОМ (урок 10.2026, Ораз): разовый сбой связи раньше превращался в
+  // «Доступ только для руководства». Теперь: 3 попытки с паузой; если сервер так и не
+  // ответил — честно пишем «нет связи», а не «нет доступа»; при отказе показываем,
+  // под каким аккаунтом открыто окно и кого нашёл сервер, и сообщаем в «Здоровье системы».
+  var GATE = { reason: '', member: '', worker: '' };
+  function permsWithRetry(mid, n){
+    return Promise.race([
+      fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(mid)).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }),
+      new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('нет ответа 10 с')); }, 10000); })
+    ]).catch(function(e){
+      if (n > 0) return new Promise(function(r){ setTimeout(r, 1500); }).then(function(){ return permsWithRetry(mid, n-1); });
+      throw e;
+    });
+  }
   function gateAccess(t){
     return t.member('id').then(function(m){
       MY_MEMBER_ID = (m && m.id) || '';
+      GATE.member = MY_MEMBER_ID;
       return Promise.all([
-        fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(m.id)).then(function(r){return r.json();}).catch(function(){return {};}),
-        t.board('memberships').catch(function(){ return { memberships: [] }; })
+        permsWithRetry(MY_MEMBER_ID, 1).catch(function(e){ GATE.reason = 'net'; GATE.err = (e && e.message) || String(e); return null; }),
+        Promise.race([ t.board('memberships'), new Promise(function(r){ setTimeout(function(){ r({ memberships: [] }); }, 3000); }) ]).catch(function(){ return { memberships: [] }; })
       ]).then(function(rr){
-        var p = rr[0]||{}, b = rr[1]||{};
-        var isAdmin = ((b.memberships||[]).filter(function(x){ return x.idMember===m.id && x.memberType==='admin'; }).length>0);
-        return !!(p.canIssueInvoice || p.canInvoice || p.canDashboard || isAdmin || (MODE_REPAIR && p.canIssueRepairInvoice)); // «Счета по ремонту» — только для ремонтных счетов
+        var p = rr[0], b = rr[1]||{};
+        var isAdmin = ((b.memberships||[]).filter(function(x){ return x.idMember===MY_MEMBER_ID && x.memberType==='admin'; }).length>0);
+        if (isAdmin) return true;
+        if (!p) return false;   // связи нет — причина уже записана
+        GATE.worker = p.found ? (p.workerName || '') : '';
+        if (!p.found) GATE.reason = 'unlinked';
+        var ok = !!(p.canIssueInvoice || p.canInvoice || p.canDashboard || (MODE_REPAIR && p.canIssueRepairInvoice)); // «Счета по ремонту» — только для ремонтных счетов
+        if (!ok && !GATE.reason) GATE.reason = 'noperm';
+        return ok;
       });
     });
   }
@@ -1006,10 +1027,17 @@
       // доступ в «Счёт на оплату» — только начальству
       return gateAccess(t).then(function(ok){
         if (ok) return;
+        var why = GATE.reason === 'net'
+          ? ['📶', 'Нет связи с сервером', 'Сервер не ответил после нескольких попыток ('+esc(GATE.err||'')+'). Закройте окно и откройте ещё раз. Это не запрет доступа.']
+          : GATE.reason === 'unlinked'
+          ? ['🔗', 'Аккаунт не привязан к работнику', 'Окно открыто под Trello-аккаунтом <b>'+esc(GATE.member)+'</b>, а в «Зарплата / Работники» этот аккаунт не выбран ни у одного работника. Руководителю: откройте карточку работника и выберите этот аккаунт.']
+          : ['🔒', 'Доступ только для руководства', 'Работник <b>'+esc(GATE.worker||'?')+'</b> найден, но права «Выставлять счета» у него нет. Право выдаётся в «Зарплата / Работники».'];
         document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#dbe4ec">'+
-          '<div style="font-size:40px;margin-bottom:12px">🔒</div>'+
-          '<h2 style="margin:0 0 8px">Доступ только для руководства</h2>'+
-          '<div style="color:#9aa7b4">Выставление счетов доступно работникам с правом «Выставлять счета» или «Видит суммы (бухгалтер)». Право выдаётся в «Зарплата / Работники».</div></div>';
+          '<div style="font-size:40px;margin-bottom:12px">'+why[0]+'</div>'+
+          '<h2 style="margin:0 0 8px">'+why[1]+'</h2>'+
+          '<div style="color:#9aa7b4;max-width:560px;margin:0 auto">'+why[2]+'</div>'+
+          '<div style="color:#5e6c84;font-size:11px;margin-top:14px">аккаунт: '+esc(GATE.member||'—')+'</div></div>';
+        try { if (window.__msCfgReport) window.__msCfgReport('perm', 'счёт: '+(GATE.reason||'?')+' · аккаунт '+GATE.member+' · '+(GATE.err||GATE.worker||'')); } catch(e){}
         throw new Error('no-access');
       });
     })
