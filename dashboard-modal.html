@@ -713,6 +713,16 @@
         .then(function(r){ return r.json(); }).then(function(j){
           if(!j || !j.ok){ body.innerHTML='<div style="color:#f87168">'+esc((j&&j.error)||'проверка не выполнилась')+'</div>'; return; }
           var ic={ ok:'✅', warn:'⚠️', bad:'❌' }, h='';
+          // утренняя самопроверка (каждый день ~09:00): «глазами каждого работника»
+          var st=j.selftest;
+          h+='<div style="border:1px solid var(--line,#3a414a);border-radius:8px;padding:10px 12px;margin-bottom:12px">'+
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Утренняя самопроверка</b>'+
+            '<button id="hlSelf" type="button" style="background:transparent;border:1px solid #9ee6bd;border-radius:6px;color:#9ee6bd;cursor:pointer;padding:4px 10px;font-size:12px">▶ Проверить всё сейчас</button></div>'+
+            (st ? ('<div style="font-size:12px;color:var(--muted,#9fadbc);margin-top:4px">'+esc(new Date(st.at).toLocaleString('ru-RU'))+' · '+(st.ok?'✅ проблем нет':'❌ проблем: '+st.problems.length)+'</div>'+
+              (st.problems||[]).map(function(x){ return '<div style="font-size:12px;color:#f87168;margin-top:3px">• '+esc(x)+'</div>'; }).join('')+
+              (st.notes||[]).map(function(x){ return '<div style="font-size:12px;color:var(--muted,#9fadbc);margin-top:2px">· '+esc(x)+'</div>'; }).join(''))
+              : '<div style="font-size:12px;color:var(--muted,#9fadbc);margin-top:4px">ещё не запускалась — нажмите «Проверить всё сейчас»</div>')+
+            '</div>';
           if(j.fixed && j.fixed.length) h+='<div style="background:#1c3329;border:1px solid #2e5c44;border-radius:8px;padding:10px 12px;margin-bottom:12px"><b>Исправлено автоматически:</b><br>'+j.fixed.map(esc).join('<br>')+'</div>';
           h+=(j.checks||[]).map(function(c){
             return '<div style="display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line,#3a414a)"><div>'+(ic[c.level]||'•')+'</div><div><b>'+esc(c.title)+'</b>'+(c.detail?'<div style="font-size:12px;color:var(--muted,#9fadbc);margin-top:2px">'+esc(c.detail)+'</div>':'')+'</div></div>';
@@ -725,6 +735,13 @@
               er.map(function(e){ return '<tr style="border-top:1px solid var(--line,#3a414a)"><td style="padding:5px 4px;white-space:nowrap">'+esc((function(){ try{ return new Date(String(e.last_at).replace(' ','T')+'Z').toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(x){ return e.day; } })())+'</td><td>'+esc(String(e.module).replace('.html',''))+'</td><td>'+esc(KIND[e.kind]||e.kind)+'<div style="color:var(--muted,#9fadbc)">'+esc(e.msg)+'</div></td><td>'+esc(e.worker||'')+'</td><td style="text-align:right">'+(+e.n||1)+'</td></tr>'; }).join('')+'</table>';
           }
           body.innerHTML=h;
+          var sb=document.getElementById('hlSelf');
+          if(sb) sb.onclick=function(){
+            sb.disabled=true; sb.textContent='Проверяю… (до минуты)';
+            fetch(WORKER+'/selftest',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminToken: tok }) })
+              .then(function(r){ return r.json(); }).then(function(){ run(); })
+              .catch(function(e){ sb.disabled=false; sb.textContent='▶ Проверить всё сейчас'; alert('Не удалось: '+(e&&e.message||e)); });
+          };
         }).catch(function(e){ body.innerHTML='<div style="color:#f87168">Нет связи с сервером: '+esc(e&&e.message||e)+'</div>'; });
     }
     document.getElementById('hlRun').onclick=run;
