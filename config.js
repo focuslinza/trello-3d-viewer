@@ -23,7 +23,12 @@
 // ============================================================
 (function () {
   var MODULE = (location.pathname.split('/').pop() || '?');
-  var MEMBER = '';
+  var MEMBER = '', MEMBER_NAME = '';
+  // КТО НАЖАЛ (урок 11.2026, «карточка ушла в Оплачен от имени Асхата»): сервер двигает
+  // карточки ключом учредителя, поэтому в Trello любой перенос выглядит как «Асхат».
+  // Чтобы в журнале статусов было видно настоящего автора, имя открывшего окно
+  // дописывается в запросы смены статусов, если окно само его не передало.
+  var WHO_PATHS = ['/calc-paid', '/acct-set', '/repair-flags', '/calc-cancel', '/calc-hide', '/order-flag', '/invoice-archive', '/invoice-mark-sent'];
   var sent = 0, origFetch = window.fetch ? window.fetch.bind(window) : null;
   function report(kind, msg) {
     try {
@@ -44,6 +49,17 @@
     window.fetch = function (input, init) {
       var u = (typeof input === 'string') ? input : (input && input.url) || '';
       var ours = u.indexOf(window.WORKER_URL) === 0 || u.charAt(0) === '/';
+      try {
+        var pth = u.replace(window.WORKER_URL, '').split('?')[0];
+        if (ours && init && String(init.method || '').toUpperCase() === 'POST' && typeof init.body === 'string' && WHO_PATHS.indexOf(pth) >= 0 && (MEMBER_NAME || MEMBER)) {
+          var bo = JSON.parse(init.body);
+          if (bo && typeof bo === 'object' && !Array.isArray(bo) && !bo.byName) {
+            bo.byName = MEMBER_NAME || ('Trello ' + MEMBER);
+            if (MEMBER && !bo.byMemberId) bo.byMemberId = MEMBER;
+            init = Object.assign({}, init, { body: JSON.stringify(bo) });
+          }
+        }
+      } catch (e) {}
       // ПРАВА — С ПОВТОРОМ во ВСЕХ окнах (урок 10.2026): разовый сбой связи при запросе
       // прав раньше выглядел как «нет доступа». До 3 попыток с паузой 1,5 с.
       var p = (ours && u.indexOf('/worker-perms') >= 0) ? (function attempt(n){
@@ -73,7 +89,7 @@
             return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('organization: нет ответа')); }, 1500); })]);
           };
         }
-        if (typeof t.member === 'function') t.member('id').then(function (m) { MEMBER = (m && m.id) || ''; }).catch(function () {});
+        if (typeof t.member === 'function') t.member('id', 'fullName').then(function (m) { MEMBER = (m && m.id) || ''; MEMBER_NAME = (m && m.fullName) || ''; }).catch(function () {});
       } catch (e) {}
       return t;
     };
