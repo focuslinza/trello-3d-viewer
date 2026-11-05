@@ -76,6 +76,8 @@
     .company-head { background: #f4f5f7; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
     .company-head .nm { font-size: 16px; font-weight: 700; }
     .req-grid { font-size: 12px; color: #42526e; margin-top: 4px; line-height: 1.5; }
+    .enq-line { display: flex; align-items: center; gap: 8px; }
+    .enq-line .enq-sel { flex: 1 1 auto; min-width: 0; }
     .enq-sel { width: 100%; height: 38px; font-size: 14px; border: 2px solid #0c66e4; border-radius: 6px; padding: 0 8px; background: #fff; color: #172b4d; }
     .enq-cur { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; font-size: 14px; }
     .enq-warn { margin: 8px 0 4px; font-size: 13px; color: #a54800; }
@@ -279,27 +281,26 @@
       if (contacts.length === 0) {
         html += '<div class="muted">У компании пока нет контактов. Нажмите «Редактировать контакты» и добавьте человека, который оставил заявку.</div>';
       } else {
-        html += '<select id="enqSel" class="enq-sel">' +
+        var cur = contacts.filter(function (c) { return c.id === curId; })[0];
+        var wa1 = cur ? CRM.waLink(cur.phone) : null, tel1 = cur ? CRM.telLink(cur.phone) : null;
+        // выбранный заказчик — это тот, кто стоит в списке; WhatsApp/Позвонить — в той же строке
+        html += '<div class="enq-line"><select id="enqSel" class="enq-sel">' +
           '<option value=""' + (curId ? '' : ' selected') + '>— выберите сотрудника клиента —</option>' +
           contacts.map(function (c) {
             return '<option value="' + CRM.esc(c.id) + '"' + (c.id === curId ? ' selected' : '') + '>' +
               CRM.esc((c.name || 'Без имени') + (c.role ? ' · ' + c.role : '') + (c.phone ? ' · ' + c.phone : '')) + '</option>';
-          }).join('') + '</select>';
-        var cur = contacts.filter(function (c) { return c.id === curId; })[0];
-        if (cur) {
-          var wa1 = CRM.waLink(cur.phone), tel1 = CRM.telLink(cur.phone);
-          html += '<div class="enq-cur"><b>' + CRM.esc(cur.name || 'Без имени') + '</b>' + (cur.phone ? ' · ' + CRM.esc(cur.phone) : '') +
-            '<span class="contact-actions" style="margin:0 0 0 auto">' +
-            (wa1 ? '<a class="wa" href="' + wa1 + '" target="_blank" rel="noopener">WhatsApp</a>' : '') +
-            (tel1 ? '<a class="call" href="' + tel1 + '" target="_blank" rel="noopener">Позвонить</a>' : '') + '</span></div>';
-        } else {
+          }).join('') + '</select>' +
+          (wa1 ? '<a class="wa" href="' + wa1 + '" target="_blank" rel="noopener">WhatsApp</a>' : '') +
+          (tel1 ? '<a class="call" href="' + tel1 + '" target="_blank" rel="noopener">Позвонить</a>' : '') +
+          '</div>';
+        if (!cur) {
           html += '<div class="enq-warn">⚠ Заказчик не выбран — без него расчёт по заказу не сохранится.</div>';
         }
       }
 
 
       html += '<div class="btnbar">' +
-        '<button class="btn secondary" id="done">Готово</button>' +
+        '<button class="btn" id="done">Готово</button>' +
         '</div>';
 
       app.innerHTML = html;
