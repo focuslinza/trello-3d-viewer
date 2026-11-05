@@ -27,7 +27,7 @@
     th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:middle}
     th{color:var(--muted);font-size:11px;text-transform:uppercase;white-space:nowrap}
     td.num{text-align:right;white-space:nowrap}
-    table.cash td.num,table.cash th.num{text-align:center;white-space:nowrap;width:150px}
+    table.cash{table-layout:fixed}table.cash td.num,table.cash th.num{text-align:center;white-space:nowrap}table.cash td{overflow-wrap:anywhere}
     .pill{display:inline-block;border-radius:10px;padding:2px 9px;font-size:11.5px;font-weight:700;white-space:nowrap}
     .pill.new{background:#2b3a55;color:#a9c2ff}
     .pill.bought{background:#1c3329;color:var(--green)}
@@ -413,6 +413,8 @@
     }
 
     // ---------- НАЛИЧНЫЕ ----------
+    // одинаковые колонки у «Выдач» и «Расходов»: Дата | Сумма | Заметка/На что | Чек | ✕
+    var CASH_COLS='<colgroup><col style="width:130px"><col style="width:150px"><col><col style="width:170px"><col style="width:56px"></colgroup>';
     function renderCash(){
       var h='<div class="filters">'+
         '<input type="date" id="cfrom" value="'+CASH_RANGE.from+'"><span class="muted">—</span>'+
@@ -433,17 +435,20 @@
         if(!issues.length) h+='<div class="muted" style="margin-bottom:8px">Выдач за период нет.</div>';
       }
       if(issues.length){
-        h+='<table class="cash"><thead><tr><th>Дата</th><th class="num">Сумма</th><th>Заметка</th>'+(IS_ADMIN?'<th style="width:50px"></th>':'')+'</tr></thead><tbody>';
+        h+='<table class="cash">'+CASH_COLS+'<thead><tr><th>Дата</th><th class="num">Сумма</th><th>Заметка</th><th>Чек / документ</th><th></th></tr></thead><tbody>';
         issues.forEach(function(i0){
-          h+='<tr><td>'+esc(i0.date)+'</td><td class="num" style="color:#579dff">+'+money(i0.amount)+' ₸</td><td class="muted">'+esc(i0.note||'')+'</td>'+
-             (IS_ADMIN?('<td><button class="btn danger idel" data-id="'+i0.id+'" type="button">✕</button></td>'):'')+'</tr>';
+          var rid='issue-'+i0.id;
+          h+='<tr><td>'+esc(i0.date)+'</td><td class="num" style="color:#579dff">+'+money(i0.amount)+' ₸</td><td>'+esc(i0.note||'')+'</td>'+
+             '<td><span class="crec" data-id="'+rid+'">…</span>'+(IS_ADMIN?' <label style="cursor:pointer;color:#8ab4ff" title="Прикрепить чек или документ">📎<input type="file" accept="image/*,application/pdf" class="cfile" data-id="'+rid+'" style="display:none"></label>':'')+'</td>'+
+             '<td>'+(IS_ADMIN?('<button class="btn danger idel" data-id="'+i0.id+'" type="button">✕</button>'):'')+'</td></tr>';
         });
         h+='</tbody></table>';
       }
       if(IS_ADMIN) h+='<div class="ovl" id="ipop" style="display:none"><div class="pop sm"><h3>Выдать налом (подотчёт)</h3><div class="grid2">'+
            '<div><div class="lbl">Дата</div><input type="date" id="idate" value="'+fmtDate(new Date())+'"></div>'+
            '<div><div class="lbl">Сумма, ₸ *</div><input type="text" id="iamount" inputmode="numeric" placeholder="200000"></div>'+
-           '<div><div class="lbl">Заметка</div><input type="text" id="inote" placeholder="выдача на июль"></div></div>'+
+           '<div><div class="lbl">Заметка</div><input type="text" id="inote" placeholder="выдача на июль"></div>'+
+           '<div><div class="lbl">Чек / документ (необязательно)</div>'+pickerHtml('ip')+'</div></div>'+
            '<div class="popbar"><span id="imsg" class="muted" style="margin-right:auto"></span><button class="btn" data-popclose="ipop" type="button">Отмена</button><button class="btn primary" id="iadd" type="button">Выдать</button></div></div></div>';
       h+='<div class="hrow"><h3>Расходы</h3><button class="iplus minus" data-pop="cpop" type="button" title="Записать расход">−</button></div>';
       h+='<div class="ovl" id="cpop" style="display:none"><div class="pop sm"><h3>Новый расход</h3><div class="grid2">'+
@@ -455,16 +460,11 @@
          '<div class="popbar"><span id="cmsg" class="muted" style="margin-right:auto"></span><button class="btn" data-popclose="cpop" type="button">Отмена</button><button class="btn primary" id="cadd" type="button">Записать расход</button></div></div></div>';
       var entries=(CASH&&CASH.entries)||[];
       if(!entries.length) return h+'<div class="empty">Расходов за период нет.</div>';
-      h+='<table class="cash"><thead><tr><th>На что</th><th class="num">Сумма</th><th>Чеки</th><th style="width:50px"></th></tr></thead><tbody>';
-      var lastDate=null;
+      h+='<table class="cash">'+CASH_COLS+'<thead><tr><th>Дата</th><th class="num">Сумма</th><th>На что</th><th>Чек / документ</th><th></th></tr></thead><tbody>';
       entries.forEach(function(e0){
-        if(e0.date!==lastDate){
-          lastDate=e0.date;
-          h+='<tr class="daterow"><td>'+esc(e0.date)+'</td><td class="num">'+money(CASH.byDate[e0.date])+' ₸</td><td colspan="2"></td></tr>';
-        }
-        h+='<tr><td>'+esc(e0.what)+(e0.note?('<div class="muted">'+esc(e0.note)+'</div>'):'')+'</td>'+
-           '<td class="num">'+money(e0.amount)+' ₸</td>'+
-           '<td><span class="crec" data-id="'+e0.id+'">…</span> <label style="cursor:pointer;color:#8ab4ff">📎<input type="file" accept="image/*,application/pdf" class="cfile" data-id="'+e0.id+'" style="display:none"></label></td>'+
+        h+='<tr><td>'+esc(e0.date)+'</td><td class="num">−'+money(e0.amount)+' ₸</td>'+
+           '<td>'+esc(e0.what)+(e0.note?('<div class="muted">'+esc(e0.note)+'</div>'):'')+'</td>'+
+           '<td><span class="crec" data-id="'+e0.id+'">…</span> <label style="cursor:pointer;color:#8ab4ff" title="Прикрепить чек или документ">📎<input type="file" accept="image/*,application/pdf" class="cfile" data-id="'+e0.id+'" style="display:none"></label></td>'+
            '<td><button class="btn danger cdel" data-id="'+e0.id+'" type="button">✕</button></td></tr>';
       });
       return h+'</tbody></table>';
@@ -493,7 +493,7 @@
       });
     }
     // Файлы, выбранные ДО сохранения (по разделам): tp — инструмент, cp — наличные
-    var PEND = { tp: [], cp: [] };
+    var PEND = { tp: [], cp: [], ip: [] };
     function pickerHtml(p){
       return '<button type="button" class="btn" id="'+p+'Cam">📷 Камера</button> '+
              '<button type="button" class="btn" id="'+p+'Gal">📁 Файл</button>'+
@@ -1049,7 +1049,7 @@
       var trec=document.getElementById('trec'); if(trec && TOOL_EDIT && TOOL_EDIT.id) fillReceipts('tool', TOOL_EDIT.id, trec);
       wirePicker('tp');
 
-      wirePicker('cp');
+      wirePicker('cp'); wirePicker('ip');
       var capply=document.getElementById('capply'); if(capply) capply.onclick=function(){
         var f=document.getElementById('cfrom').value, t2=document.getElementById('cto').value;
         if(!f||!t2) return; if(f>t2){var tmp=f;f=t2;t2=tmp;}
@@ -1071,7 +1071,7 @@
         var btn=this; btn.disabled=true;
         fetch(WORKER+'/cash-issue-save',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({issue:{date:date,amount:amount,note:note}})})
-          .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); loadAll(); })
+          .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); return j.id?uploadPending('cash', 'issue-'+j.id, 'ip', msg):null; }).then(function(){ loadAll(); })
           .catch(function(e){ msg.textContent='Не сохранилось: '+(e&&e.message||e); btn.disabled=false; });
       };
       [].forEach.call(document.querySelectorAll('.idel'), function(b){
