@@ -193,14 +193,30 @@
 
   // ---- custom items added from the dashboard (materials / components / works) ----
   var _customCodes=[];
+  // заводские позиции можно менять/удалять из «Номенклатуры»: запись в customMat/customCmp
+  // с ТЕМ ЖЕ кодом накладывается поверх заводской (название/размер/группа), hidden:true —
+  // позиция пропадает из списков выбора, но старые расчёты с ней считаются как раньше.
+  var FACT_MAT={}, FACT_CMP={};
+  Object.keys(MAT).forEach(function(c){ FACT_MAT[c]=Object.assign({},MAT[c]); });
+  Object.keys(CMP).forEach(function(c){ FACT_CMP[c]=Object.assign({},CMP[c]); });
+  function overlay(dst,fact,it){
+    var o=Object.assign({},fact[it.code]);
+    if(it.lbl) o.lbl=it.lbl; if(it.spec!=null) o.spec=it.spec; if(it.sec) o.sec=it.sec;
+    if(it.u!=null&&it.u!=='') o.u=+it.u; if(it.attrs) o.attrs=it.attrs; if(it.sheet!==undefined) o.sheet=!!it.sheet;
+    o.hidden=!!it.hidden; o.edited=true; dst[it.code]=o;
+  }
   function applyCustom(){
     var p=PR();
     _customCodes.forEach(function(c){ delete MAT[c]; delete CMP[c]; delete KIND[c]; });
     _customCodes=[];
-    (p.customMat||[]).forEach(function(it){ if(!it || !it.code) return;
-      MAT[it.code]={u:+it.u||0,ost:+it.ost||0,rah:+it.rah||0,sec:it.sec||'ДРУГИЕ МАТЕРИАЛЫ',lbl:it.lbl||it.code,custom:true,sheet:(it.sheet===undefined?undefined:!!it.sheet)}; _customCodes.push(it.code); });
-    (p.customCmp||[]).forEach(function(it){ if(!it || !it.code) return;
-      CMP[it.code]={u:+it.u||0,ost:+it.ost||0,rah:+it.rah||0,m:(it.m!=null?+it.m:1),sec:it.sec||'ДРУГИЕ КОМПОНЕНТЫ',lbl:it.lbl||it.code,custom:true}; _customCodes.push(it.code); });
+    Object.keys(FACT_MAT).forEach(function(c){ MAT[c]=Object.assign({},FACT_MAT[c]); });
+    Object.keys(FACT_CMP).forEach(function(c){ CMP[c]=Object.assign({},FACT_CMP[c]); });
+    (p.customMat||[]).forEach(function(it){ if(it && it.code && FACT_MAT[it.code]) overlay(MAT,FACT_MAT,it); });
+    (p.customCmp||[]).forEach(function(it){ if(it && it.code && FACT_CMP[it.code]) overlay(CMP,FACT_CMP,it); });
+    (p.customMat||[]).forEach(function(it){ if(!it || !it.code || FACT_MAT[it.code]) return;
+      MAT[it.code]={u:+it.u||0,ost:+it.ost||0,rah:+it.rah||0,sec:it.sec||'ДРУГИЕ МАТЕРИАЛЫ',lbl:it.lbl||it.code,spec:it.spec||'',custom:true,sheet:(it.sheet===undefined?undefined:!!it.sheet)}; _customCodes.push(it.code); });
+    (p.customCmp||[]).forEach(function(it){ if(!it || !it.code || FACT_CMP[it.code]) return;
+      CMP[it.code]={u:+it.u||0,ost:+it.ost||0,rah:+it.rah||0,m:(it.m!=null?+it.m:1),sec:it.sec||'ДРУГИЕ КОМПОНЕНТЫ',lbl:it.lbl||it.code,spec:it.spec||'',custom:true}; _customCodes.push(it.code); });
     (p.customOp||[]).forEach(function(it){ if(!it || !it.code) return;
       KIND[it.code]={t:'FLAT',mult:1,sec:it.sec||'РАБОТЫ',lbl:it.lbl||it.code,flatRate:+it.rate||0,custom:true}; _customCodes.push(it.code); });
   }
@@ -401,7 +417,7 @@
             taxRate:taxRate,taxGrossUp:gross,taxAmount:taxAmount,total:total};
   }
 
-  root.CALC={compute:compute,MAT:MAT,CMP:CMP,OPS:OPS,KIND:KIND,opRate:opRate,taxGrossUp:taxGrossUp,TH:TH,applyCustom:applyCustom,
+  root.CALC={compute:compute,MAT:MAT,CMP:CMP,FACT_MAT:FACT_MAT,FACT_CMP:FACT_CMP,OPS:OPS,KIND:KIND,opRate:opRate,taxGrossUp:taxGrossUp,TH:TH,applyCustom:applyCustom,
              CUTBEND:CUTBEND,BEND:BEND,WELD_SS:WELD_SS,WELD_BLACK:WELD_BLACK,CUTBEND_TIERS:CUTBEND_TIERS,WELD_TIERS:WELD_TIERS,
              matOstFor:function(code){ var M=MAT[code]; return M ? secOst('matOstBySec',M.sec,M.ost) : 0.15; }};
 })(typeof window!=='undefined'?window:globalThis);

@@ -5,7 +5,7 @@
   <title>Калькулятор стоимости</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./calc-engine.js?v=22"></script>
+  <script src="./calc-engine.js?v=23"></script>
   <style>
     html[data-color-mode="light"] { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
     html[data-color-mode="dark"]  { --bg:#1d2125; --txt:#c7d1db; --muted:#9fadbc; --chip:#22272b; --line:#3c4149; --card:#22272b; }
@@ -239,6 +239,7 @@
     function groupBySection(map){
       var groups={}, order=[];
       Object.keys(map).forEach(function(code){
+        if(map[code].hidden) return;   // удалена в «Номенклатуре» — не предлагаем
         var sec=map[code].sec||'Прочее';
         if(!groups[sec]){ groups[sec]=[]; order.push(sec); }
         groups[sec].push({code:code, label:map[code].lbl||code, spec:map[code].spec});
@@ -729,7 +730,7 @@
       var grade = m.indexOf('304')>=0 ? 'ЛИСТ 304' : m.indexOf('430')>=0 ? 'ЛИСТ 430' : (m.indexOf('черн')>=0||m.indexOf('ст3')>=0) ? 'ЛИСТ черн' : null;
       var best=null;
       Object.keys(CALC.MAT).forEach(function(code){
-        var M=CALC.MAT[code]; if(!M.sec) return;
+        var M=CALC.MAT[code]; if(!M.sec || M.hidden) return;
         if(grade && M.sec.indexOf(grade)<0) return;
         // match thickness in label like "2мм (м2)"
         var lbl=(M.lbl||'').replace(',', '.');

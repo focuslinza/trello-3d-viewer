@@ -5,7 +5,7 @@
   <title>DXF Viewer</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.js"></script>
-  <script src="./calc-engine.js?v=8"></script>
+  <script src="./calc-engine.js?v=23"></script>
   <style>
     html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden;
       font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:#172b4d; }
@@ -123,6 +123,7 @@
       // group sheets (sections starting with "ЛИСТ") by section
       var groups = {}, order = [];
       Object.keys(MAT).forEach(function(code){
+        if (MAT[code].hidden) return;   // удалена в «Номенклатуре»
         var sec = MAT[code].sec || '';
         // листовые: встроенные разделы «ЛИСТ…» + позиции снабженца.
         // У позиций снабженца главный — флаг «Лист» (галочка в форме);
