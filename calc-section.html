@@ -188,7 +188,11 @@
         return Promise.all([ isDirector(), t.member('id').catch(function(){return {};}) ]).then(function(r){
           if (myGen !== renderGen) return; // устарело
           var admin=r[0], me=r[1]||{};
+          // «ЗАРАБОТОК ПО ЗАКАЗУ» УБРАН ИЗ КАРТОЧКИ (решение Асхата, 05.11.2026): работаем
+          // по окладу и плану, сдельной по заказам нет. Окно earnings-modal.html оставлено
+          // в системе (история старых заказов), вернуть кнопку — убрать return ниже.
           function addEarningsBtn(){
+            return;
             var row2=document.createElement('div'); row2.className='row'; row2.style.marginTop='8px';
             var lbl=document.createElement('div'); lbl.className='muted'; lbl.textContent='Заработок и эффективность по этому заказу';
             var eb=document.createElement('button'); eb.className='btn'; eb.type='button'; eb.style.background='#5a4a8a';
