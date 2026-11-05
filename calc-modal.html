@@ -359,7 +359,7 @@
         if(!name){ msg.textContent='Напишите, что нужно — снабженец должен понять, какую позицию заводить.'; return; }
         var btn=this; btn.disabled=true; msg.textContent='Отправляю…';
         t.member('id','fullName').catch(function(){ return {}; }).then(function(me){
-          var comment='📋 ДОБАВИТЬ В СПРАВОЧНИК КАЛЬКУЛЯТОРА ('+(isMat?'материал':'компонент')+', ед.: '+document.getElementById('rqUnit').value+')'+
+          var comment='📋 ДОБАВИТЬ В СПРАВОЧНИК КАЛЬКУЛЯТОРА (Снабжение → «💲 Цены материалов» → «Свои материалы/компоненты»; '+(isMat?'материал':'компонент')+', ед.: '+document.getElementById('rqUnit').value+')'+
             ' — для заказа №'+(ctx.cardNumber||'?')+' «'+(ctx.cardName||'')+'»'+(document.getElementById('rqCom').value.trim()?(' · '+document.getElementById('rqCom').value.trim()):'');
           return fetch(WORKER+'/supply-request',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({ name:'В калькулятор: '+name, qty:'', comment:comment, link:(ctx.cardId?('https://trello.com/c/'+ctx.cardId):''),
