@@ -591,37 +591,119 @@
     // название руками, а выбирает значения — наименование собирается само в одном
     // порядке. Так нет дублей «поворот. с торм.» / «с тормозом, поворотное».
     // Схемы по группам: ключ — проверка названия группы.
+    // Схема: test — к каким группам относится; prefix+поле group:true — поле, которое
+    // само выбирает группу (марку): «ЛИСТ 304 нерж», «ТРУБА черн»…; build — как из
+    // характеристик собрать наименование/размер; parse — характеристики заводских
+    // позиций из их старых названий (сами заводские позиции не меняются).
+    // ВАЖНО для листа: название начинается с толщины «2мм … (м2)», а группа — с «ЛИСТ»:
+    // по этому калькулятор и DXF-раскрой узнают листовой материал и толщину.
+    function nomNum(v){ return String(v).replace('.',','); }
+    function nomNumIn(s){ return String(s==null?'':s).replace(',','.'); }
+    function nomTok(sc,a,skip){
+      var out=[];
+      sc.fields.forEach(function(f){
+        if(skip&&skip.indexOf(f.k)>=0) return;
+        if(f.group||f.spec) return;
+        var v=a[f.k]; if(v==null||v==='') return;
+        var t=(typeof f.tok==='function')?f.tok(v):(f.tok&&f.tok[v]!==undefined?f.tok[v]:v);
+        if(t) out.push(t);
+      });
+      return out;
+    }
+    function nomGradeOf(sc,sec){ var s=String(sec||''); return s.toUpperCase().indexOf(sc.prefix)===0 ? s.slice(sc.prefix.length).trim() : ''; }
+    var GR_MET=['304 нерж','430 нерж','201 нерж','черн','оцинк','алюм'];
+    var SURF={k:'surf', lbl:'Поверхность', opts:['2B матовая','BA зеркальная','шлифованная','рифлёная','с плёнкой'],
+              tok:{'2B матовая':'2B','BA зеркальная':'зерк','шлифованная':'шлиф','рифлёная':'Рифл','с плёнкой':'плёнка'}};
+    function dims(){ return [].slice.call(arguments).filter(function(x){return x!=null&&x!=='';}).map(nomNum).join('*'); }
     var NOM_SCHEMAS=[
-      { test:/колес/i, base:'Колесо', fields:[
-        {k:'d',     lbl:'Диаметр, мм', type:'num', list:[50,75,100,125,160,200], spec:function(v){return 'д'+v;}},
-        {k:'body',  lbl:'Корпус',      opts:['нерж','оцинк','сталь крашеная']},
-        {k:'mount', lbl:'Крепление',   opts:['платформа','штык','под болт']},
-        {k:'swivel',lbl:'Поворот',     opts:['поворотное','неповоротное']},
-        {k:'brake', lbl:'Тормоз',      opts:['с тормозом','без тормоза']},
-        {k:'tread', lbl:'Обод',        opts:['полиуретан','резина','полиамид','сталь'], tok:{'полиуретан':'ПУ'}},
-        {k:'bear',  lbl:'Подшипник',   opts:['шариковый','роликовый','скольжения'], tok:{'шариковый':'шарик. подш.','роликовый':'ролик. подш.','скольжения':'подш. скольж.'}},
-        {k:'heat',  lbl:'Жаростойкое', opts:['да','нет'], tok:{'да':'жаростойкое','нет':''}},
-        {k:'load',  lbl:'Нагрузка, кг',type:'num', tok:function(v){return 'до '+v+' кг';}},
-        {k:'note',  lbl:'Примечание',  type:'txt'}
-      ]}
+      { test:/^ЛИСТ/i, prefix:'ЛИСТ', sheet:true, kind:'mat', fields:[
+          {k:'grade', lbl:'Марка', group:true, opts:GR_MET},
+          {k:'th',    lbl:'Толщина, мм', type:'num', list:[0.5,0.8,1,1.2,1.5,2,2.5,3,4,5,6,8,10,12]},
+          SURF,
+          {k:'fmt',   lbl:'Формат листа', type:'txt', list:['1250*2500','1000*2000','1500*3000'], spec:true},
+          {k:'note',  lbl:'Примечание', type:'txt'} ],
+        build:function(a){ var t=nomTok(this,a,['th']); return { lbl:(a.th?nomNum(a.th)+'мм':'?мм')+(t.length?' '+t.join(' '):'')+' (м2)', spec:a.fmt||'' }; },
+        parse:function(r){ var a={grade:nomGradeOf(this,r.sec)}, m=nomNumIn(r.lbl).match(/([\d.]+)\s*мм/); if(m) a.th=m[1];
+          if(/рифл/i.test(r.lbl)) a.surf='рифлёная'; var f=String(r.spec||'').match(/^\d+\*\d+/); if(f) a.fmt=f[0]; return a; } },
+      { test:/^ПРОФИЛ/i, prefix:'ПРОФИЛЬ', sheet:false, kind:'mat', fields:[
+          {k:'grade', lbl:'Марка', group:true, opts:GR_MET},
+          {k:'a', lbl:'Сторона A, мм', type:'num', list:[15,20,25,30,40,50,60,80,100]},
+          {k:'b', lbl:'Сторона B, мм', type:'num', list:[15,20,25,30,40,50,60,80,100]},
+          {k:'t', lbl:'Стенка, мм', type:'num', list:[1,1.2,1.5,2,2.5,3,4]},
+          {k:'surf', lbl:'Поверхность', opts:['матовая','шлифованная','зеркальная'], tok:{'матовая':'мат','шлифованная':'шлиф','зеркальная':'зерк'}},
+          {k:'note', lbl:'Примечание', type:'txt'} ],
+        build:function(a){ var t=nomTok(this,a,['a','b','t']), d=dims(a.a,a.b||a.a,a.t); return { lbl:(d||'?')+(t.length?' '+t.join(' '):'')+' (п.м)', spec:d }; },
+        parse:function(r){ var a={grade:nomGradeOf(this,r.sec)}, m=nomNumIn(r.spec).match(/([\d.]+)\*([\d.]+)\*([\d.]+)/); if(m){ a.a=m[1]; a.b=m[2]; a.t=m[3]; } return a; } },
+      { test:/^ТРУБ/i, prefix:'ТРУБА', sheet:false, kind:'mat', fields:[
+          {k:'grade', lbl:'Марка', group:true, opts:GR_MET},
+          {k:'d', lbl:'Диаметр, мм', type:'num', list:[12,16,20,25,32,38,42,51,57,76]},
+          {k:'t', lbl:'Стенка, мм', type:'num', list:[1,1.2,1.5,2,2.5,3]},
+          {k:'surf', lbl:'Поверхность', opts:['матовая','шлифованная','зеркальная'], tok:{'матовая':'мат','шлифованная':'шлиф','зеркальная':'зерк'}},
+          {k:'note', lbl:'Примечание', type:'txt'} ],
+        build:function(a){ var t=nomTok(this,a,['d','t']), d=dims(a.d,a.t); return { lbl:(d||'?')+(t.length?' '+t.join(' '):'')+' (п.м)', spec:a.d?'д'+d:'' }; },
+        parse:function(r){ var a={grade:nomGradeOf(this,r.sec)}, m=nomNumIn(r.spec).match(/д\s*([\d.]+)\*([\d.]+)/); if(m){ a.d=m[1]; a.t=m[2]; } return a; } },
+      { test:/^ПРУТ|^КРУГ/i, prefix:'ПРУТ', sheet:false, kind:'mat', fields:[
+          {k:'grade', lbl:'Марка', group:true, opts:GR_MET},
+          {k:'d', lbl:'Диаметр, мм', type:'num', list:[3,4,5,6,8,10,12,14,16,20]},
+          {k:'note', lbl:'Примечание', type:'txt'} ],
+        build:function(a){ var t=nomTok(this,a,['d']); return { lbl:(a.d?nomNum(a.d)+'мм':'?мм')+(t.length?' '+t.join(' '):'')+' (п.м)', spec:a.d?'д'+nomNum(a.d):'' }; },
+        parse:function(r){ var a={grade:nomGradeOf(this,r.sec)}, m=nomNumIn(r.spec).match(/д\s*([\d.]+)/); if(m) a.d=m[1]; return a; } },
+      { test:/^УГОЛ/i, prefix:'УГОЛОК', sheet:false, kind:'mat', fields:[
+          {k:'grade', lbl:'Марка', group:true, opts:GR_MET},
+          {k:'a', lbl:'Полка A, мм', type:'num', list:[20,25,32,40,50,63,75]},
+          {k:'b', lbl:'Полка B, мм', type:'num', list:[20,25,32,40,50,63,75]},
+          {k:'t', lbl:'Толщина, мм', type:'num', list:[2,3,4,5,6]},
+          {k:'note', lbl:'Примечание', type:'txt'} ],
+        build:function(a){ var t=nomTok(this,a,['a','b','t']), d=dims(a.a,a.b||a.a,a.t); return { lbl:(d||'?')+(t.length?' '+t.join(' '):'')+' (п.м)', spec:d }; } },
+      { test:/^ПОЛОС/i, prefix:'ПОЛОСА', sheet:false, kind:'mat', fields:[
+          {k:'grade', lbl:'Марка', group:true, opts:GR_MET},
+          {k:'w', lbl:'Ширина, мм', type:'num', list:[20,25,30,40,50,60]},
+          {k:'t', lbl:'Толщина, мм', type:'num', list:[2,3,4,5,6,8]},
+          {k:'note', lbl:'Примечание', type:'txt'} ],
+        build:function(a){ var t=nomTok(this,a,['w','t']), d=dims(a.w,a.t); return { lbl:(d||'?')+(t.length?' '+t.join(' '):'')+' (п.м)', spec:d }; } },
+      { test:/колес/i, kind:'cmp', fields:[
+          {k:'d',     lbl:'Диаметр, мм', type:'num', list:[50,75,100,125,160,200], spec:true},
+          {k:'body',  lbl:'Корпус',      opts:['нерж','оцинк','сталь крашеная']},
+          {k:'mount', lbl:'Крепление',   opts:['платформа','штык','под болт']},
+          {k:'swivel',lbl:'Поворот',     opts:['поворотное','неповоротное']},
+          {k:'brake', lbl:'Тормоз',      opts:['с тормозом','без тормоза']},
+          {k:'tread', lbl:'Обод',        opts:['полиуретан','резина','полиамид','сталь'], tok:{'полиуретан':'ПУ'}},
+          {k:'bear',  lbl:'Подшипник',   opts:['шариковый','роликовый','скольжения'], tok:{'шариковый':'шарик. подш.','роликовый':'ролик. подш.','скольжения':'подш. скольж.'}},
+          {k:'heat',  lbl:'Жаростойкое', opts:['да','нет'], tok:{'да':'жаростойкое','нет':''}},
+          {k:'load',  lbl:'Нагрузка, кг',type:'num', tok:function(v){return 'до '+v+' кг';}},
+          {k:'note',  lbl:'Примечание',  type:'txt'} ],
+        build:function(a){ return { lbl:['Колесо'].concat(nomTok(this,a)).join(' '), spec:a.d?'д'+a.d:'' }; },
+        parse:function(r){ var a={}, m=String(r.spec||'').match(/д\s*(\d+)/i); if(m) a.d=m[1]; if(/жаро/i.test(r.lbl||'')) a.heat='да'; return a; } },
+      { test:/^КРЕПЕЖ/i, prefix:'КРЕПЕЖ', kind:'cmp', fields:[
+          {k:'grade', lbl:'Материал', group:true, opts:['304 нерж','A2 нерж','A4 нерж','оцинк','черн']},
+          {k:'type',  lbl:'Вид', opts:['Болт','Винт','Гайка','Шайба','Шайба гровер','Саморез','Заклепка','Шпилька','Анкер','Гайка-барашек','Гайка колпачковая']},
+          {k:'m',     lbl:'Резьба / диаметр, М', type:'num', list:[3,4,5,6,8,10,12,14,16,20]},
+          {k:'len',   lbl:'Длина, мм', type:'num', list:[10,12,16,20,25,30,40,50,60,80,100]},
+          {k:'head',  lbl:'Головка', opts:['шестигранная','потайная','полукруглая','внутр. шестигранник']},
+          {k:'note',  lbl:'Примечание', type:'txt'} ],
+        build:function(a){ var sz=(a.m?'М'+nomNum(a.m):'')+(a.len?'*'+nomNum(a.len):''); var t=nomTok(this,a,['type','m','len']);
+          return { lbl:[a.type||'Крепёж'].concat(sz?[sz]:[]).concat(t).join(' '), spec:sz }; },
+        parse:function(r){ var a={grade:nomGradeOf(this,r.sec)}, L=nomName(r);
+          var ty=L.match(/^(Болт|Винт|Гайка|Шайба|Саморез|Заклеп\S*|Шпилька|Анкер)/i); if(ty) a.type=/^заклеп/i.test(ty[1])?'Заклепка':ty[1].charAt(0).toUpperCase()+ty[1].slice(1).toLowerCase();
+          var m=L.match(/[МM]\s*(\d+)(?:\s*\*\s*(\d+))?/i); if(m){ a.m=m[1]; if(m[2]) a.len=m[2]; } return a; } },
+      { test:/^ЗАГЛУШ|^ОПОР|НОЖК/i, kind:'cmp', fields:[
+          {k:'type',  lbl:'Вид', opts:['Заглушка','Регулируемая ножка','Опора','Подпятник']},
+          {k:'shape', lbl:'Форма', opts:['квадратная','круглая','прямоугольная']},
+          {k:'size',  lbl:'Размер, мм', type:'txt', list:['20*20','25*25','30*30','40*40','40*20','50*50','60*60','д25','д32','д38'], spec:true},
+          {k:'mat',   lbl:'Материал', opts:['пластик','нерж','резина','оцинк']},
+          {k:'note',  lbl:'Примечание', type:'txt'} ],
+        build:function(a){ return { lbl:[a.type||'Заглушка'].concat(nomTok(this,a,['type'])).join(' '), spec:a.size||'' }; },
+        parse:function(r){ var a={}, L=nomName(r); a.type=/ножк/i.test(L)?'Регулируемая ножка':(/заглуш/i.test(L)?'Заглушка':''); var m=L.match(/\d+\s*\*\s*\d+/); if(m) a.size=m[0].replace(/\s/g,''); return a; } },
+      { test:/^КРАСК/i, kind:'cmp', fields:[
+          {k:'type',  lbl:'Вид', opts:['порошковая','жидкая','грунт']},
+          {k:'ral',   lbl:'Цвет (RAL)', type:'txt', list:['9016','9003','9005','7035','7024','3020','5005','6005','1015']},
+          {k:'fin',   lbl:'Фактура', opts:['глянец','полуглянец','мат','шагрень','муар','антик']},
+          {k:'note',  lbl:'Примечание', type:'txt'} ],
+        build:function(a){ var t=nomTok(this,a,['ral']); return { lbl:['Краска'].concat(t).concat(a.ral?['RAL '+a.ral]:[]).join(' ')+' (кв.м)', spec:a.ral?'RAL '+a.ral:'' }; } }
     ];
     function nomSchema(sec){ for(var i=0;i<NOM_SCHEMAS.length;i++) if(NOM_SCHEMAS[i].test.test(sec||'')) return NOM_SCHEMAS[i]; return null; }
-    function nomBuild(sc,a){
-      a=a||{}; var parts=[sc.base], spec='';
-      sc.fields.forEach(function(f){
-        var v=a[f.k]; if(v==null||v==='') return;
-        if(f.spec){ spec=f.spec(v); return; }
-        var t=(typeof f.tok==='function')?f.tok(v):(f.tok&&f.tok[v]!==undefined?f.tok[v]:v);
-        if(t) parts.push(t);
-      });
-      return { lbl:parts.join(' '), spec:spec };
-    }
-    // характеристики заводских позиций (их нельзя править — выводим из названия)
-    function nomFactoryAttrs(sc,r){
-      var a={}, m=String(r.spec||'').match(/д\s*(\d+)/i); if(m) a.d=m[1];
-      if(/жаро/i.test(r.lbl||'')) a.heat='да';
-      return a;
-    }
+    function nomBuild(sc,a){ return sc.build(a||{}); }
+    function nomFactoryAttrs(sc,r){ return sc.parse?sc.parse(r):{}; }
     var WK=null, DIRTY={};
     function nomClone(o){ return JSON.parse(JSON.stringify(o||{})); }
     function nomInit(){
@@ -645,7 +727,8 @@
         var sc0=nomSchema(rr.sec); rr.attrs=sc0?nomFactoryAttrs(sc0,rr):null; rows.push(rr);
       });
       nomCust(kind).forEach(function(it){
-        rows.push({ code:it.code, f:0, sec:it.sec||'', lbl:it.lbl||'', spec:it.spec||'', unit:nomUnit(kind,it), price:it.u, it:it, attrs:nomSchema(it.sec)?(it.attrs||{}):null });
+        var scc=nomSchema(it.sec); if(scc && !it.attrs) it.attrs=scc.parse?scc.parse(it):(scc.prefix?{grade:nomGradeOf(scc,it.sec)}:{});
+        rows.push({ code:it.code, f:0, sec:it.sec||'', lbl:it.lbl||'', spec:it.spec||'', unit:nomUnit(kind,it), price:it.u, it:it, attrs:scc?it.attrs:null });
       });
       return rows;
     }
@@ -702,7 +785,7 @@
         var inG=rows.filter(function(r){ return (r.sec||'Без группы')===NOM.grp; });
         var fb='';
         gsc.fields.forEach(function(f){
-          if(f.type==='txt') return;
+          if(f.type==='txt'&&!f.list) return; if(f.group) return;
           var vals=[]; inG.forEach(function(r){ var v=r.attrs&&r.attrs[f.k]; if(v!=null&&v!==''&&vals.indexOf(String(v))<0) vals.push(String(v)); });
           if(!vals.length) return;
           if(f.type==='num') vals.sort(function(a,b){return a-b;});
@@ -722,11 +805,12 @@
           var rsc=r.f?null:nomSchema(r.sec);
           h+='<tr class="nrow'+(DIRTY[dk]?' dirty':'')+'" data-g="'+esc(s)+'" data-q="'+esc(q)+'" data-code="'+esc(r.code)+'" data-f="'+r.f+'" data-attrs="'+esc(JSON.stringify(r.attrs||{}))+'">';
           if(r.f){
-            h+='<td>'+esc(nomName(r))+'</td><td class="muted">'+esc(r.spec)+'</td>';
+            var fsc=nomSchema(r.sec), fnm=(fsc&&fsc.parse&&r.attrs)?nomName({lbl:fsc.build(r.attrs).lbl}):nomName(r);
+            h+='<td>'+esc(fnm)+'</td><td class="muted">'+esc(r.spec)+'</td>';
           } else {
             var opts=G.list.map(function(g){ return '<option'+(g===(r.sec||'Без группы')?' selected':'')+'>'+esc(g)+'</option>'; }).join('')+'<option value="__new__">+ новая группа…</option>';
             if(rsc){
-              h+='<td><div style="display:flex;gap:6px;align-items:center"><span class="nom-auto" style="flex:1">'+esc(r.lbl||rsc.base)+'</span><span class="nom-tag">своя</span>'+
+              h+='<td><div style="display:flex;gap:6px;align-items:center"><span class="nom-auto" style="flex:1">'+esc(nomName(r))+'</span><span class="nom-tag">своя</span>'+
                  '<button class="btn nom-attr-t" type="button" style="padding:2px 8px;font-size:12px" title="Характеристики">⚙ '+(NOM.open[r.code]?'▲':'▼')+'</button></div>'+
                  '<select data-cf="sec" style="margin-top:3px;font-size:11.5px;padding:2px 4px;max-width:100%">'+opts+'</select></td>'+
                  '<td class="muted nom-spec">'+esc(r.spec)+'</td>';
@@ -747,10 +831,12 @@
               if(f.opts){
                 inp='<select data-af="'+f.k+'" style="width:100%"><option value="">—</option>'+f.opts.map(function(o){ return '<option'+(o===v?' selected':'')+'>'+esc(o)+'</option>'; }).join('')+'</select>';
               } else if(f.type==='num'){
-                var lid='nl_'+f.k;
+                var lid='nl_'+f.k+'_'+r.code;
                 inp='<input data-af="'+f.k+'" type="number" min="0" step="any" value="'+esc(v)+'" style="width:100%"'+(f.list?' list="'+lid+'"':'')+'>'+
                     (f.list?'<datalist id="'+lid+'">'+f.list.map(function(o){return '<option value="'+o+'">';}).join('')+'</datalist>':'');
-              } else inp='<input data-af="'+f.k+'" value="'+esc(v)+'" style="width:100%">';
+              } else { var lid2='nl_'+f.k+'_'+r.code;
+                inp='<input data-af="'+f.k+'" value="'+esc(v)+'" style="width:100%"'+(f.list?' list="'+lid2+'"':'')+'>'+
+                    (f.list?'<datalist id="'+lid2+'">'+f.list.map(function(o){return '<option value="'+esc(o)+'">';}).join('')+'</datalist>':''); }
               h+='<label style="display:flex;flex-direction:column;gap:2px"><span style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">'+esc(f.lbl)+'</span>'+inp+'</label>';
             });
             h+='</div><div class="small muted" style="margin-top:6px">Наименование собирается само из выбранных характеристик.</div></td></tr>';
@@ -759,7 +845,7 @@
       });
       h+='</tbody></table><div class="empty" id="nomNone" style="display:none">Ничего не найдено</div>';
       h+='<div class="hint" style="margin:10px 0 30px">Цены закупки: листы — <b>за м²</b> (не за лист), трубы/профиль/пруток — <b>за погонный метр</b>, компоненты — за шт. По ним считаются все новые расчёты; уже сохранённые заказы не пересчитываются. '+
-         'Чтобы свой листовой материал появился в DXF-раскрое, группа должна содержать слово «Лист», а толщина — быть в названии: «3мм (м2)».</div>';
+         'Для листа, профиля, трубы, прутка, уголка, полосы, колёс, крепежа, заглушек и краски наименование собирается из характеристик (кнопка ⚙) — лист сразу попадает в калькулятор и DXF-раскрой с нужной толщиной. Новая группа с названием на «Лист», «Профиль», «Труба», «Уголок», «Полоса» получит характеристики автоматически.</div>';
       h+='</div></div>';
       return h;
     }
@@ -811,7 +897,7 @@
     function nomAddItem(sec){
       var k=NOM.kind, code=sNewCode(k);
       var it=(k==='mat')?{code:code,lbl:'',spec:'',sec:sec,u:'',ost:0.15,rah:0.04}:{code:code,lbl:'',spec:'',sec:sec,u:'',ost:0,rah:0.07,m:1};
-      var sc=nomSchema(sec); if(sc){ it.attrs={}; it.lbl=sc.base; NOM.open[code]=1; }
+      var sc=nomSchema(sec); if(sc){ it.attrs=sc.prefix?{grade:nomGradeOf(sc,sec)}:{}; var b0=sc.build(it.attrs); it.lbl=b0.lbl; it.spec=b0.spec; if(sc.sheet!=null) it.sheet=sc.sheet; NOM.open[code]=1; }
       nomCust(k).push(it); DIRTY[k+':'+code]=1; NOM.focus=code; NOM.q=''; NOM.flt={};
       render();
     }
@@ -842,7 +928,7 @@
             if(fld==='sec'){
               var v=el.value;
               if(v==='__new__'){ v=(prompt('Название новой группы:')||'').trim(); if(!v){ el.value=it.sec||''; return; } }
-              it.sec=v; var sc3=nomSchema(v); if(sc3){ it.attrs=it.attrs||{}; NOM.open[code]=1; } nomMark(tr,key); render(); return;
+              it.sec=v; var sc3=nomSchema(v); if(sc3){ it.attrs=it.attrs||{}; if(sc3.prefix) it.attrs.grade=nomGradeOf(sc3,v); var b3=sc3.build(it.attrs); it.lbl=b3.lbl; it.spec=b3.spec; if(sc3.sheet!=null) it.sheet=sc3.sheet; NOM.open[code]=1; } nomMark(tr,key); render(); return;
             }
             if(f){
               var CAT=(k==='mat'?CALC.MAT:CALC.CMP)||{};
@@ -863,8 +949,10 @@
             var on2=function(){
               it.attrs=it.attrs||{}; var fk=el.getAttribute('data-af');
               if(el.value==='') delete it.attrs[fk]; else it.attrs[fk]=el.value;
-              var b2=nomBuild(sc,it.attrs); it.lbl=b2.lbl; it.spec=b2.spec;
-              var na=tr.querySelector('.nom-auto'); if(na) na.textContent=it.lbl;
+              var b2=nomBuild(sc,it.attrs); it.lbl=b2.lbl; it.spec=b2.spec; if(sc.sheet!=null) it.sheet=sc.sheet;
+              var fdef=sc.fields.filter(function(x){return x.k===fk;})[0];
+              if(fdef&&fdef.group&&el.value){ var ns2=sc.prefix+' '+el.value; if(NOM.grp===it.sec) NOM.grp=ns2; it.sec=ns2; nomMark(tr,key); render(); return; }
+              var na=tr.querySelector('.nom-auto'); if(na) na.textContent=nomName(it);
               var ns=tr.querySelector('.nom-spec'); if(ns) ns.textContent=it.spec;
               tr.setAttribute('data-q',(it.lbl+' '+it.spec+' '+it.sec).toLowerCase());
               tr.setAttribute('data-attrs',JSON.stringify(it.attrs));
