@@ -76,6 +76,13 @@
     .company-head { background: #f4f5f7; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
     .company-head .nm { font-size: 16px; font-weight: 700; }
     .req-grid { font-size: 12px; color: #42526e; margin-top: 4px; line-height: 1.5; }
+    .enq-sel { width: 100%; height: 38px; font-size: 14px; border: 2px solid #0c66e4; border-radius: 6px; padding: 0 8px; background: #fff; color: #172b4d; }
+    .enq-cur { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; font-size: 14px; }
+    .enq-warn { margin: 8px 0 4px; font-size: 13px; color: #a54800; }
+    .crow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid #dfe1e6; border-radius: 6px; padding: 6px 10px; margin-bottom: 6px; font-size: 13px; }
+    .crow .nm { font-weight: 600; }
+    .crow .role, .crow .num { color: #5e6c84; }
+    .crow-act { margin-left: auto; display: flex; gap: 6px; }
     .contact-card { border: 1px solid #dfe1e6; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
     .contact-card .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
     .contact-card .nm { font-size: 14px; font-weight: 600; }
@@ -261,32 +268,43 @@
       }
       html += '<div class="btnbar"><button class="btn" id="addObject">+ Добавить объект</button></div>';
 
-      html += '<h3>Контакты компании</h3>';
+      // ЗАКАЗЧИК — ВЫПАДАЮЩИЙ СПИСОК (решение Асхата, 05.11.2026): выбор из списка сотрудников
+      // клиента сразу делает человека заказчиком по этой заявке; ниже — компактный список
+      // контактов для правки (без галочек)
       var contacts = company.contacts || [];
+      var curId = state.cardContacts[0] || '';
+      html += '<h3>Заказчик по этой заявке</h3>';
       if (contacts.length === 0) {
-        html += '<div class="muted">Пока нет контактов. Добавьте человека, который оставил заявку.</div>';
+        html += '<div class="muted">У компании пока нет контактов. Добавьте человека, который оставил заявку, — кнопка «+ Добавить контакт» ниже.</div>';
       } else {
-        contacts.forEach(function (c) {
-          var wa = CRM.waLink(c.phone), tel = CRM.telLink(c.phone);
-          // ЗАКАЗЧИК — ОДИН ЧЕЛОВЕК (решение Асхата, 05.11.2026): выбор радиокнопкой;
-          // если раньше отмечено несколько — считается первый отмеченный
-          var checked = state.cardContacts[0] === c.id ? 'checked' : '';
-          html += '<div class="contact-card">';
-          html += '<div class="top"><div>' +
-            '<div class="nm">' + CRM.esc(c.name || 'Без имени') + '</div>' +
-            (c.role ? '<div class="role">' + CRM.esc(c.role) + '</div>' : '') +
-            (c.phone ? '<div class="num">' + CRM.esc(c.phone) + '</div>' : '') +
-            '</div></div>';
-          html += '<div class="contact-actions">';
-          if (wa) html += '<a class="wa" href="' + wa + '" target="_blank" rel="noopener">WhatsApp</a>';
-          if (tel) html += '<a class="call" href="' + tel + '" target="_blank" rel="noopener">Звонок</a>';
-          html += '<button class="btn secondary small" data-edit="' + c.id + '">Изменить</button>';
-          html += '<button class="btn danger small" data-del="' + c.id + '">Удалить</button>';
-          html += '</div>';
-          html += '<label class="enq"><input type="radio" name="cardEnq" data-enq="' + c.id + '" ' + checked + '/> Заказчик по этой заявке</label>';
-          html += '</div>';
-        });
+        html += '<select id="enqSel" class="enq-sel">' +
+          '<option value=""' + (curId ? '' : ' selected') + '>— выберите сотрудника клиента —</option>' +
+          contacts.map(function (c) {
+            return '<option value="' + CRM.esc(c.id) + '"' + (c.id === curId ? ' selected' : '') + '>' +
+              CRM.esc((c.name || 'Без имени') + (c.role ? ' · ' + c.role : '') + (c.phone ? ' · ' + c.phone : '')) + '</option>';
+          }).join('') + '</select>';
+        var cur = contacts.filter(function (c) { return c.id === curId; })[0];
+        if (cur) {
+          var wa1 = CRM.waLink(cur.phone), tel1 = CRM.telLink(cur.phone);
+          html += '<div class="enq-cur"><b>' + CRM.esc(cur.name || 'Без имени') + '</b>' + (cur.phone ? ' · ' + CRM.esc(cur.phone) : '') +
+            '<span class="contact-actions" style="margin:0 0 0 auto">' +
+            (wa1 ? '<a class="wa" href="' + wa1 + '" target="_blank" rel="noopener">WhatsApp</a>' : '') +
+            (tel1 ? '<a class="call" href="' + tel1 + '" target="_blank" rel="noopener">Позвонить</a>' : '') + '</span></div>';
+        } else {
+          html += '<div class="enq-warn">⚠ Заказчик не выбран — без него расчёт по заказу не сохранится.</div>';
+        }
       }
+
+      html += '<h3>Контакты компании</h3>';
+      contacts.forEach(function (c) {
+        html += '<div class="crow">' +
+          '<span class="nm">' + CRM.esc(c.name || 'Без имени') + '</span>' +
+          (c.role ? '<span class="role">' + CRM.esc(c.role) + '</span>' : '') +
+          (c.phone ? '<span class="num">' + CRM.esc(c.phone) + '</span>' : '') +
+          '<span class="crow-act"><button class="btn secondary small" data-edit="' + c.id + '">Изменить</button>' +
+          '<button class="btn danger small" data-del="' + c.id + '">Удалить</button></span></div>';
+      });
+      if (!contacts.length) html += '<div class="muted">Нет контактов.</div>';
 
       html += '<div class="btnbar">' +
         '<button class="btn" id="addContact">+ Добавить контакт</button>' +
@@ -315,10 +333,10 @@
           deleteContact(company.id, cid);
         });
       });
-      Array.prototype.forEach.call(document.querySelectorAll('[data-enq]'), function (el) {
-        el.addEventListener('change', function () {
-          toggleEnquiry(el.getAttribute('data-enq'), el.checked);
-        });
+      var enqSel = document.getElementById('enqSel');
+      if (enqSel) enqSel.addEventListener('change', function () {
+        toggleEnquiry(enqSel.value, !!enqSel.value);
+        renderHome();
       });
 
       Array.prototype.forEach.call(document.querySelectorAll('[data-obj-edit]'), function (el) {
