@@ -49,6 +49,13 @@
     .map-links a { background: transparent; color: #4c9aff; border: 1px solid var(--line); font-size: 11px; padding: 4px 8px; }
     .map-links a:active { background: rgba(76,154,255,0.18); }
     .empty-box { padding: 6px 2px; }
+    /* одна строка: компания · заказчик · телефон · WhatsApp · Звонок (решение Асхата, 05.11.2026) */
+    .line1 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+    .line1 .co { font-size: 14px; font-weight: 700; color: var(--txt); }
+    .line1 .nm { font-size: 13px; font-weight: 600; color: var(--txt); }
+    .line1 .num { font-size: 13px; color: var(--muted); white-space: nowrap; }
+    .line1 .sep { color: var(--muted); }
+    .line1 .actions { margin-left: auto; }
   </style>
 </head>
 <body>
@@ -119,23 +126,27 @@
           var toShow = selected;
 
           var html = '';
-          html += '<div class="company-name">' + CRM.esc(company.name) + '</div>';
+          var c0 = toShow[0] || null;
+          var wa0 = c0 ? CRM.waLink(c0.phone) : null, tel0 = c0 ? CRM.telLink(c0.phone) : null;
+          html += '<div class="line1">' +
+            '<span class="co">' + CRM.esc(company.name) + '</span>' +
+            (c0 ? '<span class="sep">·</span><span class="nm" title="' + CRM.esc(c0.role || '') + '">' + CRM.esc(c0.name || 'Без имени') + '</span>' : '') +
+            (c0 && c0.phone ? '<span class="sep">·</span><span class="num">' + CRM.esc(c0.phone) + '</span>' : '') +
+            '<span class="actions">' +
+              (wa0 ? '<a class="wa" href="' + wa0 + '" target="_blank" rel="noopener">WhatsApp</a>' : '') +
+              (tel0 ? '<a class="call" href="' + tel0 + '" target="_blank" rel="noopener">Позвонить</a>' : '') +
+            '</span></div>';
 
           var obj = (company.objects || []).filter(function (o) { return o.id === cardObjectId; })[0];
           if (obj) {
-            html += '<div class="req">Объект: ' + CRM.esc(obj.name) + '</div>';
+            html += '<div class="req" style="margin-top:4px">Объект: ' + CRM.esc(obj.name) + '</div>';
             if (obj.addr) {
               var mu = CRM.mapUrls(obj.addr);
               html += '<a class="addr-link" href="' + mu.gis + '" target="_blank" rel="noopener" title="Открыть в 2ГИС">' + CRM.esc(obj.addr) + '</a>';
             }
           }
 
-          if (toShow.length) {
-            html += '<div class="contacts">';
-            html += '<div class="req" style="margin-bottom:4px;">Заказчик:</div>';
-            toShow.forEach(function (c) { html += renderContactRow(c); });
-            html += '</div>';
-          } else {
+          if (!c0) {
             html += '<div class="req" style="margin-top:6px;color:#e8c07d;">⚠ Заказчик не выбран. Нажмите «Управление» и отметьте одного человека — без этого расчёт не сохранится.</div>';
           }
 
