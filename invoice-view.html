@@ -390,7 +390,7 @@
       ov.querySelector('#edCancel').onclick=function(){ ov.remove(); };
       ov.querySelector('#edSave').onclick=function(){
         var btn=this; btn.disabled=true; btn.textContent='Сохраняю…';
-        postJ('/invoice-revise',{ id:CUR.id, items:items, reason:ov.querySelector('#edReason').value||'', byName:'' })
+        postJ('/invoice-revise',{ id:CUR.id, items:items, reason:ov.querySelector('#edReason').value||'', byName:(Q.get('by')||'') })
           .then(function(j){ ov.remove(); alert('Счёт №'+j.number+' исправлен (версия '+j.version+'), итог '+money(j.total)+' ₸.\nСкачайте новый PDF кнопкой «Скачать PDF».'); reloadAll(j.number); })
           .catch(function(e){ btn.disabled=false; btn.textContent='Сохранить как новую версию'; alert('Не удалось: '+(e&&e.message||e)); });
       };
@@ -408,7 +408,7 @@
         if(!lines.length){ alert('Отметьте строки для нового счёта.'); return; }
         if(lines.length===items.length){ alert('Все строки выделить нельзя — тогда просто используйте этот счёт.'); return; }
         var btn=this; btn.disabled=true;
-        postJ('/invoice-split',{ id:CUR.id, lines:lines, byName:'' })
+        postJ('/invoice-split',{ id:CUR.id, lines:lines, byName:(Q.get('by')||'') })
           .then(function(j){ ov.remove(); alert('Готово: новый счёт №'+j.newNumber+' на '+money(j.movedTotal)+' ₸.\nСчёт №'+j.number+' теперь на '+money(j.keptTotal)+' ₸.\nНе забудьте скачать новые PDF обоих счетов.'); reloadAll(j.number); })
           .catch(function(e){ btn.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
       };
@@ -416,14 +416,14 @@
     document.getElementById('invResid').onclick=function(){
       var sum=prompt('Счёт на остаток по счёту №'+CUR.number+'.\nСумма остатка (оставьте как есть — посчитаем «сумма счёта минус поступления»):','');
       if(sum===null) return;
-      postJ('/invoice-residual',{ id:CUR.id, amount:(sum?+sum:0)||0, byName:'' })
+      postJ('/invoice-residual',{ id:CUR.id, amount:(sum?+sum:0)||0, byName:(Q.get('by')||'') })
         .then(function(j){ alert('Создан счёт №'+j.number+' на остаток '+money(j.amount)+' ₸ по счёту №'+j.parent+'.\nВ 1С вносите этот же номер. Откройте его в журнале и скачайте PDF.'); reloadAll(CUR.number); })
         .catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
     };
     document.getElementById('invAnnul').onclick=function(){
       var reason=prompt('Аннулировать счёт №'+CUR.number+'?\nСчёт перестанет учитываться в суммах, его заказы снова можно будет выставить. Номер и история сохранятся.\n\nПричина:', 'ошибка в счёте');
       if(reason===null) return;
-      postJ('/invoice-archive',{ id:CUR.id, archived:1, reason:reason||'аннулирован', byName:'' })
+      postJ('/invoice-archive',{ id:CUR.id, archived:1, reason:reason||'аннулирован', byName:(Q.get('by')||'') })
         .then(function(){ reloadAll(CUR.number); }).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
     };
 

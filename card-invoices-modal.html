@@ -150,7 +150,8 @@
           '<td class="small muted">'+esc(supLbl)+'</td>'+
           '<td style="white-space:nowrap;text-align:right">'+
             '<button class="btn vw" data-i="'+i+'" type="button" title="Открыть в новом окне без скачивания">Просмотр</button> '+
-            '<button class="btn green dl" data-i="'+i+'" type="button">Скачать PDF</button>'+
+            '<button class="btn green dl" data-i="'+i+'" type="button">Скачать PDF</button> '+
+            '<button class="btn ed" data-i="'+i+'" type="button" title="Исправить строки, разделить, выставить остаток или аннулировать — номер счёта не меняется">✎ Изменить</button>'+
             (IS_DIRECTOR?' <button class="btn red del" data-i="'+i+'" type="button" title="Удалить из журнала">✕</button>':'')+
           '</td>'+
         '</tr>';
@@ -163,6 +164,22 @@
     [].forEach.call(document.querySelectorAll('.dl'), function(b){ b.onclick=function(){ downloadPdf(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.vw'), function(b){ b.onclick=function(){ previewPdf(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.del'), function(b){ b.onclick=function(){ delInvoice(ROWS[+this.getAttribute('data-i')]); }; });
+    [].forEach.call(document.querySelectorAll('.ed'), function(b){ b.onclick=function(){ openEdit(ROWS[+this.getAttribute('data-i')]); }; });
+  }
+  // ПРАВКА СЧЁТА ПРЯМО ИЗ КАРТОЧКИ (решение Асхата, 05.11.2026): то же окно счёта, что
+  // в бухгалтерии (исправить строки без смены номера, разделить, остаток, аннулировать),
+  // поверх списка. Доступ уже проверен выше: руководитель или право «выставлять счёт».
+  var ME_NAME = '';
+  t.member('fullName').then(function(m){ ME_NAME=(m&&m.fullName)||''; }).catch(function(){});
+  function openEdit(row){
+    var host=document.getElementById('edHost');
+    if(!host){ host=document.createElement('div'); host.id='edHost'; document.body.appendChild(host); }
+    host.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:90;display:flex;flex-direction:column">'+
+      '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
+      '<button id="edBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад к счетам заказа</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт № '+esc(row.number)+'</div><span style="width:160px"></span></div>'+
+      '<iframe src="./invoice-view.html?number='+encodeURIComponent(row.number)+'&by='+encodeURIComponent(ME_NAME)+'&t='+Date.now()+'" style="flex:1;border:0;background:#1d2125"></iframe></div>';
+    document.getElementById('edBack').onclick=function(){ host.innerHTML=''; load(); };
   }
 
   document.getElementById('close').onclick=function(){ t.closeModal(); };
