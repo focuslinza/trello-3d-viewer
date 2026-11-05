@@ -37,7 +37,7 @@
   var t = window.TrelloPowerUp.iframe();
   var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
   var cardId = t.arg('cardId') || null;
-  var ROWS = [];
+  var ROWS = [], SENDS = [];
   var IS_DIRECTOR = false;
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -81,9 +81,11 @@
         ROWS=(j.rows||[]).map(function(r){
           return { id:r.id, number:r.number, dateIso:r.date_iso||'', dateText:r.date_text||'', contract:r.contract||'Без договора',
                    supplier:parse(r.supplier_json,null), buyer:parse(r.buyer_json,null), items:parse(r.items_json,[]),
-                   total:+r.total||0, createdAt:r.created_at||'' };
+                   total:+r.total||0, createdAt:r.created_at||'', sentTo:r.sent_to||'', sentAt:r.sent_at||'', archived:+r.archived===1 };
         });
-        render();
+        return fetch(WORKER+'/order-status?cardId='+encodeURIComponent(cardId||'')).then(function(r){return r.json();}).then(function(st){
+          SENDS=((st&&st.history)||[]).filter(function(x){ return x.field==='invoiceSent' && x.value && /^выслан:/.test(String(x.why||'')); });
+        }).catch(function(){}).then(render);
       })
       .catch(function(e){
         if(e&&e.code===404){ boot(''); document.getElementById('app').innerHTML=
@@ -145,7 +147,7 @@
         h+='<tr>'+
           '<td><b>'+esc(r.number)+'</b></td>'+
           '<td class="small">'+esc(r.dateIso?String(r.dateIso).slice(0,10):String(r.createdAt||'').slice(0,10))+'</td>'+
-          '<td>'+esc((r.buyer&&r.buyer.name)||'—')+'</td>'+
+          '<td>'+esc((r.buyer&&r.buyer.name)||'—')+(r.sentTo?'<div class="small" style="color:#4bce97">выслан: '+esc(r.sentTo)+(r.sentAt?' · '+esc(String(r.sentAt).slice(0,16).replace("T"," ")):'')+'</div>':'')+(r.archived?'<div class="small" style="color:#e8a59d">аннулирован</div>':'')+'</td>'+
           '<td class="num">'+money(r.total)+' ₸</td>'+
           '<td class="small muted">'+esc(supLbl)+'</td>'+
           '<td style="white-space:nowrap;text-align:right">'+
@@ -160,6 +162,12 @@
       h+='<div class="small muted" style="margin-top:10px">PDF собирается заново из сохранённых данных счёта — он идентичен тому, что скачивался при выставлении.</div>';
     }
     h+='</div>';
+    // КОМУ ОТПРАВЛЯЛИ (решение Асхата, 05.11.2026): отметки «выслан» по этому заказу из журнала
+    if (SENDS.length) {
+      h+='<div class="sec"><h3>Кому отправляли счёт по этому заказу</h3><table><tbody>'+SENDS.map(function(x){
+        return '<tr><td class="small muted" style="white-space:nowrap">'+esc(String(x.at||'').slice(0,16))+'</td><td>'+esc(String(x.why||'').replace(/^выслан:\s*/,''))+'</td><td class="small muted">'+esc(x.by||'')+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+    }
     document.getElementById('app').innerHTML=h;
     [].forEach.call(document.querySelectorAll('.dl'), function(b){ b.onclick=function(){ downloadPdf(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.vw'), function(b){ b.onclick=function(){ previewPdf(ROWS[+this.getAttribute('data-i')]); }; });

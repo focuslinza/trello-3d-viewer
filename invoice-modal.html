@@ -686,7 +686,18 @@
         var o=ALL_ORDERS.filter(function(x){return x.cardId===id;})[0]; if(!o) return;
         var newVal=!o[field];
         if(field==='paid'){ markPaid(id, newVal); return; }
-        var self=this; self.classList.add('busy');
+        var self=this;
+        if(field==='invoiceSent' && newVal && !o.isRepair){
+          askRecipient(o.personName||'').then(function(r){
+            if(!r) return;
+            self.classList.add('busy');
+            fetch(WORKER+'/acct-set',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:id, field:field, value:1, why:'выслан: '+r.label }) })
+              .then(function(x){return x.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил'); o[field]=true; render(); })
+              .catch(function(e){ self.classList.remove('busy'); alert('Не удалось изменить статус: '+(e&&e.message||e)); });
+          });
+          return;
+        }
+        self.classList.add('busy');
         var p = o.isRepair
           ? fetch(WORKER+'/repair-flags',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:o.repairId, field:field, value:newVal?1:0 }) })
           : fetch(WORKER+'/acct-set',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:id, field:field, value:newVal?1:0 }) });
@@ -1033,6 +1044,42 @@
   // сообщения — окно с той же кнопкой-чипом «выслан», что в списке заказов, чтобы
   // было сразу видно, что нажать после отправки счёта клиенту. Нажатие ставит
   // «выслан» тем же вызовом /acct-set (в журнал — с именем нажавшего).
+  // КОМУ ОТПРАВИЛИ СЧЁТ (решение Асхата, 05.11.2026): при отметке «выслан» спрашиваем,
+  // кому и как отправили. Список — сотрудники выбранного клиента (по умолчанию заказчик
+  // по заявке), можно вписать другого. Записывается в журнал заказа («выслан: Куаныш
+  // (WhatsApp)», с именем нажавшего) и в журнал счёта (поле «кому»).
+  var SENT_HOWS = ['WhatsApp','Почта','Лично','Другое'];
+  var LAST_SENT = null;
+  function askRecipient(defaultName){
+    return new Promise(function(done){
+      var co = companyById(selectedCompanyId) || {};
+      var people = (co.contacts||[]).filter(function(c){ return c && c.name; });
+      var def = LAST_SENT ? LAST_SENT.to : (defaultName || (people[0]&&people[0].name) || '');
+      var known = people.some(function(c){ return c.name===def; });
+      var how0 = LAST_SENT ? LAST_SENT.how : 'WhatsApp';
+      var h='<div id="rcpOvl" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px">'+
+        '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;max-width:460px;width:100%;padding:18px 20px">'+
+        '<div style="font-weight:700;font-size:15px;margin-bottom:10px">Кому отправили счёт?</div>'+
+        '<select id="rcpSel" style="width:100%;padding:8px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px">'+
+          people.map(function(c){ return '<option value="'+esc(c.name)+'"'+(c.name===def?' selected':'')+'>'+esc(c.name+(c.role?' · '+c.role:'')+(c.phone?' · '+c.phone:''))+'</option>'; }).join('')+
+          '<option value=""'+(known?'':' selected')+'>другой человек…</option></select>'+
+        '<input type="text" id="rcpOther" placeholder="Имя, телефон или почта" value="'+(known?'':esc(def))+'" style="width:100%;margin-top:8px;'+(known&&people.length?'display:none':'')+'">'+
+        '<div style="margin:12px 0 4px" class="small muted">Как отправили</div>'+
+        '<div id="rcpHow" style="display:flex;gap:6px;flex-wrap:wrap">'+SENT_HOWS.map(function(x){ return '<span class="chip'+(x===how0?' on':'')+'" data-how="'+x+'">'+x+'</span>'; }).join('')+'</div>'+
+        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="rcpCancel" type="button">Отмена</button><span class="chip on" id="rcpOk" style="font-size:13px;padding:6px 14px">✓ выслан</span></div>'+
+        '</div></div>';
+      var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host);
+      var sel=host.querySelector('#rcpSel'), oth=host.querySelector('#rcpOther'), how=how0;
+      sel.onchange=function(){ oth.style.display = sel.value ? 'none' : ''; if(!sel.value) oth.focus(); };
+      [].forEach.call(host.querySelectorAll('[data-how]'), function(c){ c.onclick=function(){ how=this.getAttribute('data-how'); [].forEach.call(host.querySelectorAll('[data-how]'), function(x){ x.classList.toggle('on', x===c); }); }; });
+      host.querySelector('#rcpCancel').onclick=function(){ host.remove(); done(null); };
+      host.querySelector('#rcpOk').onclick=function(){
+        var to = sel.value || String(oth.value||'').trim();
+        if(!to){ oth.style.display=''; oth.focus(); oth.style.borderColor='#f28b82'; return; }
+        host.remove(); LAST_SENT={ to:to, how:how }; done({ to:to, how:how, label: to+' ('+how+')' });
+      };
+    });
+  }
   function askMarkSent(number, lines, orders){
     var todo = (orders||[]).filter(function(o){ return !o.invoiceSent; });
     var h='<div id="sentOvl" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:95;display:flex;align-items:center;justify-content:center;padding:16px">'+
@@ -1057,10 +1104,23 @@
     var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host);
     function closeIt(){ host.remove(); render(); }
     document.getElementById('sentLater').onclick=closeIt;
+    var RCP = null;
+    function recipient(){
+      if (RCP) return Promise.resolve(RCP);
+      var firstPerson = (todo.filter(function(o){ return o.personName; })[0]||{}).personName || '';
+      return askRecipient(firstPerson).then(function(r){
+        if(!r) return null;
+        RCP = r;
+        // журнал счёта: кому отправили (карточки уже в «Ждём оплату» — перенос ничего не сдвинет)
+        fetch(WORKER+'/invoice-mark-sent',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ number:String(number||''), sentTo:r.label }) }).catch(function(){});
+        return r;
+      });
+    }
     function mark(o, chip){
       if(o.invoiceSent){ return Promise.resolve(); }
+      if(!RCP) return recipient().then(function(r){ if(r) return mark(o, chip); });
       chip && chip.classList.add('busy');
-      return fetch(WORKER+'/acct-set',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:o.cardId, field:'invoiceSent', value:1 }) })
+      return fetch(WORKER+'/acct-set',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:o.cardId, field:'invoiceSent', value:1, why:'выслан: '+RCP.label }) })
         .then(function(r){return r.json();}).then(function(j){
           if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
           o.invoiceSent=true;
@@ -1072,10 +1132,13 @@
     });
     var all=document.getElementById('sentAll');
     if(all) all.onclick=function(){
-      var self=this; self.classList.add('busy');
+      var self=this;
+      recipient().then(function(r){ if(!r) return;
+      self.classList.add('busy');
       var chips={}; [].forEach.call(host.querySelectorAll('.sentChip'), function(c){ chips[c.getAttribute('data-id')]=c; });
       todo.reduce(function(p,o){ return p.then(function(){ return mark(o, chips[o.cardId]); }); }, Promise.resolve())
         .then(function(){ self.classList.remove('busy'); self.classList.add('on'); self.textContent='✓ выслан — все'; setTimeout(closeIt, 700); });
+      });
     };
   }
   document.getElementById('close').onclick=function(){ t.closeModal(); };
