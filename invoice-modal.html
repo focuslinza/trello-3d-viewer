@@ -16,7 +16,14 @@
     *{box-sizing:border-box}
     body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
     .hd{position:sticky;top:0;background:var(--accent);color:#fff;text-align:center;font-weight:700;padding:12px;font-size:15px;z-index:5}
-    .wrap{padding:16px;max-width:900px;margin:0 auto}
+    .wrap{padding:16px;max-width:1440px;margin:0 auto}
+    /* заказы клиента — одна строка на заказ (решение Асхата, 05.11.2026) */
+    table.otbl td,table.otbl th{white-space:nowrap;padding:6px 5px}
+    table.otbl td.nm{width:100%;max-width:0}
+    table.otbl .onm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    table.otbl .qty{width:54px;padding:5px 6px}
+    table.otbl select.invSel{width:72px;padding:4px 2px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:6px}
+    table.otbl .act{padding:1px 6px;font-size:11px;border-radius:6px}
     .sec{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
     h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
     .muted{color:var(--muted)}
@@ -539,7 +546,7 @@
     if(allRows.length){
       html+='<div class="small muted" style="margin-bottom:6px">Галочка — включить в счёт (только неоплаченные). Статусы: «выслан» и «сдали» можно отметить здесь; «оплачен» — только при наличных (иначе отмечает бухгалтер); «акт» ставит бухгалтер. «История» — в какие счета заказ уже входил.</div>';
       var allOn = co.length>0 && co.every(function(o){ return o.checked; });
-      html+='<table><thead><tr><th>'+(co.length?'<input type="checkbox" id="ckAll" title="Выбрать все / снять все"'+(allOn?' checked':'')+'>':'')+'</th><th>№</th><th>Заказ</th><th class="num">Кол-во</th>'+(ONLY_REPAIR?'':'<th>Степень</th>')+'<th class="num">Сумма'+(supplierKey!=='cash'?' (с налогом)':'')+'</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th><th>История</th></tr></thead><tbody>';
+      html+='<table class="otbl"><thead><tr><th>'+(co.length?'<input type="checkbox" id="ckAll" title="Выбрать все / снять все"'+(allOn?' checked':'')+'>':'')+'</th><th>№</th><th>Заказ</th><th class="num">Кол-во</th>'+(ONLY_REPAIR?'':'<th>Степень</th>')+'<th class="num" title="'+(supplierKey!=='cash'?'С налогом выбранной компании':'Без налога')+'">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th><th>История</th><th></th></tr></thead><tbody>';
       function chip(o, field, label, active, title){
         var on=!!o[field];
         return '<span class="chip'+(on?' on':'')+(active?'':' ro')+'" data-id="'+esc(o.cardId)+'" data-f="'+field+'" title="'+esc(title||'')+'">'+(on?'✓ ':'')+label+'</span>';
@@ -553,25 +560,25 @@
         html+='<tr'+(o.paid?' style="opacity:.8"':'')+'>'+
           '<td>'+(o.paid?'':'<input type="checkbox" class="ck" data-id="'+esc(o.cardId)+'"'+(o.checked?' checked':'')+'>')+'</td>'+
           '<td class="small">'+numCell+'</td>'+
-          '<td>'+esc(o.name)+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+
+          '<td class="nm"><div class="onm" title="'+esc(o.name+(o.personName?' ('+o.personName+')':''))+'">'+esc(o.name)+(o.personName?' <span class="muted">('+esc(o.personName)+')</span>':'')+
             (o.sampleOf?' <span class="small" style="color:#e8c07d" title="Основной заказ, созданный из одобренного образца">по образцу</span>':'')+
-            (o.mainOf?' <span class="small" style="color:#e8c07d" title="Образец: по нему уже создан основной заказ">образец → есть основной</span>':'')+
-            (!o.paid&&!o.isRepair?' <button class="btn ghost cancelbtn" data-id="'+esc(o.cardId)+'" data-num="'+esc(o.number||'')+'" type="button" style="padding:1px 7px;font-size:11px;color:#f28b82" title="Отказ клиента: уйдёт из счетов, бухгалтерии, аналитики и с доски (обратимо)">отказ</button> <button class="btn ghost hidebtn" data-id="'+esc(o.cardId)+'" type="button" style="padding:1px 7px;font-size:11px" title="Убрать заказ из списка (тест/дубль, не оплата)">убрать</button>':'')+'</td>'+
+            (o.mainOf?' <span class="small" style="color:#e8c07d" title="Образец: по нему уже создан основной заказ">образец → есть основной</span>':'')+'</div></td>'+
           '<td class="num">'+(o.paid?'<span class="muted">'+(o.qty||1)+'</span>':'<input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'">')+'</td>'+
           (ONLY_REPAIR ? '' : (o.paid ? '<td class="muted small">'+((+o.engCoef||0)===0?'нет':(+o.engCoef===0.5?'+50%':'+100%'))+'</td>' :
-            '<td><select class="invSel" data-id="'+esc(o.cardId)+'" title="Степень изобретения назначает руководство: начисляется клиенту поверх работ, инженер получает свою долю от неё">'+
+            '<td><select class="invSel" data-id="'+esc(o.cardId)+'" title="Степень изобретения: нет / +50% доработка / +100% новый продукт. Назначает руководство: начисляется клиенту поверх работ, инженер получает свою долю от неё">'+
               '<option value="0"'+((+o.engCoef||0)===0?' selected':'')+'>нет</option>'+
-              '<option value="0.5"'+((+o.engCoef||0)===0.5?' selected':'')+'>доработка +50%</option>'+
-              '<option value="1"'+((+o.engCoef||0)===1?' selected':'')+'>новый продукт +100%</option>'+
+              '<option value="0.5"'+((+o.engCoef||0)===0.5?' selected':'')+' title="доработка">+50%</option>'+
+              '<option value="1"'+((+o.engCoef||0)===1?' selected':'')+' title="новый продукт">+100%</option>'+
             '</select></td>'))+
-          '<td class="num">'+money(o.total*(o.paid?1:kFor(o)))+(o.taxIncluded&&!o.paid?' <span class="muted" title="Этот заказ посчитан со включённым налогом — повторно налог не добавляется">₸ (налог внутри)</span>':' ₸')+
-            ((+o.discount>0)?'<div class="small" style="color:#e8c07d" title="Спеццена в расчёте: в счёте клиенту идёт итоговая цена, скидка не показывается">уступка '+money(o.discount)+' ₸ ('+Math.round(o.discount/(o.total+o.discount)*100)+'%)</div>':'')+'</td>'+
+          '<td class="num">'+money(o.total*(o.paid?1:kFor(o)))+(o.taxIncluded&&!o.paid?' <span class="muted" title="Этот заказ посчитан со включённым налогом — повторно налог не добавляется">₸*</span>':' ₸')+
+            ((+o.discount>0)?' <span class="small" style="color:#e8c07d" title="Уступка '+money(o.discount)+' ₸ — спеццена в расчёте; в счёте клиенту итоговая цена, скидка не показывается">−'+Math.round(o.discount/(o.total+o.discount)*100)+'%</span>':'')+'</td>'+
           '<td>'+chip(o,'invoiceSent','выслан',true,'Счёт отправлен клиенту — отмечает тот, кто отправил')+'</td>'+
           '<td>'+chip(o,'paid','оплачен',cashOk,cashOk?'Клиент заплатил наличными':'Оплату по безналу отмечает бухгалтер')+'</td>'+
           '<td>'+chip(o,'delivered','сдали',!o.isRepair,o.isRepair?'Для ремонта = заявка выполнена':'Заказ сдан клиенту — отмечает начальник цеха')+'</td>'+
           '<td>'+chip(o,'actSigned','акт',false,'Акт подписан — отмечает бухгалтер')+'</td>'+
-          '<td class="small muted">'+esc(String(o.paid_at||o.dateAt||'').slice(0,10))+'</td>'+
+          '<td class="small muted">'+esc((function(d){ d=String(d||'').slice(0,10).split('-'); return d.length===3?(d[2]+'.'+d[1]+'.'+d[0].slice(2)):''; })(o.paid_at||o.dateAt))+'</td>'+
           '<td>'+hist+'</td>'+
+          '<td>'+(!o.paid&&!o.isRepair?'<button class="btn ghost cancelbtn act" data-id="'+esc(o.cardId)+'" data-num="'+esc(o.number||'')+'" type="button" style="color:#f28b82" title="Отказ клиента: уйдёт из счетов, бухгалтерии, аналитики и с доски (обратимо)">отказ</button> <button class="btn ghost hidebtn act" data-id="'+esc(o.cardId)+'" type="button" title="Убрать заказ из списка (тест/дубль, не оплата)">убрать</button>':'')+'</td>'+
         '</tr>';
       });
       html+='</tbody></table>';
