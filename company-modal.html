@@ -249,12 +249,17 @@
       var objects = company.objects || [];
       if (objects.length) {
         html += '<h3>Объект заявки</h3>';
-        objects.forEach(function (o) {
-          var sel = state.cardObjectId === o.id ? 'checked' : '';
-          var addrHtml = '';
-          if (o.addr) { var mu = CRM.mapUrls(o.addr); addrHtml = ' <a class="addr-link" href="' + mu.gis + '" target="_blank" rel="noopener" title="Открыть в 2ГИС">' + CRM.esc(o.addr) + '</a>'; }
-          html += '<label class="enq"><input type="radio" name="cardObject" data-obj-pick="' + o.id + '" ' + sel + '/> <b>' + CRM.esc(o.name || 'Без названия') + '</b>' + addrHtml + '</label>';
-        });
+        // выбор объекта — выпадающим списком, как заказчик (решение Асхата, 05.11.2026)
+        var curObj = objects.filter(function (o) { return o.id === state.cardObjectId; })[0];
+        var gis = (curObj && curObj.addr) ? CRM.mapUrls(curObj.addr).gis : null;
+        html += '<div class="enq-line"><select id="objSel" class="enq-sel">' +
+          '<option value=""' + (curObj ? '' : ' selected') + '>— без объекта —</option>' +
+          objects.map(function (o) {
+            return '<option value="' + CRM.esc(o.id) + '"' + (curObj && curObj.id === o.id ? ' selected' : '') + '>' +
+              CRM.esc((o.name || 'Без названия') + (o.addr ? ' · ' + o.addr : '')) + '</option>';
+          }).join('') + '</select>' +
+          (gis ? '<a class="call" href="' + gis + '" target="_blank" rel="noopener" title="Открыть адрес в 2ГИС">2ГИС</a>' : '') +
+          '</div>';
       }
 
 
@@ -329,13 +334,8 @@
           deleteObject(company.id, el.getAttribute('data-obj-del'));
         });
       });
-      // radio click toggles selection (clicking the chosen one again clears it)
-      Array.prototype.forEach.call(document.querySelectorAll('[data-obj-pick]'), function (el) {
-        el.addEventListener('click', function () {
-          var oid = el.getAttribute('data-obj-pick');
-          selectObjectForCard(state.cardObjectId === oid ? null : oid);
-        });
-      });
+      var objSel = document.getElementById('objSel');
+      if (objSel) objSel.addEventListener('change', function () { selectObjectForCard(objSel.value || null); });
     }
 
     // ---------- COMPANY FORM ----------
