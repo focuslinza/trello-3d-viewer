@@ -975,8 +975,38 @@
     }
     setTimeout(loadVersions, 400);
     document.getElementById('btnClose').onclick=function(){ t.closeModal(); };
+    // ЗАКАЗ БЕЗ КЛИЕНТА И ОТВЕТСТВЕННОГО НЕ СОХРАНЯЕТСЯ (решение Асхата, 05.11.2026):
+    // такие заказы терялись — не попадали в счёт клиента и висели «без привязки».
+    // Проверяем по карточке в момент сохранения (а не при открытии окна), чтобы
+    // выбранный только что клиент сразу засчитывался. Для физлица ответственный —
+    // он сам, отдельный контакт не нужен. Ремонт проверку не проходит (у него своя заявка).
+    function checkClientBeforeSave(){
+      if (MODE_REPAIR || !ctx.cardId) return Promise.resolve(null);
+      return Promise.all([
+        fetch(WORKER+'/plugindata?cardId='+encodeURIComponent(ctx.cardId)+(ctx.boardId?'&boardId='+encodeURIComponent(ctx.boardId):'')).then(function(r){return r.json();}),
+        fetch(WORKER+'/companies-list').then(function(r){return r.json();})
+      ]).then(function(rs){
+        var cd=(rs[0]&&rs[0].cardData)||{};
+        var list=(rs[1]&&rs[1].companies)||[];
+        var co=cd.companyId ? list.filter(function(x){return x.id===cd.companyId;})[0] : null;
+        if(!co) return 'Не выбрана компания-клиент. Закройте калькулятор, на карточке откройте «Компания и контакты», выберите компанию и ответственного человека, затем сохраните расчёт снова.';
+        ctx.companyId=co.id; ctx.companyName=co.name||ctx.companyName;
+        var isPerson=((co.type||co.kind)==='person');
+        var contacts=(cd.cardContacts||[]).filter(Boolean);
+        if(!isPerson && !contacts.length) return 'Не выбран ответственный человек клиента ('+(co.name||'компания')+'). На карточке в «Компания и контакты» отметьте контакт (кто заказал), затем сохраните расчёт снова.';
+        return null;
+      }, function(){ return null; }); // нет связи — не мешаем работе, сервер сохранит как раньше
+    }
     document.getElementById('btnSave').onclick=function(){
-      var btn=this; var msg=document.getElementById('msg');
+      var b=this, m=document.getElementById('msg');
+      m.className='msg'; m.textContent='Проверяем клиента…'; b.disabled=true;
+      checkClientBeforeSave().then(function(err){
+        if(err){ m.className='msg err'; m.textContent=err; b.disabled=false; return; }
+        doSave(b);
+      });
+    };
+    function doSave(btn){
+      var msg=document.getElementById('msg');
       msg.className='msg'; msg.textContent='Сохранение…'; btn.disabled=true;
       var inp=lastResult.inputs, res=lastResult.result;
       // СДЕЛЬНАЯ — ВСЕГДА ОТ ФАКТИЧЕСКИХ ЦЕН РАСЧЁТА (решение Асхата, 09.2026):
