@@ -586,7 +586,42 @@
     // Рабочая копия WK хранит все правки, поэтому смена вкладки/группы/поиска
     // ничего не теряет. Заводские позиции: меняется только цена (на сервер уходят
     // только изменённые). Свои позиции: название, размер, группа, цена.
-    var NOM={kind:'mat', grp:'', q:'', focus:''};
+    var NOM={kind:'mat', grp:'', q:'', focus:'', open:{}, flt:{}};
+    // ХАРАКТЕРИСТИКИ (как «свойства» в 1С): для групп со схемой снабженец не пишет
+    // название руками, а выбирает значения — наименование собирается само в одном
+    // порядке. Так нет дублей «поворот. с торм.» / «с тормозом, поворотное».
+    // Схемы по группам: ключ — проверка названия группы.
+    var NOM_SCHEMAS=[
+      { test:/колес/i, base:'Колесо', fields:[
+        {k:'d',     lbl:'Диаметр, мм', type:'num', list:[50,75,100,125,160,200], spec:function(v){return 'д'+v;}},
+        {k:'body',  lbl:'Корпус',      opts:['нерж','оцинк','сталь крашеная']},
+        {k:'mount', lbl:'Крепление',   opts:['платформа','штык','под болт']},
+        {k:'swivel',lbl:'Поворот',     opts:['поворотное','неповоротное']},
+        {k:'brake', lbl:'Тормоз',      opts:['с тормозом','без тормоза']},
+        {k:'tread', lbl:'Обод',        opts:['полиуретан','резина','полиамид','сталь'], tok:{'полиуретан':'ПУ'}},
+        {k:'bear',  lbl:'Подшипник',   opts:['шариковый','роликовый','скольжения'], tok:{'шариковый':'шарик. подш.','роликовый':'ролик. подш.','скольжения':'подш. скольж.'}},
+        {k:'heat',  lbl:'Жаростойкое', opts:['да','нет'], tok:{'да':'жаростойкое','нет':''}},
+        {k:'load',  lbl:'Нагрузка, кг',type:'num', tok:function(v){return 'до '+v+' кг';}},
+        {k:'note',  lbl:'Примечание',  type:'txt'}
+      ]}
+    ];
+    function nomSchema(sec){ for(var i=0;i<NOM_SCHEMAS.length;i++) if(NOM_SCHEMAS[i].test.test(sec||'')) return NOM_SCHEMAS[i]; return null; }
+    function nomBuild(sc,a){
+      a=a||{}; var parts=[sc.base], spec='';
+      sc.fields.forEach(function(f){
+        var v=a[f.k]; if(v==null||v==='') return;
+        if(f.spec){ spec=f.spec(v); return; }
+        var t=(typeof f.tok==='function')?f.tok(v):(f.tok&&f.tok[v]!==undefined?f.tok[v]:v);
+        if(t) parts.push(t);
+      });
+      return { lbl:parts.join(' '), spec:spec };
+    }
+    // характеристики заводских позиций (их нельзя править — выводим из названия)
+    function nomFactoryAttrs(sc,r){
+      var a={}, m=String(r.spec||'').match(/д\s*(\d+)/i); if(m) a.d=m[1];
+      if(/жаро/i.test(r.lbl||'')) a.heat='да';
+      return a;
+    }
     var WK=null, DIRTY={};
     function nomClone(o){ return JSON.parse(JSON.stringify(o||{})); }
     function nomInit(){
@@ -606,10 +641,11 @@
       var CAT=(kind==='mat'?CALC.MAT:CALC.CMP)||{}, over=WK[kind], rows=[];
       Object.keys(CAT).forEach(function(code){
         var it=CAT[code], has=(over[code]!=null&&over[code]!=='');
-        rows.push({ code:code, f:1, sec:it.sec||'', lbl:it.lbl, spec:String(it.spec||'').trim(), unit:nomUnit(kind,it), price:has?over[code]:it.u, base:it.u });
+        var rr={ code:code, f:1, sec:it.sec||'', lbl:it.lbl, spec:String(it.spec||'').trim(), unit:nomUnit(kind,it), price:has?over[code]:it.u, base:it.u };
+        var sc0=nomSchema(rr.sec); rr.attrs=sc0?nomFactoryAttrs(sc0,rr):null; rows.push(rr);
       });
       nomCust(kind).forEach(function(it){
-        rows.push({ code:it.code, f:0, sec:it.sec||'', lbl:it.lbl||'', spec:it.spec||'', unit:nomUnit(kind,it), price:it.u, it:it });
+        rows.push({ code:it.code, f:0, sec:it.sec||'', lbl:it.lbl||'', spec:it.spec||'', unit:nomUnit(kind,it), price:it.u, it:it, attrs:nomSchema(it.sec)?(it.attrs||{}):null });
       });
       return rows;
     }
@@ -640,7 +676,7 @@
         'table.nom tr.ngh td{background:var(--bg2);font-weight:700;font-size:12px;color:#e6edf3;padding:6px 8px}'+
         'table.nom tr.dirty td{background:rgba(232,192,125,.10)}'+
         'table.nom tr.dirty td:first-child{box-shadow:inset 3px 0 0 var(--amber)}'+
-        'table.nom input{padding:5px 7px;font-size:13px}'+
+        'table.nom input,table.nom select{padding:5px 7px;font-size:13px;box-sizing:border-box}'+
         'table.nom .np{width:110px;text-align:right}'+
         '.nom-tag{font-size:10.5px;color:var(--blue);border:1px solid #2f4a7a;border-radius:4px;padding:0 4px;margin-left:6px}'+
         '.nom-x{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px}.nom-x:hover{color:var(--red)}'+
@@ -659,18 +695,42 @@
       h+='<div class="nom-wrap"><div class="nom-side">';
       h+='<div class="nom-g'+(NOM.grp===''?' on':'')+'" data-ng=""><span>Все</span><i>'+rows.length+'</i></div>';
       G.list.forEach(function(s){ h+='<div class="nom-g'+(NOM.grp===s?' on':'')+'" data-ng="'+esc(s)+'"><span>'+esc(s)+'</span><i>'+G.cnt[s]+'</i></div>'; });
-      h+='</div><div class="nom-main"><table class="nom"><thead><tr><th>Наименование</th><th>Размер</th><th>Ед.</th><th style="text-align:right">Цена, ₸</th><th></th></tr></thead><tbody>';
+      h+='</div><div class="nom-main">';
+      var gsc=NOM.grp?nomSchema(NOM.grp):null;
+      if(gsc){
+        // фильтр по характеристикам: только значения, которые реально есть в группе
+        var inG=rows.filter(function(r){ return (r.sec||'Без группы')===NOM.grp; });
+        var fb='';
+        gsc.fields.forEach(function(f){
+          if(f.type==='txt') return;
+          var vals=[]; inG.forEach(function(r){ var v=r.attrs&&r.attrs[f.k]; if(v!=null&&v!==''&&vals.indexOf(String(v))<0) vals.push(String(v)); });
+          if(!vals.length) return;
+          if(f.type==='num') vals.sort(function(a,b){return a-b;});
+          fb+='<label class="small muted" style="display:inline-flex;gap:4px;align-items:center">'+esc(f.lbl)+
+              '<select data-flt="'+f.k+'" style="padding:3px 6px;font-size:12px"><option value="">любой</option>'+
+              vals.map(function(v){ return '<option'+(String(NOM.flt[f.k]||'')===v?' selected':'')+'>'+esc(v)+'</option>'; }).join('')+'</select></label>';
+        });
+        if(fb) h+='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:8px"><b class="small">Фильтр:</b>'+fb+'<button class="btn" id="nomFltClr" type="button" style="padding:3px 9px;font-size:12px">сбросить</button></div>';
+      }
+      h+='<table class="nom"><thead><tr><th>Наименование</th><th>Размер</th><th>Ед.</th><th style="text-align:right">Цена, ₸</th><th></th></tr></thead><tbody>';
       var shown=NOM.grp?[NOM.grp]:G.list;
       shown.forEach(function(s){
         if(!NOM.grp) h+='<tr class="ngh" data-gh="'+esc(s)+'"><td colspan="5">'+esc(s)+'</td></tr>';
         rows.filter(function(r){ return (r.sec||'Без группы')===s; }).forEach(function(r){
           var q=(r.lbl+' '+r.spec+' '+r.sec).toLowerCase();
           var dk=kind+':'+r.code;
-          h+='<tr class="nrow'+(DIRTY[dk]?' dirty':'')+'" data-g="'+esc(s)+'" data-q="'+esc(q)+'" data-code="'+esc(r.code)+'" data-f="'+r.f+'">';
+          var rsc=r.f?null:nomSchema(r.sec);
+          h+='<tr class="nrow'+(DIRTY[dk]?' dirty':'')+'" data-g="'+esc(s)+'" data-q="'+esc(q)+'" data-code="'+esc(r.code)+'" data-f="'+r.f+'" data-attrs="'+esc(JSON.stringify(r.attrs||{}))+'">';
           if(r.f){
             h+='<td>'+esc(nomName(r))+'</td><td class="muted">'+esc(r.spec)+'</td>';
           } else {
             var opts=G.list.map(function(g){ return '<option'+(g===(r.sec||'Без группы')?' selected':'')+'>'+esc(g)+'</option>'; }).join('')+'<option value="__new__">+ новая группа…</option>';
+            if(rsc){
+              h+='<td><div style="display:flex;gap:6px;align-items:center"><span class="nom-auto" style="flex:1">'+esc(r.lbl||rsc.base)+'</span><span class="nom-tag">своя</span>'+
+                 '<button class="btn nom-attr-t" type="button" style="padding:2px 8px;font-size:12px" title="Характеристики">⚙ '+(NOM.open[r.code]?'▲':'▼')+'</button></div>'+
+                 '<select data-cf="sec" style="margin-top:3px;font-size:11.5px;padding:2px 4px;max-width:100%">'+opts+'</select></td>'+
+                 '<td class="muted nom-spec">'+esc(r.spec)+'</td>';
+            } else
             h+='<td><div style="display:flex;gap:6px;align-items:center"><input data-cf="lbl" value="'+esc(r.lbl)+'" placeholder="Название, напр. 3мм (м2)" style="flex:1;min-width:120px"><span class="nom-tag" title="Позиция добавлена вручную">своя</span></div>'+
                  '<select data-cf="sec" style="margin-top:3px;font-size:11.5px;padding:2px 4px;max-width:100%">'+opts+'</select></td>'+
                  '<td><input data-cf="spec" value="'+esc(r.spec)+'" placeholder="1250*2500" style="width:110px"></td>';
@@ -678,6 +738,23 @@
           h+='<td class="muted">'+esc(r.unit)+'</td>';
           h+='<td style="text-align:right"><input class="np" type="number" step="any" min="0" data-cf="u" value="'+nomFmt(r.price)+'"></td>';
           h+='<td style="width:28px">'+(r.f?'':'<button class="nom-x" type="button" title="Удалить позицию">✕</button>')+'</td></tr>';
+          if(rsc){
+            var A=r.attrs||{};
+            h+='<tr class="nattr" data-for="'+esc(r.code)+'"'+(NOM.open[r.code]?'':' style="display:none"')+'><td colspan="5" style="background:var(--bg2);padding:8px 10px">'+
+               '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 10px">';
+            rsc.fields.forEach(function(f){
+              var v=A[f.k]==null?'':String(A[f.k]), inp;
+              if(f.opts){
+                inp='<select data-af="'+f.k+'" style="width:100%"><option value="">—</option>'+f.opts.map(function(o){ return '<option'+(o===v?' selected':'')+'>'+esc(o)+'</option>'; }).join('')+'</select>';
+              } else if(f.type==='num'){
+                var lid='nl_'+f.k;
+                inp='<input data-af="'+f.k+'" type="number" min="0" step="any" value="'+esc(v)+'" style="width:100%"'+(f.list?' list="'+lid+'"':'')+'>'+
+                    (f.list?'<datalist id="'+lid+'">'+f.list.map(function(o){return '<option value="'+o+'">';}).join('')+'</datalist>':'');
+              } else inp='<input data-af="'+f.k+'" value="'+esc(v)+'" style="width:100%">';
+              h+='<label style="display:flex;flex-direction:column;gap:2px"><span style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">'+esc(f.lbl)+'</span>'+inp+'</label>';
+            });
+            h+='</div><div class="small muted" style="margin-top:6px">Наименование собирается само из выбранных характеристик.</div></td></tr>';
+          }
         });
       });
       h+='</tbody></table><div class="empty" id="nomNone" style="display:none">Ничего не найдено</div>';
@@ -717,7 +794,11 @@
         var hay=tr.getAttribute('data-q')||'';
         [].forEach.call(tr.querySelectorAll('input[data-cf="lbl"],input[data-cf="spec"]'), function(i){ hay+=' '+i.value.toLowerCase(); });
         var ok=words.every(function(w){ return hay.indexOf(w)>=0; });
-        tr.style.display=ok?'':'none'; if(ok){ any=1; vis[tr.getAttribute('data-g')]=1; }
+        if(ok && NOM.grp){ var at={}; try{ at=JSON.parse(tr.getAttribute('data-attrs')||'{}'); }catch(e){}
+          Object.keys(NOM.flt).forEach(function(k2){ var fv2=NOM.flt[k2]; if(fv2!==''&&fv2!=null&&String(at[k2]==null?'':at[k2])!==String(fv2)) ok=false; }); }
+        tr.style.display=ok?'':'none';
+        var ar=document.querySelector('tr.nattr[data-for="'+tr.getAttribute('data-code')+'"]');
+        if(ar) ar.style.display=(ok&&NOM.open[tr.getAttribute('data-code')])?'':'none'; if(ok){ any=1; vis[tr.getAttribute('data-g')]=1; }
       });
       [].forEach.call(document.querySelectorAll('tr.ngh'), function(tr){ tr.style.display=vis[tr.getAttribute('data-gh')]?'':'none'; });
       var none=document.getElementById('nomNone'); if(none) none.style.display=any?'none':'';
@@ -730,13 +811,16 @@
     function nomAddItem(sec){
       var k=NOM.kind, code=sNewCode(k);
       var it=(k==='mat')?{code:code,lbl:'',spec:'',sec:sec,u:'',ost:0.15,rah:0.04}:{code:code,lbl:'',spec:'',sec:sec,u:'',ost:0,rah:0.07,m:1};
-      nomCust(k).push(it); DIRTY[k+':'+code]=1; NOM.focus=code; NOM.q='';
+      var sc=nomSchema(sec); if(sc){ it.attrs={}; it.lbl=sc.base; NOM.open[code]=1; }
+      nomCust(k).push(it); DIRTY[k+':'+code]=1; NOM.focus=code; NOM.q=''; NOM.flt={};
       render();
     }
     function wirePricesTab(){
       var save=document.getElementById('sprSave'); if(!save) return;
       [].forEach.call(document.querySelectorAll('[data-nk]'), function(el){ el.onclick=function(){ NOM.kind=this.getAttribute('data-nk'); NOM.grp=''; render(); }; });
-      [].forEach.call(document.querySelectorAll('[data-ng]'), function(el){ el.onclick=function(){ NOM.grp=this.getAttribute('data-ng'); render(); }; });
+      [].forEach.call(document.querySelectorAll('[data-ng]'), function(el){ el.onclick=function(){ NOM.grp=this.getAttribute('data-ng'); NOM.flt={}; render(); }; });
+      [].forEach.call(document.querySelectorAll('[data-flt]'), function(el){ el.onchange=function(){ NOM.flt[el.getAttribute('data-flt')]=el.value; nomApplyFilter(); }; });
+      var fc=document.getElementById('nomFltClr'); if(fc) fc.onclick=function(){ NOM.flt={}; render(); };
       var q=document.getElementById('nomQ');
       q.oninput=function(){ NOM.q=q.value; nomApplyFilter(); };
       nomApplyFilter();
@@ -758,7 +842,7 @@
             if(fld==='sec'){
               var v=el.value;
               if(v==='__new__'){ v=(prompt('Название новой группы:')||'').trim(); if(!v){ el.value=it.sec||''; return; } }
-              it.sec=v; nomMark(tr,key); render(); return;
+              it.sec=v; var sc3=nomSchema(v); if(sc3){ it.attrs=it.attrs||{}; NOM.open[code]=1; } nomMark(tr,key); render(); return;
             }
             if(f){
               var CAT=(k==='mat'?CALC.MAT:CALC.CMP)||{};
@@ -770,6 +854,25 @@
           };
           if(el.tagName==='SELECT') el.onchange=on; else el.oninput=on;
         });
+        var sc=it?nomSchema(it.sec):null;
+        var tg=tr.querySelector('.nom-attr-t');
+        if(tg) tg.onclick=function(){ NOM.open[code]=!NOM.open[code]; var ar=document.querySelector('tr.nattr[data-for="'+code+'"]'); if(ar) ar.style.display=NOM.open[code]?'':'none'; tg.textContent='⚙ '+(NOM.open[code]?'▲':'▼'); };
+        if(sc){
+          var ar=document.querySelector('tr.nattr[data-for="'+code+'"]');
+          if(ar) [].forEach.call(ar.querySelectorAll('[data-af]'), function(el){
+            var on2=function(){
+              it.attrs=it.attrs||{}; var fk=el.getAttribute('data-af');
+              if(el.value==='') delete it.attrs[fk]; else it.attrs[fk]=el.value;
+              var b2=nomBuild(sc,it.attrs); it.lbl=b2.lbl; it.spec=b2.spec;
+              var na=tr.querySelector('.nom-auto'); if(na) na.textContent=it.lbl;
+              var ns=tr.querySelector('.nom-spec'); if(ns) ns.textContent=it.spec;
+              tr.setAttribute('data-q',(it.lbl+' '+it.spec+' '+it.sec).toLowerCase());
+              tr.setAttribute('data-attrs',JSON.stringify(it.attrs));
+              nomMark(tr,key);
+            };
+            if(el.tagName==='SELECT') el.onchange=on2; else el.oninput=on2;
+          });
+        }
         var x=tr.querySelector('.nom-x');
         if(x) x.onclick=function(){
           if(!confirm('Удалить позицию из номенклатуры? В старых сохранённых расчётах она останется как есть.')) return;
@@ -779,7 +882,8 @@
         };
       });
       if(NOM.focus){ var tr=document.querySelector('tr.nrow[data-code="'+NOM.focus+'"]'); NOM.focus='';
-        if(tr){ var i=tr.querySelector('input[data-cf="lbl"]'); if(i){ i.focus(); tr.scrollIntoView({block:'center'}); } } }
+        if(tr){ var ar2=document.querySelector('tr.nattr[data-for="'+tr.getAttribute('data-code')+'"]');
+          var i=tr.querySelector('input[data-cf="lbl"]')||(ar2&&ar2.querySelector('[data-af]')); if(i){ i.focus(); tr.scrollIntoView({block:'center'}); } } }
       save.onclick=function(){
         var body=collectPricesTab();
         body.knownCustom=window.__KNOWN_CUSTOM||{};
