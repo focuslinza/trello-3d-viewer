@@ -113,8 +113,10 @@
           }
 
           var contacts = company.contacts || [];
-          var selected = contacts.filter(function (c) { return cardContactIds.indexOf(c.id) !== -1; });
-          var toShow = selected.length ? selected : contacts; // if none flagged, show all
+          // показываем ТОЛЬКО выбранного заказчика (решение Асхата, 05.11.2026); раньше,
+          // если никто не отмечен, показывались все контакты компании — путало
+          var selected = contacts.filter(function (c) { return c.id === cardContactIds[0]; });
+          var toShow = selected;
 
           var html = '';
           html += '<div class="company-name">' + CRM.esc(company.name) + '</div>';
@@ -134,7 +136,7 @@
             toShow.forEach(function (c) { html += renderContactRow(c); });
             html += '</div>';
           } else {
-            html += '<div class="req" style="margin-top:6px;">Контакт заказчика ещё не добавлен.</div>';
+            html += '<div class="req" style="margin-top:6px;color:#e8c07d;">⚠ Заказчик не выбран. Нажмите «Управление» и отметьте одного человека — без этого расчёт не сохранится.</div>';
           }
 
           html += '<div class="toolbar">' +

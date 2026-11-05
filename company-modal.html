@@ -268,7 +268,9 @@
       } else {
         contacts.forEach(function (c) {
           var wa = CRM.waLink(c.phone), tel = CRM.telLink(c.phone);
-          var checked = state.cardContacts.indexOf(c.id) !== -1 ? 'checked' : '';
+          // ЗАКАЗЧИК — ОДИН ЧЕЛОВЕК (решение Асхата, 05.11.2026): выбор радиокнопкой;
+          // если раньше отмечено несколько — считается первый отмеченный
+          var checked = state.cardContacts[0] === c.id ? 'checked' : '';
           html += '<div class="contact-card">';
           html += '<div class="top"><div>' +
             '<div class="nm">' + CRM.esc(c.name || 'Без имени') + '</div>' +
@@ -281,7 +283,7 @@
           html += '<button class="btn secondary small" data-edit="' + c.id + '">Изменить</button>';
           html += '<button class="btn danger small" data-del="' + c.id + '">Удалить</button>';
           html += '</div>';
-          html += '<label class="enq"><input type="checkbox" data-enq="' + c.id + '" ' + checked + '/> Обращался по этой заявке</label>';
+          html += '<label class="enq"><input type="radio" name="cardEnq" data-enq="' + c.id + '" ' + checked + '/> Заказчик по этой заявке</label>';
           html += '</div>';
         });
       }
@@ -488,10 +490,8 @@
     }
 
     function toggleEnquiry(contactId, checked) {
-      var set = state.cardContacts.slice();
-      var idx = set.indexOf(contactId);
-      if (checked && idx === -1) set.push(contactId);
-      if (!checked && idx !== -1) set.splice(idx, 1);
+      // один заказчик на заявку: выбор нового заменяет прежнего
+      var set = checked ? [contactId] : [];
       state.cardContacts = set;
       CRM.setCardContacts(t, set);
     }
