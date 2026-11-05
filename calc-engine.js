@@ -402,5 +402,6 @@
   }
 
   root.CALC={compute:compute,MAT:MAT,CMP:CMP,OPS:OPS,KIND:KIND,opRate:opRate,taxGrossUp:taxGrossUp,TH:TH,applyCustom:applyCustom,
-             CUTBEND:CUTBEND,BEND:BEND,WELD_SS:WELD_SS,WELD_BLACK:WELD_BLACK,CUTBEND_TIERS:CUTBEND_TIERS,WELD_TIERS:WELD_TIERS};
+             CUTBEND:CUTBEND,BEND:BEND,WELD_SS:WELD_SS,WELD_BLACK:WELD_BLACK,CUTBEND_TIERS:CUTBEND_TIERS,WELD_TIERS:WELD_TIERS,
+             matOstFor:function(code){ var M=MAT[code]; return M ? secOst('matOstBySec',M.sec,M.ost) : 0.15; }};
 })(typeof window!=='undefined'?window:globalThis);

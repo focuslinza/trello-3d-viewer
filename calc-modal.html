@@ -5,7 +5,7 @@
   <title>Калькулятор стоимости</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./calc-engine.js?v=20"></script>
+  <script src="./calc-engine.js?v=21"></script>
   <style>
     html[data-color-mode="light"] { --bg:#fff; --txt:#172b4d; --muted:#5e6c84; --chip:#f4f5f7; --line:#dfe1e6; --card:#fafbfc; }
     html[data-color-mode="dark"]  { --bg:#1d2125; --txt:#c7d1db; --muted:#9fadbc; --chip:#22272b; --line:#3c4149; --card:#22272b; }
@@ -783,7 +783,17 @@
         }
         if(m.partAreaM2>0){
           var code = m.materialCode || guessSheetCode(m.material, nearestTh(th));
-          var km = 'mat|'+(code||''); matAgg[km]=(matAgg[km]||{code:code,qty:0}); matAgg[km].qty += m.partAreaM2*q;
+          // МЕТАЛЛ — НЕ МЕНЬШЕ ГАБАРИТА (решение Асхата, 05.11.2026): у круга и фигурных деталей
+          // уголки вокруг контура тоже уходят в отход, а 15% остатков их не покрывают
+          // (круг — 21,5% габарита). Берём большее из «площадь детали + остатки» и «габарит»:
+          // в строку идёт площадь, которая после наценки остатков даёт не меньше габарита.
+          // Прямоугольные детали не меняются (их площадь ≈ габариту).
+          var area1 = +m.partAreaM2||0;
+          if (!m.tube && +m.bboxAreaM2 > 0 && CALC.matOstFor) {
+            var ost1 = CALC.matOstFor(code);
+            area1 = Math.max(area1, (+m.bboxAreaM2) / (1 + (ost1||0)));
+          }
+          var km = 'mat|'+(code||''); matAgg[km]=(matAgg[km]||{code:code,qty:0}); matAgg[km].qty += area1*q;
         }
       });
 
