@@ -244,33 +244,19 @@
         '<button class="btn secondary small" id="changeCompany">Сменить клиента</button>' +
         '</div>';
 
-      html += '<h3>Объекты</h3>';
+      // ОБЪЕКТЫ (решение Асхата, 05.11.2026): на главном экране — только выбор объекта
+      // для этой заявки (если объекты есть); добавить/изменить/удалить — в «Редактировать контакты»
       var objects = company.objects || [];
-      if (objects.length === 0) {
-        html += '<div class="muted">Пока нет объектов. Добавьте объект с адресом.</div>';
-      } else {
+      if (objects.length) {
+        html += '<h3>Объект заявки</h3>';
         objects.forEach(function (o) {
           var sel = state.cardObjectId === o.id ? 'checked' : '';
           var addrHtml = '';
-          if (o.addr) {
-            var mu = CRM.mapUrls(o.addr);
-            addrHtml =
-              '<a class="addr-link" href="' + mu.gis + '" target="_blank" rel="noopener" title="Открыть в 2ГИС">' + CRM.esc(o.addr) + '</a>';
-          }
-          html += '<div class="contact-card">';
-          html += '<div class="top"><div>' +
-            '<div class="nm">' + CRM.esc(o.name || 'Без названия') + '</div>' +
-            addrHtml +
-            '</div></div>';
-          html += '<div class="contact-actions">';
-          html += '<button class="btn secondary small" data-obj-edit="' + o.id + '">Изменить</button>';
-          html += '<button class="btn danger small" data-obj-del="' + o.id + '">Удалить</button>';
-          html += '</div>';
-          html += '<label class="enq"><input type="radio" name="cardObject" data-obj-pick="' + o.id + '" ' + sel + '/> Эта заявка для этого объекта</label>';
-          html += '</div>';
+          if (o.addr) { var mu = CRM.mapUrls(o.addr); addrHtml = ' <a class="addr-link" href="' + mu.gis + '" target="_blank" rel="noopener" title="Открыть в 2ГИС">' + CRM.esc(o.addr) + '</a>'; }
+          html += '<label class="enq"><input type="radio" name="cardObject" data-obj-pick="' + o.id + '" ' + sel + '/> <b>' + CRM.esc(o.name || 'Без названия') + '</b>' + addrHtml + '</label>';
         });
       }
-      html += '<div class="btnbar"><button class="btn" id="addObject">+ Добавить объект</button></div>';
+
 
       // ЗАКАЗЧИК — ВЫПАДАЮЩИЙ СПИСОК (решение Асхата, 05.11.2026): выбор из списка сотрудников
       // клиента сразу делает человека заказчиком по этой заявке; ниже — компактный список
@@ -350,7 +336,6 @@
           selectObjectForCard(state.cardObjectId === oid ? null : oid);
         });
       });
-      document.getElementById('addObject').addEventListener('click', function () { renderObjectForm(null, company.id); });
     }
 
     // ---------- COMPANY FORM ----------
@@ -455,12 +440,30 @@
           '<span class="crow-act"><button class="btn secondary small" data-edit="' + c.id + '">Изменить</button>' +
           '<button class="btn danger small" data-del="' + c.id + '">Удалить</button></span></div>';
       });
-      html += '<div class="btnbar">' +
-        '<button class="btn" id="addContact">+ Добавить контакт</button>' +
-        '<button class="btn secondary" id="backHome">← Назад</button>' +
-        '</div>';
+      html += '<div class="btnbar"><button class="btn" id="addContact">+ Добавить контакт</button></div>';
+      var objs = company.objects || [];
+      html += '<h3>Объекты клиента</h3>';
+      if (!objs.length) html += '<div class="muted">Пока нет объектов. Добавьте объект с адресом — потом его можно выбрать для заявки.</div>';
+      objs.forEach(function (o) {
+        html += '<div class="crow"><span class="nm">' + CRM.esc(o.name || 'Без названия') + '</span>' +
+          (o.addr ? '<span class="num">' + CRM.esc(o.addr) + '</span>' : '') +
+          '<span class="crow-act"><button class="btn secondary small" data-obj-edit="' + o.id + '">Изменить</button>' +
+          '<button class="btn danger small" data-obj-del="' + o.id + '">Удалить</button></span></div>';
+      });
+      html += '<div class="btnbar"><button class="btn" id="addObject">+ Добавить объект</button>' +
+        '<button class="btn secondary" id="backHome">← Назад</button></div>';
       app.innerHTML = html;
       document.getElementById('addContact').addEventListener('click', function () { renderContactForm(null, company.id); });
+      document.getElementById('addObject').addEventListener('click', function () { renderObjectForm(null, company.id); });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-obj-edit]'), function (el) {
+        el.addEventListener('click', function () {
+          var oid = el.getAttribute('data-obj-edit');
+          renderObjectForm((company.objects || []).filter(function (x) { return x.id === oid; })[0], company.id);
+        });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-obj-del]'), function (el) {
+        el.addEventListener('click', function () { deleteObject(company.id, el.getAttribute('data-obj-del')); });
+      });
       document.getElementById('backHome').addEventListener('click', function () { state.view = ''; renderHome(); });
       Array.prototype.forEach.call(document.querySelectorAll('[data-edit]'), function (el) {
         el.addEventListener('click', function () {
