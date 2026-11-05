@@ -153,6 +153,7 @@
           '<td style="white-space:nowrap;text-align:right">'+
             '<button class="btn vw" data-i="'+i+'" type="button" title="Открыть в новом окне без скачивания">Просмотр</button> '+
             '<button class="btn green dl" data-i="'+i+'" type="button">Скачать PDF</button> '+
+            '<button class="btn ghost ml" data-i="'+i+'" type="button" title="Письмо в Zoho всем, кто у компании получает счета на почту; PDF приложите сами (кнопка «Скачать PDF»)">✉ Письмо</button> '+
             '<button class="btn ed" data-i="'+i+'" type="button" title="Исправить строки, разделить, выставить остаток или аннулировать — номер счёта не меняется">✎ Изменить</button>'+
             (IS_DIRECTOR?' <button class="btn red del" data-i="'+i+'" type="button" title="Удалить из журнала">✕</button>':'')+
           '</td>'+
@@ -172,11 +173,29 @@
     [].forEach.call(document.querySelectorAll('.dl'), function(b){ b.onclick=function(){ downloadPdf(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.vw'), function(b){ b.onclick=function(){ previewPdf(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.del'), function(b){ b.onclick=function(){ delInvoice(ROWS[+this.getAttribute('data-i')]); }; });
+    [].forEach.call(document.querySelectorAll('.ml'), function(b){ b.onclick=function(){ mailInvoice(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.ed'), function(b){ b.onclick=function(){ openEdit(ROWS[+this.getAttribute('data-i')]); }; });
   }
   // ПРАВКА СЧЁТА ПРЯМО ИЗ КАРТОЧКИ (решение Асхата, 05.11.2026): то же окно счёта, что
   // в бухгалтерии (исправить строки без смены номера, разделить, остаток, аннулировать),
   // поверх списка. Доступ уже проверен выше: руководитель или право «выставлять счёт».
+  // ПИСЬМО СО СЧЁТОМ ЧЕРЕЗ ZOHO (решение Асхата, 05.11.2026): адресаты — сотрудники компании-
+  // покупателя с галочкой «Получает счета на почту»; PDF прикладывают сами
+  var COMPANIES = null;
+  function companiesP(){ return COMPANIES ? Promise.resolve(COMPANIES) : fetch(WORKER+'/companies-list').then(function(r){return r.json();}).then(function(j){ COMPANIES=(j&&j.companies)||[]; return COMPANIES; }).catch(function(){ return []; }); }
+  function mailInvoice(row){
+    companiesP().then(function(list){
+      var bn=String((row.buyer&&row.buyer.name)||'').trim().toLowerCase(), bb=String((row.buyer&&row.buyer.bin)||'').replace(/\D/g,'');
+      var co=list.filter(function(c){ return (bb && String(c.bin||'').replace(/\D/g,'')===bb) || String(c.name||'').trim().toLowerCase()===bn; })[0];
+      var to=((co&&co.contacts)||[]).filter(function(c){ return c && c.invoiceMail && /@/.test(c.email||''); });
+      if(!to.length){ alert('У компании «'+((row.buyer&&row.buyer.name)||'?')+'» никто не отмечен «Получает счета на почту».\nКарточка → «Компания и контакты» → «Управление» → «Редактировать контакты» → укажите почту и отметьте галочку.'); return; }
+      var sup=(row.supplier&&(row.supplier.label||row.supplier.name))||'';
+      var subj='Счёт на оплату № '+row.number+(sup?(' — '+sup):'');
+      var body='Здравствуйте!\n\nНаправляем счёт на оплату № '+row.number+' на сумму '+money(row.total)+' ₸. Счёт во вложении.\n\nС уважением,\n'+sup;
+      var url='mailto:'+to.map(function(c){ return c.email.trim().replace(/[\s,;?&]/g,''); }).join(',')+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body);
+      var w=window.open(url,'_blank'); if(!w) location.href=url;
+    });
+  }
   var ME_NAME = '';
   t.member('fullName').then(function(m){ ME_NAME=(m&&m.fullName)||''; }).catch(function(){});
   function openEdit(row){

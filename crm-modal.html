@@ -239,11 +239,13 @@
               '<input class="search" style="margin:0;flex:1;min-width:140px" placeholder="Имя" data-ci="'+i+'" data-f="name" value="'+esc(p.name||'')+'">'+
               '<input class="search" style="margin:0;flex:1;min-width:120px" placeholder="Роль" data-ci="'+i+'" data-f="role" value="'+esc(p.role||'')+'">'+
               '<input class="search" style="margin:0;flex:1;min-width:150px" placeholder="+7 701 …" data-ci="'+i+'" data-f="phone" value="'+esc(p.phone||'')+'">'+
+              '<input class="search" style="margin:0;flex:1;min-width:160px" placeholder="почта" data-ci="'+i+'" data-f="email" value="'+esc(p.email||'')+'">'+
+              '<label class="muted" style="display:flex;align-items:center;gap:4px;font-size:12px" title="Получает счета на почту"><input type="checkbox" data-ci="'+i+'" data-f="invoiceMail"'+(p.invoiceMail?' checked':'')+'> счета</label>'+
               '<button class="btn" data-del="'+i+'" type="button">✕</button></div>';
         });
         el.innerHTML=ch||'<div class="muted" style="margin-bottom:6px">Нет контактов.</div>';
         [].forEach.call(el.querySelectorAll('input'), function(inp){
-          inp.oninput=function(){ c.contacts[+this.getAttribute('data-ci')][this.getAttribute('data-f')]=this.value; };
+          inp.oninput=inp.onchange=function(){ c.contacts[+this.getAttribute('data-ci')][this.getAttribute('data-f')]=(this.type==='checkbox')?this.checked:this.value; };
         });
         [].forEach.call(el.querySelectorAll('[data-del]'), function(b){
           b.onclick=function(){ c.contacts.splice(+this.getAttribute('data-del'),1); drawContacts(); };

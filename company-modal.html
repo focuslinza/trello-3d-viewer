@@ -437,6 +437,8 @@
           '<span class="nm">' + CRM.esc(c.name || 'Без имени') + '</span>' +
           (c.role ? '<span class="role">' + CRM.esc(c.role) + '</span>' : '') +
           (c.phone ? '<span class="num">' + CRM.esc(c.phone) + '</span>' : '') +
+          (c.email ? '<span class="num">' + CRM.esc(c.email) + '</span>' : '') +
+          (c.invoiceMail ? '<span class="num" style="color:#216e4e" title="Получает счета на почту">✉ счета</span>' : '') +
           '<span class="crow-act"><button class="btn secondary small" data-edit="' + c.id + '">Изменить</button>' +
           '<button class="btn danger small" data-del="' + c.id + '">Удалить</button></span></div>';
       });
@@ -487,6 +489,11 @@
       html += '<div class="row"><label class="fld" for="c_phone">Телефон (WhatsApp)</label>' +
         '<input type="tel" id="c_phone" value="' + CRM.esc(contact.phone || '') + '" placeholder="+7 701 123 45 67" /></div>';
       html += '<div class="req-note">По номеру можно будет написать в WhatsApp одним кликом.</div>';
+      // ПОЧТА ДЛЯ СЧЕТОВ (решение Асхата, 05.11.2026): у каждой компании свой список, кому
+      // отправлять счёт на почту (директор, финдиректор группы, бухгалтер…)
+      html += '<div class="row"><label class="fld" for="c_email">Эл. почта</label>' +
+        '<input type="email" id="c_email" value="' + CRM.esc(contact.email || '') + '" placeholder="name@company.kz" /></div>';
+      html += '<label class="enq"><input type="checkbox" id="c_inv" ' + (contact.invoiceMail ? 'checked' : '') + '/> Получает счета на почту</label>';
       html += '<div class="btnbar">' +
         '<button class="btn" id="saveContact">Сохранить</button>' +
         '<button class="btn secondary" id="cancelContact">Отмена</button>' +
@@ -502,12 +509,18 @@
     function saveContact(existing, companyId) {
       var name = (document.getElementById('c_name').value || '').trim();
       if (!name) { alert('Укажите имя контакта.'); return; }
-      var contact = {
+      var email = (document.getElementById('c_email').value || '').trim();
+      var inv = !!document.getElementById('c_inv').checked;
+      if (inv && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { alert('Чтобы контакт получал счета на почту, укажите правильный адрес эл. почты.'); return; }
+      // прочие поля контакта (если появятся) не теряем
+      var contact = Object.assign({}, existing, {
         id: existing.id || CRM.newId(),
         name: name,
         role: (document.getElementById('c_role').value || '').trim(),
-        phone: (document.getElementById('c_phone').value || '').trim()
-      };
+        phone: (document.getElementById('c_phone').value || '').trim(),
+        email: email,
+        invoiceMail: inv
+      });
       CRM.getCompanyById(t, companyId).then(function (company) {
         if (!company) throw new Error('Компания не найдена.');
         company.contacts = company.contacts || [];
