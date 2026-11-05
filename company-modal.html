@@ -107,6 +107,27 @@
       nearFull: false
     };
 
+    // КЛИЕНТ В НАЗВАНИИ КАРТОЧКИ (решение Асхата, 05.11.2026): после выбора/смены
+    // компании или ответственного в конец названия карточки дописывается
+    // « · Компания · Имя» (сервер заменяет прежний хвост, а не наращивает).
+    // В счёте этот хвост убирается — там, как раньше, «… (Имя)».
+    function syncCardName() {
+      return Promise.all([t.card('id'), CRM.getCardCompanyId(t), CRM.getCardContacts(t), CRM.getDirectory(t)]).then(function (r) {
+        var cardId = r[0] && r[0].id; if (!cardId) return;
+        var co = null; (r[3] || []).forEach(function (c) { if (c.id === r[1]) co = c; });
+        var contactName = '';
+        if (co) { var ids = r[2] || []; (co.contacts || []).forEach(function (c) { if (!contactName && ids.indexOf(c.id) !== -1) contactName = c.name || ''; }); }
+        var isPerson = co && ((co.type || co.kind) === 'person');
+        return fetch(WORKER_URL + '/card-client-name', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cardId: cardId, company: co ? co.name : '', contact: isPerson ? '' : contactName }) });
+      }).catch(function () {});
+    }
+    (function () {
+      var sc = CRM.setCardCompanyId, sk = CRM.setCardContacts;
+      CRM.setCardCompanyId = function () { return sc.apply(CRM, arguments).then(function (v) { syncCardName(); return v; }); };
+      CRM.setCardContacts = function () { return sk.apply(CRM, arguments).then(function (v) { syncCardName(); return v; }); };
+    })();
+
     function loadAll() {
       return Promise.all([
         CRM.getDirectory(t),

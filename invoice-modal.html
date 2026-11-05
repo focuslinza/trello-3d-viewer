@@ -884,7 +884,14 @@
     var items = [];
     selectedOrders().forEach(function(o){
       var qty=Math.max(1,o.qty||1);
-      var nm = o.invName || (o.name + (o.personName ? ' ('+o.personName+')' : ''));
+      // хвост « · Компания · Имя» из названия карточки в счёт не идёт (решение Асхата,
+      // 05.11.2026): клиент — в шапке счёта, в строке — как раньше «… (Имя)»
+      var base = String(o.name||'');
+      var coN = (companyById(selectedCompanyId)||{}).name || '';
+      var cut = coN ? base.indexOf(' · ' + coN) : -1;
+      if (cut > 0) base = base.slice(0, cut);
+      else if (o.personName && base.slice(-(o.personName.length+3)) === ' · ' + o.personName) base = base.slice(0, -(o.personName.length+3));
+      var nm = o.invName || (base + (o.personName ? ' ('+o.personName+')' : ''));
       // СКИДКА В СЧЁТЕ НЕ ПОКАЗЫВАЕТСЯ (решение Асхата, 05.11.2026; раньше — отдельной
       // строкой «Скидка постоянному клиенту»): клиент видит одну строку с итоговой
       // договорной ценой. Уступка по-прежнему видна внутри: пометка в этом окне и
