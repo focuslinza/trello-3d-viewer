@@ -161,7 +161,8 @@
     // ---------- HOME ----------
     function renderHome() {
       var company = currentCompany();
-      if (company) { renderLinkedCompany(company); }
+      if (company && state.view === 'contacts') { renderContactsView(company); }
+      else if (company) { renderLinkedCompany(company); }
       else { renderPicker(); }
     }
 
@@ -237,6 +238,7 @@
 
       html += '<div class="btnbar">' +
         '<button class="btn secondary small" id="editCompany">Редактировать реквизиты</button>' +
+        '<button class="btn secondary small" id="editContacts">Редактировать контакты</button>' +
         '<button class="btn secondary small" id="changeCompany">Сменить клиента</button>' +
         '</div>';
 
@@ -275,7 +277,7 @@
       var curId = state.cardContacts[0] || '';
       html += '<h3>Заказчик по этой заявке</h3>';
       if (contacts.length === 0) {
-        html += '<div class="muted">У компании пока нет контактов. Добавьте человека, который оставил заявку, — кнопка «+ Добавить контакт» ниже.</div>';
+        html += '<div class="muted">У компании пока нет контактов. Нажмите «Редактировать контакты» и добавьте человека, который оставил заявку.</div>';
       } else {
         html += '<select id="enqSel" class="enq-sel">' +
           '<option value=""' + (curId ? '' : ' selected') + '>— выберите сотрудника клиента —</option>' +
@@ -295,19 +297,8 @@
         }
       }
 
-      html += '<h3>Контакты компании</h3>';
-      contacts.forEach(function (c) {
-        html += '<div class="crow">' +
-          '<span class="nm">' + CRM.esc(c.name || 'Без имени') + '</span>' +
-          (c.role ? '<span class="role">' + CRM.esc(c.role) + '</span>' : '') +
-          (c.phone ? '<span class="num">' + CRM.esc(c.phone) + '</span>' : '') +
-          '<span class="crow-act"><button class="btn secondary small" data-edit="' + c.id + '">Изменить</button>' +
-          '<button class="btn danger small" data-del="' + c.id + '">Удалить</button></span></div>';
-      });
-      if (!contacts.length) html += '<div class="muted">Нет контактов.</div>';
 
       html += '<div class="btnbar">' +
-        '<button class="btn" id="addContact">+ Добавить контакт</button>' +
         '<button class="btn secondary" id="done">Готово</button>' +
         '</div>';
 
@@ -317,7 +308,7 @@
       document.getElementById('changeCompany').addEventListener('click', function () {
         CRM.setCardCompanyId(t, null).then(function () { state.cardCompanyId = null; renderPicker(); });
       });
-      document.getElementById('addContact').addEventListener('click', function () { renderContactForm(null, company.id); });
+      document.getElementById('editContacts').addEventListener('click', function () { state.view = 'contacts'; renderHome(); });
       document.getElementById('done').addEventListener('click', function () { t.closeModal(); });
 
       Array.prototype.forEach.call(document.querySelectorAll('[data-edit]'), function (el) {
@@ -449,6 +440,38 @@
     }
 
     // ---------- CONTACT FORM ----------
+    // РЕДАКТИРОВАНИЕ КОНТАКТОВ — отдельный экран (решение Асхата, 05.11.2026): на главном
+    // экране только заказчик этой заявки, остальные сотрудники клиента — здесь
+    function renderContactsView(company) {
+      var contacts = company.contacts || [];
+      var html = '<h2>Контакты: ' + CRM.esc(company.name || '') + '</h2>';
+      if (!contacts.length) html += '<div class="muted">Пока нет контактов.</div>';
+      contacts.forEach(function (c) {
+        html += '<div class="crow">' +
+          '<span class="nm">' + CRM.esc(c.name || 'Без имени') + '</span>' +
+          (c.role ? '<span class="role">' + CRM.esc(c.role) + '</span>' : '') +
+          (c.phone ? '<span class="num">' + CRM.esc(c.phone) + '</span>' : '') +
+          '<span class="crow-act"><button class="btn secondary small" data-edit="' + c.id + '">Изменить</button>' +
+          '<button class="btn danger small" data-del="' + c.id + '">Удалить</button></span></div>';
+      });
+      html += '<div class="btnbar">' +
+        '<button class="btn" id="addContact">+ Добавить контакт</button>' +
+        '<button class="btn secondary" id="backHome">← Назад</button>' +
+        '</div>';
+      app.innerHTML = html;
+      document.getElementById('addContact').addEventListener('click', function () { renderContactForm(null, company.id); });
+      document.getElementById('backHome').addEventListener('click', function () { state.view = ''; renderHome(); });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-edit]'), function (el) {
+        el.addEventListener('click', function () {
+          var cid = el.getAttribute('data-edit');
+          renderContactForm((company.contacts || []).filter(function (x) { return x.id === cid; })[0], company.id);
+        });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-del]'), function (el) {
+        el.addEventListener('click', function () { deleteContact(company.id, el.getAttribute('data-del')); });
+      });
+    }
+
     function renderContactForm(contact, companyId) {
       var isNew = !contact;
       contact = contact || {};
