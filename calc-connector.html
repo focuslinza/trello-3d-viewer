@@ -11,35 +11,7 @@
     // Adds a "Калькулятор стоимости" section to the card back with a button
     // that opens the full calculator modal. Stores results on the card and
     // logs every order to the central D1 database via the Worker.
-    // НАПОМИНАНИЕ НА ДОСКЕ (решение Асхата, 11.2026): карточка в «Ждем оплату», а счёт
-    // не отмечен «выслан» — красная плашка «⚠ выслан?» прямо на карточке в колонке.
-    // Отметки берём одним запросом на всю доску и держим 60 с.
-    var SENT_MAP = null, SENT_AT = 0;
-    function sentMap(){
-      if (SENT_MAP && Date.now() - SENT_AT < 60000) return SENT_MAP;
-      SENT_AT = Date.now();
-      SENT_MAP = fetch(window.WORKER_URL + '/acct-sent-map').then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
-        if (!j || !j.ok) return null;
-        var m = { sent:{}, paid:{} };
-        (j.sent||[]).forEach(function(id){ m.sent[id]=1; }); (j.paid||[]).forEach(function(id){ m.paid[id]=1; });
-        return m;
-      }).catch(function(){ return null; });
-      return SENT_MAP;
-    }
     window.TrelloPowerUp.initialize({
-      'card-badges': function (t) {
-        return t.list('name').then(function (l) {
-          if (!/жд[её]м\s*оплат/i.test((l && l.name) || '')) return [];
-          return t.card('id').then(function (c) {
-            return [{ dynamic: function () {
-              return sentMap().then(function (m) {
-                if (!m || m.sent[c.id] || m.paid[c.id]) return { text: '', refresh: 60 };
-                return { text: '⚠ выслан?', color: 'red', refresh: 60 };
-              });
-            } }];
-          });
-        }).catch(function () { return []; });
-      },
       'card-detail-badges': function (t, options) {
         // фишка «QR-этикетка» в одном ряду и стиле с «Метки» и «Card Number»
         return [{
