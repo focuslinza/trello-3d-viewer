@@ -56,13 +56,10 @@
     .line1 .num { font-size: 13px; color: var(--muted); white-space: nowrap; }
     .line1 .sep { color: var(--muted); }
     .line1 .actions { margin-left: auto; }
-    .sentq { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 8px; border: 1px solid #7f5f01; background: rgba(232,192,125,.12); border-radius: 6px; font-size: 13px; color: var(--txt); }
-    .sentq .actions { margin-left: auto; }
-    .sentq.ok { border-color: #2e5c44; background: rgba(75,206,151,.12); color: #4bce97; }
   </style>
 </head>
 <body>
-  <div id="wrap"><div id="sentAsk"></div><div id="root"><div class="muted">Загрузка…</div></div></div>
+  <div id="root"><div class="muted">Загрузка…</div></div>
 
   <script src="./config.js"></script>
   <script src="./crm-common.js"></script>
@@ -93,43 +90,8 @@
       return html;
     }
 
-    // ВЫСЛАН ПРИ «ЖДЕМ ОПЛАТУ» (решение Асхата, 11.2026): карточку перенесли в колонку
-    // «Ждем оплату», а счёт не отмечен высланным — спрашиваем прямо в карточке.
-    // «Да» ставит отметку «выслан» на заказе (её видят Бухгалтерия, окно счетов, журнал);
-    // «Нет» — больше по этой карточке не спрашиваем.
-    function askSent() {
-      var box = document.getElementById('sentAsk');
-      return Promise.all([t.list('name').catch(function(){ return null; }), t.card('id'), t.get('card', 'shared', 'sentAskNo').catch(function(){ return null; })])
-        .then(function (r) {
-          var listName = (r[0] && r[0].name) || '', cardId = r[1] && r[1].id;
-          if (!cardId || r[2] || !/жд[её]м\s*оплат/i.test(listName)) { box.innerHTML = ''; return t.sizeTo('#wrap'); }
-          return fetch(window.WORKER_URL + '/order-status?cardId=' + encodeURIComponent(cardId)).then(function (x) { return x.json(); }).then(function (st) {
-            if (!st || !st.ok || st.invoiceSent || st.paid) { box.innerHTML = ''; return t.sizeTo('#wrap'); }
-            box.innerHTML = '<div class="sentq">' +
-              '<span>Карточка в «Ждем оплату». Отметить счёт как <b>«выслан»</b>?</span>' +
-              '<span class="actions"><button class="btn" id="sqYes">Да, выслан</button><button class="btn secondary" id="sqNo">Нет</button></span></div>';
-            document.getElementById('sqYes').onclick = function () {
-              var b = this; b.disabled = true; b.textContent = 'Отмечаю…';
-              fetch(window.WORKER_URL + '/acct-set', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cardId: cardId, field: 'invoiceSent', value: 1, why: 'выслан: карточка в «Ждем оплату»' }) })
-                .then(function (x) { return x.json(); }).then(function (j) {
-                  if (!j || !j.ok) throw new Error((j && j.error) || 'сервер не подтвердил');
-                  box.innerHTML = '<div class="sentq ok">✓ Отмечено «выслан»</div>'; t.sizeTo('#wrap');
-                  setTimeout(function () { box.innerHTML = ''; t.sizeTo('#wrap'); }, 2500);
-                }).catch(function (e) { b.disabled = false; b.textContent = 'Да, выслан'; alert('Не удалось отметить: ' + (e && e.message || e)); });
-            };
-            document.getElementById('sqNo').onclick = function () {
-              t.set('card', 'shared', 'sentAskNo', 1).catch(function(){});
-              box.innerHTML = ''; t.sizeTo('#wrap');
-            };
-            return t.sizeTo('#wrap');
-          });
-        }).catch(function () {});
-    }
-
     t.render(function () {
       var root = document.getElementById('root');
-      askSent();
 
       return CRM.getCardCompanyId(t).then(function (companyId) {
         if (!companyId) {
@@ -137,7 +99,7 @@
             '<div class="empty-box"><div class="muted">Компания для этой карточки ещё не выбрана.</div>' +
             '<div class="toolbar"><button class="btn" id="choose">Выбрать компанию</button></div></div>';
           document.getElementById('choose').addEventListener('click', openManager);
-          return t.sizeTo('#wrap');
+          return t.sizeTo('#root');
         }
 
         return Promise.all([
@@ -154,7 +116,7 @@
               '<div class="empty-box"><div class="muted">Связанная компания не найдена (возможно, удалена).</div>' +
               '<div class="toolbar"><button class="btn" id="choose">Выбрать компанию</button></div></div>';
             document.getElementById('choose').addEventListener('click', openManager);
-            return t.sizeTo('#wrap');
+            return t.sizeTo('#root');
           }
 
           var contacts = company.contacts || [];
@@ -191,11 +153,11 @@
 
           root.innerHTML = html;
           document.getElementById('manage').addEventListener('click', openManager);
-          return t.sizeTo('#wrap');
+          return t.sizeTo('#root');
         });
       }).catch(function (err) {
         root.innerHTML = '<div class="muted">Ошибка: ' + CRM.esc(err && err.message ? err.message : 'неизвестно') + '</div>';
-        return t.sizeTo('#wrap');
+        return t.sizeTo('#root');
       });
     });
   </script>
