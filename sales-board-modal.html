@@ -51,7 +51,12 @@
     .fld input,.fld select,.fld textarea{width:100%;box-sizing:border-box}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
     @media (max-width:560px){ .grid2{grid-template-columns:1fr} }
-    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:11px 16px;display:flex;justify-content:space-between;align-items:center;z-index:50}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:11px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;z-index:50}
+    /* вкладки разделов — внизу рядом с «Закрыть» (как в Бухгалтерии и Снабжении) */
+    .bar .tabs{display:flex;gap:8px;flex-wrap:wrap;flex:1;min-width:0}
+    .bar .tab{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer}
+    .bar .tab.active{border-color:var(--blue,#579dff);color:#cfe1ff;background:#274469;margin-top:-12px;padding-top:18px;border-top-color:transparent;border-radius:0 0 8px 8px}
+    #crmView iframe{width:100%;height:100%;border:0;display:block}
     .empty{color:var(--muted);padding:8px 4px;font-size:12.5px}
     .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
     .thumbs .ph{position:relative}
@@ -70,13 +75,17 @@
       <h2>Продажи</h2>
       <input type="text" id="q" placeholder="Поиск: клиент, тема, контакт, телефон…" style="flex:1;min-width:180px">
       <button class="btn primary" id="newBtn" type="button">+ Новый лид</button>
-      <button class="btn" id="anBtn" type="button" title="Лиды, источники, конверсия, клики по ссылкам роликов">📊 Аналитика</button>
-      <button class="btn" id="crmBtn" type="button" title="Открыть базу клиентов (CRM)">👥 Клиенты</button>
     </div>
     <div id="board"><div class="empty">Загрузка…</div></div>
   </div>
+  <div id="anView" style="display:none;padding:14px 14px 70px;max-width:1100px;margin:0 auto"></div>
+  <div id="crmView" style="display:none;position:fixed;left:0;right:0;top:0;bottom:58px"></div>
   <div class="bar">
-    <span class="muted">Карточки двигаются вручную: перетащите или используйте стрелки ‹ ›. Даты следующего контакта подсвечиваются, когда пора звонить.</span>
+    <div class="tabs" id="barTabs">
+      <div class="tab active" data-sv="board" title="Карточки двигаются вручную: перетащите или стрелками ‹ ›">Воронка</div>
+      <div class="tab" data-sv="an" title="Лиды, источники, конверсия, клики по ссылкам роликов">📊 Аналитика</div>
+      <div class="tab" data-sv="crm" title="База клиентов (CRM)">👥 Клиенты</div>
+    </div>
     <button class="btn" id="close" type="button">Закрыть</button>
   </div>
   <div id="ovlHost"></div>
@@ -87,22 +96,30 @@
     document.getElementById('close').onclick=function(){ t.closeModal(); };
     // кнопка сверху справа: существующий CRM-раздел (позже — коммерческие CRM)
     // ---------- аналитика продаж ----------
-    document.getElementById('anBtn').onclick=function(){ openAnalytics(); };
+    window.__MS_T = t;   // для встроенного окна «Клиенты»
+    var SV='board';
+    function showView(v){
+      SV=v;
+      [].forEach.call(document.querySelectorAll('[data-sv]'), function(x){ x.classList.toggle('active', x.getAttribute('data-sv')===v); });
+      document.getElementById('wrap').style.display = v==='board' ? '' : 'none';
+      document.getElementById('anView').style.display = v==='an' ? '' : 'none';
+      var cv=document.getElementById('crmView'); cv.style.display = v==='crm' ? '' : 'none';
+      if(v==='an' && !document.getElementById('anBody')) openAnalytics();
+      if(v==='crm' && !cv.firstChild){ cv.innerHTML='<iframe src="./crm-modal.html?embed=1&t='+Date.now()+'"></iframe>'; }
+    }
+    [].forEach.call(document.querySelectorAll('[data-sv]'), function(x){ x.onclick=function(){ showView(this.getAttribute('data-sv')); }; });
     function monthRange(){ var d=new Date(); var f=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; return [f, today()]; }
     function openAnalytics(){
       var mr=monthRange();
-      var host=document.getElementById('ovlHost');
-      host.innerHTML='<div class="ovl" id="anOvl"><div class="pop" style="max-width:840px">'+
+      var host=document.getElementById('anView');
+      host.innerHTML='<div>'+
         '<h3>📊 Аналитика продаж</h3>'+
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">'+
         '<input type="date" id="anFrom" value="'+mr[0]+'"> — <input type="date" id="anTo" value="'+mr[1]+'">'+
         '<button class="btn primary" id="anGo" type="button">Показать</button>'+
         '<span class="msg" id="anMsg"></span></div>'+
         '<div id="anBody" class="muted" style="margin-top:12px">Выберите период и нажмите «Показать».</div>'+
-        '<div class="popbar"><button class="btn" id="anClose" type="button">Закрыть</button></div>'+
-        '</div></div>';
-      document.getElementById('anClose').onclick=function(){ host.innerHTML=''; };
-      document.getElementById('anOvl').onclick=function(e){ if(e.target===this) host.innerHTML=''; };
+        '</div>';
       document.getElementById('anGo').onclick=loadAnalytics;
       loadAnalytics();
     }
@@ -152,9 +169,6 @@
         document.getElementById('anBody').innerHTML=h;
       }).catch(function(e){ document.getElementById('anMsg').textContent='Ошибка: '+e.message; });
     }
-    document.getElementById('crmBtn').onclick=function(){
-      t.modal({ url:'./crm-modal.html?t='+Date.now(), title:'CRM — клиенты', accentColor:'#1f6ce8', fullscreen:true });
-    };
 
     var ROWS=[], COMPANIES=[], FILTER='', dragId=null, MYNAME='', FILE_COUNTS={};
     var SOURCES=[['','— не указан —'],['whatsapp','WhatsApp'],['call','Звонок'],['site','Сайт metalshop.kz'],

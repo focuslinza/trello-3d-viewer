@@ -142,8 +142,8 @@
           }
         };
         var dashBtn = {
-          icon: { dark: ICON_BASE + 'ic-t-dashboard-w.png?v=2', light: ICON_BASE + 'ic-t-dashboard-b.png?v=2' },
-          text: 'Рук',
+          icon: { dark: ICON_BASE + 'ic-t-mgmt-w.png?v=2', light: ICON_BASE + 'ic-t-mgmt-b.png?v=2' },
+          text: 'Упр',
           callback: function (t) {
             return t.modal({
               url: t.signUrl('./dashboard-modal.html') + '?t=' + Date.now(),
@@ -192,16 +192,17 @@
         // админство и права спрашиваем ОДНОВРЕМЕННО — общий ответ укладывается в ~2 с
         return Promise.all([isAdmin(), perms()]).then(function(r){
           var admin = r[0];
-          if (admin) return [earnBtn, repairBtn, supBtn, tabelBtn, buhBtn, salesBtn, mgmtBtn([dashBtn, crmBtn])]; // Бухгалтерия — отдельной кнопкой
+          if (admin) return [earnBtn, repairBtn, supBtn, buhBtn, salesBtn, dashBtn]; // Табель — внутри «Упр», Клиенты — внутри «Прд»
           return Promise.resolve(r[1]).then(function(p){
             var out = [earnBtn, repairBtn, supBtn]; // ремонт и снабжение (канбан заявок) — любой работник;
             // внутри «Снабжения» инструмент/наличные/цены видят только снабженец и руководство
-            if (p.canTimesheet || p.canInvoice) out.push(tabelBtn); // табель: начальник цеха (заполняет) и бухгалтер (смотрит)
+            // табель: начальник цеха (заполняет) и бухгалтер (смотрит); у кого есть «Упр» — табель внутри неё
+            if ((p.canTimesheet || p.canInvoice) && !p.canDashboard) out.push(tabelBtn);
             var mgmt = [];
             if (p.canDashboard) mgmt.push(dashBtn);
             // Бухгалтерия — отдельной кнопкой, не в меню (урок 10.2026: в «Управлении» её не находили)
             if (p.canInvoice) out.push(buhBtn);
-            if (p.canCrm) { out.push(salesBtn); mgmt.push(crmBtn); }
+            if (p.canCrm) out.push(salesBtn);   // «Клиенты» (CRM) — вкладка внутри «Прд»
             if (mgmt.length === 1) out.push(mgmt[0]);           // одна привилегия — прямой кнопкой
             else if (mgmt.length > 1) out.push(mgmtBtn(mgmt));  // несколько — единым меню
             // аккаунт Trello не привязан к карточке работника — показываем это прямо в шапке,

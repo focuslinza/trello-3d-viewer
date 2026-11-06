@@ -55,7 +55,12 @@
     <button class="btn" id="close" type="button">Закрыть</button>
   </div>
   <script>
-    var t = window.TrelloPowerUp.iframe();
+    // ВСТРОЕННЫЙ РЕЖИМ (?embed=1): окно открыто внутри другого окна системы (Клиенты — внутри
+    // «Продаж», Табель — внутри панели руководителя). Своего подключения к Trello у вложенного
+    // окна нет, поэтому берём его у родительского окна; свою нижнюю панель прячем.
+    var EMBED = /[?&]embed=1/.test(location.search) && window.parent !== window;
+    var t = (EMBED && window.parent.__MS_T) || window.TrelloPowerUp.iframe();
+    if (EMBED) { var _st=document.createElement('style'); _st.textContent='.bar{display:none!important}body{padding-bottom:0!important}'; document.head.appendChild(_st); }
     var LIST = [];        // весь справочник
     var ORDERS_CACHE = {}; // companyId -> {totals, orders}
     var VIEW = { mode:'list', companyId:null, filter:'' };

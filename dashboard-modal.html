@@ -76,6 +76,7 @@
       <button class="btn" id="workers" type="button" style="border-color:#4f7cff;color:#a9c2ff">⚙ Зарплата / Работники</button>
       <button class="btn" id="financeBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">₸ Финансы</button>
       <button class="btn" id="discBtn" type="button" style="border-color:#e8c07d;color:#e8c07d" title="Где и сколько уступаем клиентам: спеццены в расчётах против тарифа">% Уступки</button>
+      <button class="btn" id="tabelBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff" title="Табель: явка и время работников">📅 Табель</button>
       <button class="btn" id="boardBtn" type="button" style="border-color:#4caf7d;color:#9ee6bd" title="Своя доска: импорт из Trello, сравнение и переключение режима">🧱 Своя доска</button>
       <button class="btn" id="goalsBtn" type="button" style="border-color:#c9a8ff;color:#c9a8ff" title="Цели управляющему на месяц и бонус за их достижение">🎯 Цели управляющему</button>
       <button class="btn" id="healthBtn" type="button" style="border-color:#4caf7d;color:#9ee6bd" title="Система проверяет себя: права, модули, нумерация, сбои у работников">🩺 Здоровье системы</button>
@@ -1012,6 +1013,23 @@
     var finClose=function(){ ov.remove(); load(); }; // вернувшись, пересчитать плитки
     document.getElementById('finBack').onclick=finClose;
     document.getElementById('finX').onclick=finClose;
+  };
+  // ТАБЕЛЬ — внутри панели (решение Асхата, 11.2026: убран из шапки доски у руководства)
+  window.__MS_T = t;
+  document.getElementById('tabelBtn').onclick=function(){
+    var old=document.getElementById('tbOverlay'); if(old) old.remove();
+    var ov=document.createElement('div');
+    ov.id='tbOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column';
+    ov.innerHTML='<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
+      '<button id="tbBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад</button>'+
+      '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">📅 Табель</div>'+
+      '<button id="tbX" type="button" title="Закрыть" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px;line-height:1">✕</button></div>'+
+      '<iframe src="./timesheet-modal.html?embed=1&t='+Date.now()+'" style="flex:1;border:0;width:100%"></iframe>';
+    document.body.appendChild(ov);
+    var tbClose=function(){ ov.remove(); };
+    document.getElementById('tbBack').onclick=tbClose;
+    document.getElementById('tbX').onclick=tbClose;
   };
   document.getElementById('backupBtn').onclick=function(){
     var ov=document.createElement('div');
