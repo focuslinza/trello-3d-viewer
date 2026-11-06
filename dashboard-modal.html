@@ -38,6 +38,16 @@
     .chartbox2{position:relative;height:200px;margin-top:10px}
     .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;z-index:50}
     .bar .tabs{margin:0;flex:1;min-width:0}
+    html,body{overflow-x:clip}  /* без горизонтальной прокрутки (clip не ломает «липкую» нижнюю строку) */
+    .filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+    .filters input[type=date]{background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 9px;font-size:13px}
+    .filters .btn.green{border-color:#2e7d52;color:#7ee2a8;background:#1c3a2a;font-weight:700}
+    .mnav{display:flex;align-items:center;gap:6px}
+    .mnav .arw{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:5px 11px;font-size:15px;line-height:1;cursor:pointer;user-select:none}
+    .mnav .arw:hover{border-color:var(--accent)}
+    .mnav .arw.off{opacity:.35;cursor:default;pointer-events:none}
+    .mnav .mlbl{min-width:150px;text-align:center;font-size:13px;font-weight:600;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;cursor:pointer}
+    .mnav .mlbl.on{border-color:var(--accent);background:#22304d}
     .bar .tab{padding:7px 14px;font-size:13px;white-space:nowrap}
     .bar .tab.active{margin-top:-13px;padding-top:19px;border-top-color:transparent;border-radius:0 0 8px 8px}
     .btn{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
@@ -173,17 +183,32 @@
     }).catch(function(e){ boot('Сеть недоступна: '+(e&&e.message||e)); });
   }
 
+  // ПЕРИОД — как в Бухгалтерии (11.2026): одна строка «‹ Месяц › · даты · без выходных · Применить»,
+  // кнопки Сегодня/Неделя/Квартал/Год/Всё время убраны (не используются)
+  var MONTHS_RU=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  var NAVM=(function(){ var d=new Date((RANGE.from||fmtDate(new Date()))+'T00:00:00'); return { y:d.getFullYear(), m:d.getMonth() }; })();
+  function isThisMonth(){ var n=new Date(); return NAVM.y===n.getFullYear() && NAVM.m===n.getMonth(); }
+  function applyMonth(){
+    var n=new Date(), first=new Date(NAVM.y, NAVM.m, 1), last=isThisMonth() ? n : new Date(NAVM.y, NAVM.m+1, 0);
+    RANGE.from=fmtDate(first); RANGE.to=fmtDate(last); RANGE.presetKey='month'; ACTLOG=null; ACTLOG_KEY=''; load();
+  }
+  function shiftMonth(d){
+    if(d>0 && isThisMonth()) return;
+    NAVM.m+=d; if(NAVM.m<0){ NAVM.m=11; NAVM.y--; } if(NAVM.m>11){ NAVM.m=0; NAVM.y++; }
+    applyMonth();
+  }
   function periodBar(){
-    var presets=[['today','Сегодня'],['week','Неделя'],['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']];
-    var h='<div class="tabs" style="margin-bottom:10px">';
-    presets.forEach(function(p){ h+='<div class="tab'+(RANGE.presetKey===p[0]?' active':'')+'" data-preset="'+p[0]+'">'+p[1]+'</div>'; });
-    h+='</div>';
-    h+='<div class="period" style="justify-content:flex-start;flex-wrap:wrap;margin-bottom:8px">'+
-       '<input type="date" id="fromD" value="'+RANGE.from+'" style="background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px 8px;font-size:13px">'+
-       '<span class="muted">—</span>'+
-       '<input type="date" id="toD" value="'+RANGE.to+'" style="background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:6px 8px;font-size:13px">'+
-       '<button type="button" id="applyRange" class="btn" style="padding:6px 14px">Применить</button>'+
-       '<label class="small muted" style="display:flex;align-items:center;gap:6px;margin-left:8px;cursor:pointer"><input type="checkbox" id="exclWeekends"'+(EXCL_WEEKENDS?' checked':'')+'> без выходных (для средних)</label>'+
+    var h='<div class="filters">'+
+       '<div class="mnav">'+
+         '<div class="arw" id="mPrev" title="Предыдущий месяц">‹</div>'+
+         '<div class="mlbl'+(RANGE.presetKey==='month'?' on':'')+'" id="mLbl" title="Нажмите, чтобы показать этот месяц целиком">'+MONTHS_RU[NAVM.m]+' '+NAVM.y+'</div>'+
+         '<div class="arw'+(isThisMonth()?' off':'')+'" id="mNext" title="'+(isThisMonth()?'Это текущий месяц':'Следующий месяц')+'">›</div>'+
+       '</div>'+
+       '<input type="date" id="fromD" value="'+RANGE.from+'"><span class="muted">—</span>'+
+       '<input type="date" id="toD" value="'+RANGE.to+'">'+
+       '<span style="flex:1"></span>'+
+       '<label class="small muted" style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="exclWeekends"'+(EXCL_WEEKENDS?' checked':'')+'> без выходных (для средних)</label>'+
+       '<button type="button" id="applyRange" class="btn green">Применить</button>'+
        '</div>';
     h+='<div class="lbl" style="text-align:left;font-weight:700;font-size:15px">'+esc(periodLabel())+'</div>';
     return h;
@@ -598,11 +623,16 @@
 
       document.getElementById('app').innerHTML=h;
       [].forEach.call(document.querySelectorAll('[data-preset]'), function(el){ el.onclick=function(){ applyPreset(this.getAttribute('data-preset')); }; });
+      var mp=document.getElementById('mPrev'), mn=document.getElementById('mNext'), ml=document.getElementById('mLbl');
+      if(mp) mp.onclick=function(){ shiftMonth(-1); };
+      if(mn) mn.onclick=function(){ shiftMonth(1); };
+      if(ml) ml.onclick=function(){ applyMonth(); };
       var ar=document.getElementById('applyRange'); if(ar) ar.onclick=function(){
         var f=document.getElementById('fromD').value, t2=document.getElementById('toD').value;
         if(!f||!t2) return;
         if(f>t2){ var tmp=f; f=t2; t2=tmp; }
-        RANGE.from=f; RANGE.to=t2; RANGE.presetKey='custom'; ACTLOG=null; ACTLOG_KEY=''; load();
+        RANGE.from=f; RANGE.to=t2; RANGE.presetKey='custom'; ACTLOG=null; ACTLOG_KEY='';
+        var d0=new Date(f+'T00:00:00'); NAVM={ y:d0.getFullYear(), m:d0.getMonth() }; load();
       };
       var ew=document.getElementById('exclWeekends'); if(ew) ew.onchange=function(){ EXCL_WEEKENDS=this.checked; render(); };
       [].forEach.call(document.querySelectorAll('.tab[data-tab]'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
