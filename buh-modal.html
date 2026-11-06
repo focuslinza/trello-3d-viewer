@@ -45,7 +45,10 @@
     .pdfmark{font-size:11px;color:var(--muted)}
     .rowclosed td{opacity:.55}
     .empty{color:var(--muted);padding:14px 4px}
-    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end;z-index:50}
+    .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;z-index:50}
+    /* вкладки разделов — внизу рядом с «Закрыть»; активная «свисает» из окна над ней */
+    .bar .tabs{margin:0;flex:1;min-width:0}
+    .bar .tab.active{margin-top:-13px;padding-top:19px;border-top-color:transparent;border-radius:0 0 8px 8px}
     label.f{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer}
   </style>
 </head>
@@ -53,7 +56,7 @@
 
   <div id="app"><div class="empty" id="boot">Загрузка…</div></div>
   <div id="invOvlHost"></div>
-  <div class="bar"><button class="btn" id="close" type="button">Закрыть</button></div>
+  <div class="bar"><div class="tabs" id="barTabs"></div><button class="btn" id="close" type="button">Закрыть</button></div>
   <script>
     var t = window.TrelloPowerUp.iframe();
     // Имена заказчиков: на карточке в CRM отмечены контакты (cardContacts);
@@ -437,30 +440,26 @@
     function render(){
       var app=document.getElementById('app');
       var h='<h2>Бухгалтерия <span class="muted" style="font-weight:400">· '+RANGE.from+' — '+RANGE.to+'</span></h2>';
-      h+='<div class="tabs" style="margin-bottom:6px">'+
-         '<div class="tab'+(VIEW==='orders'?' active':'')+'" data-view="orders">Заказы</div>'+
+      // вкладки разделов — внизу рядом с «Закрыть» (как в Снабжении)
+      var bt='<div class="tab'+(VIEW==='orders'?' active':'')+'" data-view="orders">Заказы</div>'+
          '<div class="tab'+(VIEW==='invoices'?' active':'')+'" data-view="invoices">Счета на оплату</div>'+
          '<div class="tab'+(VIEW==='payroll'?' active':'')+'" data-view="payroll">Зарплаты</div>'+
          '<div class="tab'+(VIEW==='repairs'?' active':'')+'" data-view="repairs">Ремонт</div>'+
          '<div class="tab'+(VIEW==='meals'?' active':'')+'" data-view="meals">Обеды</div>'+
-         '<div class="tab'+(VIEW==='rework'?' active':'')+'" data-view="rework">Брак</div>'+
-         '</div>';
-      h+='<div class="tabs">';
-      [['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё время']].forEach(function(p){
-        h+='<div class="tab'+(RANGE.preset===p[0]?' active':'')+'" data-preset="'+p[0]+'">'+p[1]+'</div>';
-      });
-      h+='<div class="mnav">'+
+         '<div class="tab'+(VIEW==='rework'?' active':'')+'" data-view="rework">Брак</div>';
+      var btEl=document.getElementById('barTabs'); if(btEl) btEl.innerHTML=bt;
+      // одна строка: месяц ‹ › · даты · поиск · только незакрытые · Применить
+      h+='<div class="filters">';
+      h+='<div class="mnav" style="margin-left:0">'+
          '<div class="arw" id="mPrev" title="Предыдущий месяц">‹</div>'+
          '<div class="lbl'+(RANGE.preset==='month'?' on':'')+'" id="mLbl" title="Нажмите, чтобы показать этот месяц целиком">'+MONTHS[NAVM.m]+' '+NAVM.y+'</div>'+
          '<div class="arw'+(isThisMonth()?' off':'')+'" id="mNext" title="'+(isThisMonth()?'Это текущий месяц':'Следующий месяц')+'">›</div>'+
          '</div>';
-      h+='</div>';
-      h+='<div class="filters">'+
-         '<input type="date" id="fromD" value="'+RANGE.from+'"><span class="muted">—</span>'+
+      h+='<input type="date" id="fromD" value="'+RANGE.from+'"><span class="muted">—</span>'+
          '<input type="date" id="toD" value="'+RANGE.to+'">'+
+         '<input type="text" id="q" placeholder="Поиск: №, заказ, клиент…" value="'+esc(FILTER)+'" style="flex:1;min-width:160px">'+
+         '<label class="f" style="white-space:nowrap"><input type="checkbox" id="onlyOpen"'+(ONLY_OPEN?' checked':'')+'> только незакрытые</label>'+
          '<button class="btn green" id="applyR" type="button">Применить</button>'+
-         '<input type="text" id="q" placeholder="Поиск: №, заказ, клиент…" value="'+esc(FILTER)+'">'+
-         '<label class="f"><input type="checkbox" id="onlyOpen"'+(ONLY_OPEN?' checked':'')+'> только незакрытые</label>'+
          '</div>';
       if(VIEW==='invoices'){
         h+=renderInvoicesBody();
