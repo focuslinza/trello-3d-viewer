@@ -39,7 +39,7 @@
     body{padding-bottom:64px}
     .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;z-index:50}
     .bar .tabs{margin:0;flex:1;min-width:0}
-    html,body{overflow-x:clip}  /* без горизонтальной прокрутки (clip не ломает «липкую» нижнюю строку) */
+    html,body{overflow-x:clip;max-width:100vw}  /* без горизонтальной прокрутки (clip не ломает «липкую» нижнюю строку) */
     .filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
     .filters input[type=date]{background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 9px;font-size:13px}
     .filters .btn.green{border-color:#2e7d52;color:#7ee2a8;background:#1c3a2a;font-weight:700}
@@ -74,7 +74,7 @@
     table.rtable input.ov{background:#2b3a1f;border-color:#4a6b2c;color:#c8e6a0}
     .rtlegend{display:flex;align-items:center;gap:14px;font-size:11.5px;color:var(--muted);margin:2px 0 10px}
     .rtlegend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px}
-    .prf .un{font-size:11px;color:var(--muted);width:22px}
+    .prf .un{font-size:11px;color:var(--muted);min-width:22px;max-width:90px;line-height:1.25}
     .savebar{display:flex;gap:10px;align-items:center;margin-top:14px}
     .btnp{background:var(--green);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:14px;cursor:pointer}
     .btnp.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
@@ -345,8 +345,7 @@
     h+=coefField('Ставка сварки (множитель)','rateWeld', c.rateWeld!=null&&c.rateWeld!==''?+c.rateWeld:1,'×');
     h+=coefField('Ремонт: надбавка на работы клиенту (резка, гибка, сварка, свои работы; материалы не меняются)','repairWorkPct', c.repairWorkPct!=null&&c.repairWorkPct!==''?+c.repairWorkPct:0,'% (0 = без надбавки)');
     h+='</div>';
-    h+='<h3 style="margin-top:18px">Доля работника от стоимости работ</h3>';
-    h+='<div class="small muted" style="margin-bottom:8px">Доли (цех / сборка / монтаж, %) настраиваются в <b>«Зарплата / Работники»</b> — вместе с типами оплаты, премией и инженерным процентом.</div>';
+    // «Доля работника от стоимости работ» убрана (решение Асхата, 11.2026): зарплата сейчас по окладу
     h+='<div class="small muted" style="margin-top:6px">Множитель ставок поднимает или опускает сразу всю таблицу ставок ниже (резка/гибка используют одну таблицу с разным множителем, сварка — свою). Отдельные ячейки таблицы можно поправить точечно — см. «Таблицы ставок» ниже.</div>';
 
     // --- остатки / расходники: теперь по каждому разделу отдельно, а не одной цифрой на всё ---
@@ -1055,6 +1054,8 @@
     document.getElementById('finBack').onclick=finClose;
     document.getElementById('finX').onclick=finClose;
   };
+  // страница никогда не должна уезжать вбок (тогда пропадают первые вкладки внизу)
+  window.addEventListener('scroll', function(){ if(window.scrollX) window.scrollTo(0, window.scrollY); });
   // ВКЛАДКИ ВНИЗУ (11.2026). «Обзор» убран: панель сразу открывает первый доступный раздел.
   // Каждый раздел — вкладка: занимает экран над нижней строкой, своя шапка («← Назад», ✕)
   // спрятана, полезные кнопки из неё — в теле раздела. Разделы «за период» (Финансы, Уступки)
