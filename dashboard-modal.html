@@ -392,8 +392,9 @@
       });
       return out;
     }
-    h+='<h3 style="margin-top:16px">Цены материалов (₸ за м²/п.м)</h3>'+priceRows(MAT, pm, 'mp');
-    h+='<h3 style="margin-top:6px">Цены компонентов (₸ за шт / краска за м²)</h3>'+priceRows(CMP, pc, 'cp');
+    // ЦЕНЫ МАТЕРИАЛОВ И КОМПОНЕНТОВ здесь не показываем (решение Асхата, 11.2026):
+    // они ведутся в Снабжении → «Цены материалов» (номенклатура). Здесь — только работы.
+    h+='<div class="small muted" style="margin:14px 0 4px">Цены материалов и компонентов — в <b>Снабжение → «Цены материалов»</b>.</div>';
 
     // --- custom (added) items ---
     // накладки на заводские позиции (тот же код, правятся в Снабжение → «Номенклатура»)
@@ -407,14 +408,6 @@
     var cmpSections = uniq(sectionsOf(CMP).map(function(s){return s.sec;}).concat(cc.map(function(it){return it.sec;})));
     var opSections = uniq(co.map(function(it){return it.sec;}));
 
-    h+='<h3 style="margin-top:18px">Свои материалы</h3>';
-    h+='<div class="small muted" style="margin-bottom:6px">Добавляйте материалы, которых нет выше — они появятся в калькуляторе. <b>Цена указывается за единицу, в которой вводится количество в калькуляторе: листовые — за м², трубы/профили — за погонный метр</b> (не за целый лист!). «Отходы %» — надбавка на обрезки (обычно 15, для труб/профилей 20). «Расходники %» — сопутствующие затраты (обычно 4). Итог = цена × кол-во × (1+отходы) × (1+расходники).</div>';
-    cm.forEach(function(it){ h+=custRow('mat', it, matSections); });
-    h+='<button class="btnp ghost" data-add="mat" type="button" style="margin-top:4px">+ материал</button>';
-
-    h+='<h3 style="margin-top:16px">Свои компоненты</h3>';
-    cc.forEach(function(it){ h+=custRow('cmp', it, cmpSections); });
-    h+='<button class="btnp ghost" data-add="cmp" type="button" style="margin-top:4px">+ компонент</button>';
 
     h+='<h3 style="margin-top:16px">Свои работы (фиксированная ставка за единицу)</h3>';
     co.forEach(function(it){ h+=custRow('op', it, opSections); });
@@ -439,8 +432,8 @@
     ['shareShop','shareAssembly','shareMontazh'].forEach(function(k){
       if (P.coef[k]===undefined && PRICING_EDIT.coef && PRICING_EDIT.coef[k]!==undefined && PRICING_EDIT.coef[k]!=='') P.coef[k]=+PRICING_EDIT.coef[k];
     });
-    [].forEach.call(document.querySelectorAll('.mp'), function(el){ if(el.value!=='') P.mat[el.getAttribute('data-code')]=+el.value; });
-    [].forEach.call(document.querySelectorAll('.cp'), function(el){ if(el.value!=='') P.cmp[el.getAttribute('data-code')]=+el.value; });
+    // цены материалов/компонентов и свои позиции — из Снабжения, сохраняем как есть
+    P.mat=Object.assign({}, PRICING_EDIT.mat||{}); P.cmp=Object.assign({}, PRICING_EDIT.cmp||{});
     // проценты по разделам (остатки/расходники для материалов, компонентов, работ)
     [].forEach.call(document.querySelectorAll('.so'), function(el){
       var v=el.value; if(v==='') return;
@@ -471,8 +464,7 @@
       else if(t==='cmp') P.customCmp.push(Object.assign(base('customCmp',code), { code:code, lbl:lbl, sec:sec||'ДРУГИЕ КОМПОНЕНТЫ', u:+fv(row,'u')||0, ost:0, rah:(+fv(row,'rah')||0)/100, m:(fv(row,'m')!==''?+fv(row,'m'):1) }));
       else if(t==='op') P.customOp.push(Object.assign(base('customOp',code), { code:code, lbl:lbl, sec:sec||'РАБОТЫ', rate:+fv(row,'rate')||0 }));
     });
-    (PRICING_EDIT.customMat||[]).forEach(function(it){ if(it && CALC.FACT_MAT && CALC.FACT_MAT[it.code]) P.customMat.push(it); });
-    (PRICING_EDIT.customCmp||[]).forEach(function(it){ if(it && CALC.FACT_CMP && CALC.FACT_CMP[it.code]) P.customCmp.push(it); });
+    P.customMat=(PRICING_EDIT.customMat||[]).slice(); P.customCmp=(PRICING_EDIT.customCmp||[]).slice();
     return P;
   }
   function savePricing(){
