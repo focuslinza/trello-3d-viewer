@@ -1063,10 +1063,20 @@
   function markTab(el){ TABS.forEach(function(x){ x.classList.toggle('active', x===el); }); CUR=el; }
   function overlays(){ return [].slice.call(document.body.children).slice(OV_BASE).filter(function(n){ return n.tagName!=='SCRIPT' && n.style && n.style.position==='fixed'; }); }
   function closeAllOverlays(){ overlays().forEach(function(n){ n.remove(); }); }
+  // пока открыт раздел-вкладка, сама страница не прокручивается (иначе две полосы прокрутки)
+  function syncPageScroll(){ document.documentElement.style.overflow = overlays().length ? 'hidden' : ''; }
+  new MutationObserver(syncPageScroll).observe(document.body,{childList:true});
   function topOffset(){ if(!(CUR && CUR.getAttribute('data-per'))) return 0; var ps=document.getElementById('perSec'); return ps ? Math.round(ps.getBoundingClientRect().bottom)+6 : 0; }
   function adaptOverlay(n){
     if(n.__msAdapted) return; n.__msAdapted=1;
     n.style.bottom=(BAR?BAR.offsetHeight:60)+'px'; n.style.top=topOffset()+'px'; n.style.zIndex='40';
+    // ОДНА полоса прокрутки (11.2026): прокручивается сам раздел целиком, у правого края окна;
+    // внутренние блоки не прокручиваются отдельно, страница под разделом — тоже
+    var hasFrame=!!n.querySelector('iframe');
+    if(!hasFrame){
+      n.style.overflow='auto'; n.style.display='block';
+      [].forEach.call(n.children, function(ch){ ch.style.flex='none'; ch.style.overflow='visible'; ch.style.height='auto'; });
+    }
     var bk=n.querySelector('button[id$="Back"]'), hd=bk && bk.parentElement;
     if(hd && hd!==n){
       var keep=[].filter.call(hd.querySelectorAll('button'), function(x){ return x!==bk && !/X$/.test(x.id||''); });
