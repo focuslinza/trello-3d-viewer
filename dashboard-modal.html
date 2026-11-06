@@ -1046,7 +1046,7 @@
       '<button id="finBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад</button>'+
       '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">₸ Финансы: чистая прибыль</div>'+
       '<button id="finX" type="button" title="Закрыть" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px;line-height:1">✕</button></div>'+
-      '<iframe src="'+WORKER+'/profit?from='+r.from+'&to='+r.to+'" style="flex:1;border:0;width:100%"></iframe>';
+      '<iframe src="'+WORKER+'/profit?embed=1&from='+r.from+'&to='+r.to+'" style="flex:1;border:0;width:100%"></iframe>';
     document.body.appendChild(ov);
     var finClose=function(){ ov.remove(); load(); }; // вернувшись, пересчитать плитки
     document.getElementById('finBack').onclick=finClose;
