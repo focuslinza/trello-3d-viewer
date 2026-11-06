@@ -975,6 +975,18 @@
     }
     // НАИМЕНОВАНИЯ В СЧЁТЕ (решение Асхата, 09.2026): бухгалтер правит название строки
     // здесь — карточка заказа не меняется, а счёт сразу выходит с правильным текстом
+    // ОДИН СЧЁТ — ОДНА КОМПАНИЯ (решение Асхата, 11.2026): заказы разных компаний
+    // в один счёт не объединяем. Сервер проверяет это ещё раз при сохранении.
+    var coSet={}, noCo=[];
+    selectedOrders().forEach(function(o){
+      var cid=o.company_id || (o.company_name?idByName(o.company_name):null);
+      if(!cid) noCo.push(o.number||o.name); else coSet[cid]=1;
+    });
+    var coIds=Object.keys(coSet);
+    if(noCo.length){ alert('У заказа '+noCo.join(', ')+' не указана компания. Укажите компанию в карточке — счёт выставляется только на одну компанию.'); return; }
+    if(coIds.length>1 || (coIds.length===1 && coIds[0]!==selectedCompanyId)){
+      alert('В один счёт нельзя включать заказы разных компаний. Выставьте отдельный счёт на каждую компанию.'); return;
+    }
     var okNames = await askInvoiceNames(selectedOrders());
     if (!okNames) return;
     gen.disabled=true; gen.textContent='Готовлю…';
