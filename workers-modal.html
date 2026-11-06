@@ -169,7 +169,11 @@
   </div>
 
   <script>
-    var t = window.TrelloPowerUp.iframe();
+    // ВСТРОЕННЫЙ РЕЖИМ (?embed=1): открыто вкладкой внутри панели руководителя —
+    // подключение к Trello берём у панели, свою нижнюю панель прячем
+    var EMBED = /[?&]embed=1/.test(location.search) && window.parent !== window;
+    var t = (EMBED && window.parent.__MS_T) || window.TrelloPowerUp.iframe();
+    if (EMBED) { var _st=document.createElement('style'); _st.textContent='.bar,.bottombar{display:none!important}body{padding-bottom:0!important}'; document.head.appendChild(_st); }
     document.getElementById('backToDash').onclick=function(){
       t.modal({ url:'./dashboard-modal.html?t='+Date.now(), fullscreen:true, title:'Панель руководителя', accentColor:'#1f6ce8' });
     };

@@ -697,8 +697,13 @@
   }
 
   document.getElementById('close').onclick=function(){ t.closeModal(); };
+  // ЗАРПЛАТА / РАБОТНИКИ — тоже вкладкой внутри панели (своё окно встроено)
   document.getElementById('workers').onclick=function(){
-    t.modal({ url:'./workers-modal.html?t='+Date.now(), fullscreen:true, title:'Зарплата и работники', accentColor:'#1f6ce8' });
+    window.__MS_T = t;
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column';
+    ov.innerHTML='<iframe src="./workers-modal.html?embed=1&t='+Date.now()+'" style="flex:1;border:0;width:100%"></iframe>';
+    document.body.appendChild(ov);
   };
   // ОТЧЁТ «УСТУПКИ» (решение Асхата, 09.2026): спеццены из расчётов против тарифа —
   // по операциям/толщинам (где торг стал нормой → тариф завышен), по клиентам, по инженерам
@@ -1024,9 +1029,23 @@
   (function(){
     var tabs=[].slice.call(document.querySelectorAll('#barTabs .tab')), base=document.body.children.length;
     function mark(el){ tabs.forEach(function(x){ x.classList.toggle('active', x===el); }); }
-    tabs.forEach(function(el){ el.addEventListener('click', function(){ mark(el); if(!el.getAttribute('data-sec')) closeAllOverlays(); }, true); });
-    function closeAllOverlays(){ [].slice.call(document.body.children).slice(base).forEach(function(n){ if(n.tagName!=='SCRIPT') n.remove(); }); }
-    new MutationObserver(function(){ if(document.body.children.length<=base) mark(tabs[0]); }).observe(document.body,{childList:true});
+    // нажатие любой вкладки: сначала закрываем открытый раздел, потом открываем новый
+    tabs.forEach(function(el){ el.addEventListener('click', function(){
+      closeAllOverlays(); mark(el);
+      if(!el.getAttribute('data-sec') || el.id!=='pricingBtn'){ if(tab==='pricing'){ tab='people'; render(); } }
+    }, true); });
+    function closeAllOverlays(){ [].slice.call(document.body.children).slice(base).forEach(function(n){ if(n.tagName!=='SCRIPT' && n.style && n.style.position==='fixed'){ n.__msSwitch=1; n.remove(); } }); }
+    // раздел открывается КАК ВКЛАДКА: занимает экран над нижней строкой, строка вкладок остаётся видна
+    var bar=document.querySelector('.bar');
+    new MutationObserver(function(muts){
+      muts.forEach(function(m){ [].forEach.call(m.addedNodes, function(n){
+        if(n.nodeType===1 && n.style && n.style.position==='fixed'){ n.style.bottom=(bar?bar.offsetHeight:60)+'px'; n.style.top='0'; n.style.zIndex='40'; }
+      }); });
+      // раздел закрыли его собственной кнопкой (а не переключением вкладки) — подсветка на «Обзор»
+      var closedByUser=muts.some(function(m){ return [].some.call(m.removedNodes, function(n){ return n.nodeType===1 && n.style && n.style.position==='fixed' && !n.__msSwitch; }); });
+      var open=[].slice.call(document.body.children).slice(base).some(function(n){ return n.style && n.style.position==='fixed'; });
+      if(closedByUser && !open && tab!=='pricing') mark(tabs[0]);
+    }).observe(document.body,{childList:true});
   })();
   // ТАБЕЛЬ — внутри панели (решение Асхата, 11.2026: убран из шапки доски у руководства)
   window.__MS_T = t;
