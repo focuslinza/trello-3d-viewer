@@ -192,7 +192,7 @@
         // админство и права спрашиваем ОДНОВРЕМЕННО — общий ответ укладывается в ~2 с
         return Promise.all([isAdmin(), perms()]).then(function(r){
           var admin = r[0];
-          if (admin) return [earnBtn, repairBtn, supBtn, tabelBtn, salesBtn, mgmtBtn([dashBtn, buhBtn, crmBtn])];
+          if (admin) return [earnBtn, repairBtn, supBtn, tabelBtn, buhBtn, salesBtn, mgmtBtn([dashBtn, crmBtn])]; // Бухгалтерия — отдельной кнопкой
           return Promise.resolve(r[1]).then(function(p){
             var out = [earnBtn, repairBtn, supBtn]; // ремонт и снабжение (канбан заявок) — любой работник;
             // внутри «Снабжения» инструмент/наличные/цены видят только снабженец и руководство

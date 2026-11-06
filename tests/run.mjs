@@ -64,7 +64,7 @@ for (const [f, want] of Object.entries(EXPECT)) {
   const btns = await caps['board-buttons'](mkT(), {});
   const names = btns.map(b => b.text);
   if (Date.now() - t0 > 3500) fail('кнопки доски отвечают дольше 3,5 с — Trello их выбросит');
-  if (!names.includes('Бухгалтерия')) fail('нет кнопки «Бухгалтерия» у руководителя: ' + names.join(', ')); else ok('кнопки доски: ' + names.join(', '));
+  if (!names.includes('Бух')) fail('нет кнопки «Бух» (Бухгалтерия) у руководителя: ' + names.join(', ')); else ok('кнопки доски: ' + names.join(', '));
   dom.window.close();
 }
 console.log(fails ? ('\nПРОВАЛЕНО проверок: ' + fails) : '\nВСЁ В ПОРЯДКЕ');
