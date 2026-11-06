@@ -50,7 +50,15 @@
     <button class="btn" id="close" type="button">Закрыть</button>
   </div>
 <script>
-  var t = window.TrelloPowerUp.iframe();
+  // ВСТРОЕННЫЙ РЕЖИМ (?embed=1): HR кабинет открыт из Табеля внутри панели руководителя —
+  // подключение к Trello берём у панели, нижнюю строку прячем (у панели своя), «← Табель» — сверху
+  var EMBED = /[?&]embed=1/.test(location.search) && window.parent !== window;
+  var t = (EMBED && window.parent.__MS_T) || window.TrelloPowerUp.iframe();
+  if (EMBED) {
+    var _st=document.createElement('style'); _st.textContent='.bar{position:static!important;border:0!important;background:transparent!important;padding:0 0 10px!important;max-width:1100px;margin:0 auto}.bar #close{display:none!important}body{padding-bottom:0!important}';
+    document.head.appendChild(_st);
+    document.addEventListener('DOMContentLoaded', function(){ var b=document.querySelector('.bar'); if(b && b.parentNode) b.parentNode.insertBefore(b, b.parentNode.firstChild); });
+  }
   var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
   var DATA = null, TAB = 'current', ME_NAME = '', ME_ID = '', IS_ADMIN = false;
 
@@ -70,6 +78,7 @@
 
   document.getElementById('close').onclick = function(){ t.closeModal(); };
   document.getElementById('backTs').onclick = function(){
+    if (EMBED) { location.href='./timesheet-modal.html?embed=1&t='+Date.now(); return; }
     t.modal({ url:'./timesheet-modal.html?t='+Date.now(), fullscreen:true, title:'Табель', accentColor:'#1f6ce8' });
   };
 

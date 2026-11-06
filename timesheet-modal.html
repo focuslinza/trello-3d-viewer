@@ -395,6 +395,8 @@
     }
 
     function openHr(){
+      // внутри панели руководителя — переходим в том же окне, вкладки панели остаются
+      if (EMBED) { location.href='./hr-modal.html?embed=1&t='+Date.now(); return; }
       t.modal({ url:'./hr-modal.html?t='+Date.now(), fullscreen:true, title:'HR кабинет', accentColor:'#1f6ce8' });
     }
 
