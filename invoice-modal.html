@@ -380,7 +380,7 @@
       });
     }).catch(function(){ return []; });
     // какие заказы/заявки уже включались в счета — для явной пометки при выборе
-    var pBilled = fetch(WORKER+'/invoice-list').then(function(r){return r.json();}).then(function(j){
+    var pBilled = fetch(WORKER+'/invoice-list?slim=1').then(function(r){return r.json();}).then(function(j){
       var map = {};
       (((j&&j.rows)||[])).forEach(function(iv){
         if (+iv.archived === 1) return; // аннулированный счёт заказы не держит

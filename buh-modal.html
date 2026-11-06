@@ -48,6 +48,9 @@
     .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;z-index:50}
     /* вкладки разделов — внизу рядом с «Закрыть»; активная «свисает» из окна над ней */
     .bar .tabs{margin:0;flex:1;min-width:0}
+    #busyBar{display:none;position:fixed;top:0;left:0;right:0;height:3px;z-index:99;background:linear-gradient(90deg,transparent,#579dff,transparent);background-size:40% 100%;background-repeat:no-repeat;animation:busyMove 1s linear infinite}
+    @keyframes busyMove{from{background-position:-40% 0}to{background-position:140% 0}}
+    #app{transition:opacity .15s}
     .bar .tab.active{margin-top:-13px;padding-top:19px;border-top-color:transparent;border-radius:0 0 8px 8px}
     label.f{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer}
   </style>
@@ -56,6 +59,7 @@
 
   <div id="app"><div class="empty" id="boot">Загрузка…</div></div>
   <div id="invOvlHost"></div>
+  <div id="busyBar"></div>
   <div class="bar"><div class="tabs" id="barTabs"></div><button class="btn" id="close" type="button">Закрыть</button></div>
   <script>
     var t = window.TrelloPowerUp.iframe();
@@ -297,6 +301,24 @@
       load();
     }
 
+    // СКОРОСТЬ И ОТКЛИК (урок 11.2026): раньше после нажатия вкладки ничего не менялось,
+    // пока сервер не ответит, — непонятно, нажалось ли. Теперь: вкладка подсвечивается
+    // сразу, сверху бежит полоска загрузки, а уже открытые раньше разделы показываются
+    // мгновенно из памяти и тихо обновляются, когда придёт свежий ответ.
+    var CACHE={}, BUSY=0;
+    function busy(d){ BUSY=Math.max(0,BUSY+d); var b=document.getElementById('busyBar'); if(b) b.style.display=BUSY?'block':'none'; }
+    function cfetch(url, onData, onErr){
+      var had=CACHE[url];
+      if(had){ try{ onData(had.j); }catch(e){} }
+      busy(1);
+      return fetch(url).then(function(r){return r.json();}).then(function(j){
+        busy(-1);
+        var txt=JSON.stringify(j);
+        if(had && had.txt===txt) return;          // ничего не изменилось — не перерисовываем
+        CACHE[url]={ j:j, txt:txt };
+        onData(j);
+      }).catch(function(e){ busy(-1); if(!had && onErr) onErr(e); });
+    }
     function load(){
       if(VIEW==='invoices') return loadInvoices();
       if(VIEW==='payroll') return loadPayroll();
@@ -304,37 +326,36 @@
       if(VIEW==='meals') return loadMeals();
       if(VIEW==='rework') return loadRework();
       var b=document.getElementById('boot'); if(b) b.textContent='Загружаю заказы…';
-      fetch(WORKER+'/acct-list?from='+RANGE.from+'&to='+RANGE.to)
-        .then(function(r){return r.json();})
-        .then(function(j){
-          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+      var vw=VIEW;
+      cfetch(WORKER+'/acct-list?from='+RANGE.from+'&to='+RANGE.to, function(j){
+          if(VIEW!==vw) return;
+          if(!j||!j.ok){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc((j&&j.error)||'сервер не ответил')+'</div>'; return; }
           ROWS=j.rows||[]; TOTALS=j.totals||{};
           render();
           loadPersonNames(); // имена заказчиков (контакты CRM) — подтянутся по мере загрузки
-        })
-        .catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+        }, function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
     }
 
     function loadPayroll(){
       var b=document.getElementById('boot'); if(b) b.textContent='Считаю зарплаты…';
       var app=document.getElementById('app');
-      app.innerHTML='<div class="empty">Считаю зарплаты за период… (собираю заработки по заказам, может занять до минуты)</div>';
-      fetch(WORKER+'/payroll-summary?from='+RANGE.from+'&to='+RANGE.to)
-        .then(function(r){return r.json();})
-        .then(function(j){
-          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+      var url=WORKER+'/payroll-summary?from='+RANGE.from+'&to='+RANGE.to;
+      if(!CACHE[url]) app.innerHTML='<div class="empty">Считаю зарплаты за период…</div>';
+      cfetch(url, function(j){
+          if(VIEW!=='payroll') return;
+          if(!j||!j.ok){ app.innerHTML='<div class="empty">Ошибка: '+esc((j&&j.error)||'сервер не ответил')+'</div>'; return; }
           PAY=j; render();
-        })
-        .catch(function(e){ app.innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+        }, function(e){ app.innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
     }
 
     var MEALS=null, MEALS_YM=(new Date()).toISOString().slice(0,7);
     function loadMeals(){
       var b=document.getElementById('boot'); if(b) b.textContent='Загружаю обеды…';
-      fetch(WORKER+'/meals-month?ym='+MEALS_YM).then(function(r){return r.json();}).then(function(j){
-        if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+      cfetch(WORKER+'/meals-month?ym='+MEALS_YM, function(j){
+        if(VIEW!=='meals') return;
+        if(!j||!j.ok){ document.getElementById('app').innerHTML='<div class="muted">Ошибка: '+esc((j&&j.error)||'сервер не ответил')+'</div>'; return; }
         MEALS=j; render();
-      }).catch(function(e){ document.getElementById('app').innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+      }, function(e){ document.getElementById('app').innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
     }
 
     function renderMealsBody(){
@@ -401,26 +422,22 @@
 
     function loadInvoices(){
       var b=document.getElementById('boot'); if(b) b.textContent='Загружаю счета…';
-      fetch(WORKER+'/invoice-payments-list?from='+RANGE.from+'&to='+RANGE.to)
-        .then(function(r){return r.json();})
-        .then(function(j){
-          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+      cfetch(WORKER+'/invoice-payments-list?from='+RANGE.from+'&to='+RANGE.to, function(j){
+          if(VIEW!=='invoices') return;
+          if(!j||!j.ok){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc((j&&j.error)||'сервер не ответил')+'</div>'; return; }
           INV_ROWS=j.rows||[]; INV_TOTALS=j.totals||{}; INV_SHARE=j.minShare||0.5;
           render();
-        })
-        .catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+        }, function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
     }
 
     function loadRepairs(){
       var b=document.getElementById('boot'); if(b) b.textContent='Загружаю ремонты…';
-      fetch(WORKER+'/repair-acct-list?from='+RANGE.from+'&to='+RANGE.to)
-        .then(function(r){return r.json();})
-        .then(function(j){
-          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
+      cfetch(WORKER+'/repair-acct-list?from='+RANGE.from+'&to='+RANGE.to, function(j){
+          if(VIEW!=='repairs') return;
+          if(!j||!j.ok){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc((j&&j.error)||'сервер не ответил')+'</div>'; return; }
           REP_ROWS=j.rows||[]; REP_TOTALS=j.totals||{};
           render();
-        })
-        .catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
+        }, function(e){ document.getElementById('app').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
     }
 
     function chip(r, field, label){
@@ -438,7 +455,7 @@
     }
 
     function render(){
-      var app=document.getElementById('app');
+      var app=document.getElementById('app'); if(app) app.style.opacity='';
       var h='<h2>Бухгалтерия <span class="muted" style="font-weight:400">· '+RANGE.from+' — '+RANGE.to+'</span></h2>';
       // вкладки разделов — внизу рядом с «Закрыть» (как в Снабжении)
       var bt='<div class="tab'+(VIEW==='orders'?' active':'')+'" data-view="orders">Заказы</div>'+
@@ -772,9 +789,10 @@
     var REWORK=null;
     function loadRework(){
       render();
-      fetch(WORKER+'/rework-report?from='+RANGE.from+'&to='+RANGE.to).then(function(r){return r.json();}).then(function(j){
+      cfetch(WORKER+'/rework-report?from='+RANGE.from+'&to='+RANGE.to, function(j){
+        if(VIEW!=='rework') return;
         REWORK=j; renderReworkBody();
-      }).catch(function(){ var el=document.getElementById('reworkBody'); if(el) el.innerHTML='<div class="muted">Не удалось загрузить.</div>'; });
+      }, function(){ var el=document.getElementById('reworkBody'); if(el) el.innerHTML='<div class="muted">Не удалось загрузить.</div>'; });
     }
     function renderReworkBody(){
       var el=document.getElementById('reworkBody'); if(!el||!REWORK) return;
@@ -960,7 +978,12 @@
     }
 
     function bindCommon(){
-      [].forEach.call(document.querySelectorAll('[data-view]'), function(el){ el.onclick=function(){ var v=this.getAttribute('data-view'); if(v!==VIEW){ VIEW=v; load(); } }; });
+      [].forEach.call(document.querySelectorAll('[data-view]'), function(el){ el.onclick=function(){ var v=this.getAttribute('data-view'); if(v!==VIEW){
+        VIEW=v;
+        [].forEach.call(document.querySelectorAll('[data-view]'), function(x){ x.classList.toggle('active', x.getAttribute('data-view')===v); });
+        var app=document.getElementById('app'); if(app) app.style.opacity='.45';
+        busy(1); setTimeout(function(){ busy(-1); load(); }, 0);
+      } }; });
       [].forEach.call(document.querySelectorAll('[data-ik]'), function(el){ el.onclick=function(){ INV_KIND=this.getAttribute('data-ik'); render(); bindCommon(); }; });
       [].forEach.call(document.querySelectorAll('.iarch'), function(el){
         el.onclick=function(){
@@ -1005,7 +1028,9 @@
       };
       var q=document.getElementById('q');
       if(q) q.oninput=function(){
-        FILTER=this.value; render(); var el=document.getElementById('q'); el.focus(); var v=el.value; el.value=''; el.value=v;
+        // перерисовка не на каждую букву, а через 0,2 с после последней
+        FILTER=this.value; clearTimeout(window.__qT);
+        window.__qT=setTimeout(function(){ render(); var el=document.getElementById('q'); if(el){ el.focus(); var v=el.value; el.value=''; el.value=v; } }, 200);
         clearTimeout(WIDE_TIMER);
         var query=FILTER.trim();
         if(query.length<2){ WIDE_RESULTS=null; return; }
