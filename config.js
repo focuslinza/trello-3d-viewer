@@ -28,7 +28,7 @@
   // карточки ключом учредителя, поэтому в Trello любой перенос выглядит как «Асхат».
   // Чтобы в журнале статусов было видно настоящего автора, имя открывшего окно
   // дописывается в запросы смены статусов, если окно само его не передало.
-  var WHO_PATHS = ['/calc-paid', '/acct-set', '/repair-flags', '/calc-cancel', '/calc-hide', '/order-flag', '/invoice-archive', '/invoice-mark-sent'];
+  var WHO_PATHS = ['/calc-paid', '/acct-set', '/repair-flags', '/calc-cancel', '/calc-hide', '/order-flag', '/invoice-archive', '/invoice-mark-sent', '/order-payment-add', '/order-payment-void'];
   var sent = 0, origFetch = window.fetch ? window.fetch.bind(window) : null;
   function report(kind, msg) {
     try {

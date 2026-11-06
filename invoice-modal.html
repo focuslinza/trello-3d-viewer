@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Счёт на оплату</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./pay-dialog.js?v=1"></script>
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
@@ -796,6 +797,13 @@
 
   function markPaid(cardId, paid){
     var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]; if(!o) return;
+    // заказ: оплата вносится суммой и способом (окно оплаты); ремонты — как раньше
+    if(!o.isRepair && window.openPayDialog){
+      openPayDialog({ cardId:cardId, title:(o.number?'№'+o.number+' ':'')+String(o.name||'').slice(0,40), onDone:function(s){
+        o.paid=s.paidFlag?1:0; if(o.paid) o.checked=false; render();
+      }});
+      return;
+    }
     var p = o.isRepair
       ? fetch(WORKER+'/repair-flags',{ method:'POST', headers:{'Content-Type':'application/json'},
           body:JSON.stringify({ id:o.repairId, field:'paid', value:paid?1:0 }) })

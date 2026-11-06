@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>Бухгалтерия</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./pay-dialog.js?v=1"></script>
   <script src="./config.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
@@ -40,6 +41,7 @@
     td.num, th.num{text-align:right;white-space:nowrap}
     tfoot td{border-top:2px solid var(--line);border-bottom:none;background:rgba(255,255,255,.03)}
     .chip{display:inline-block;border:1px solid var(--line);background:var(--bg2);color:var(--muted);border-radius:12px;padding:3px 10px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;user-select:none}
+    .chip.part{background:#3a2f14!important;border-color:#7f5f01!important;color:#e8c07d!important}
     .chip.on{background:#1c3329;color:var(--green);border-color:#2e5c44}
     .chip.busy{opacity:.5;pointer-events:none}
     .pdfmark{font-size:11px;color:var(--muted)}
@@ -442,6 +444,9 @@
 
     function chip(r, field, label){
       var on=r[field];
+      // оплата: частично — жёлтая с остатком; без внесённой суммы (старые отметки) — «оплачен» как раньше
+      if(field==='paid' && on && r.partial)
+        return '<span class="chip on part" data-card="'+esc(r.cardId)+'" data-f="paid" title="Оплачено '+money(r.paidSum)+' ₸ из '+money(r.total)+' ₸">частично · ост. '+money(r.rest)+'</span>';
       return '<span class="chip'+(on?' on':'')+'" data-card="'+esc(r.cardId)+'" data-f="'+field+'">'+(on?'✓ ':'')+label+'</span>';
     }
 
@@ -514,7 +519,7 @@
       h+='<div class="kpi" title="Сколько заказов посчитано в калькуляторе за выбранный период (по дате расчёта)"><div class="k">Заказов</div><div class="v">'+(T.orders||0)+'</div></div>';
       h+='<div class="kpi" title="Общая сумма этих заказов — объём взятой работы, а не деньги в кассе"><div class="k">На сумму</div><div class="v">'+money(T.revenue)+' ₸</div></div>';
       h+='<div class="kpi green" id="kpiPaid" title="Нажмите: куда упали деньги — по поставщикам счетов и форме наличных" style="cursor:pointer"><div class="k">Оплачено ▾</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
-      h+='<div class="kpi red" title="Дебиторка по заказам периода: работа отдана, деньги не пришли"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
+      h+='<div class="kpi red" title="Дебиторка по заказам периода: работа отдана, деньги не пришли"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div>'+(T.partial?'<div class="small" style="color:#e8c07d;margin-top:2px">в т.ч. частично: '+T.partial+' зак.</div>':'')+'</div>';
       h+='<div class="kpi amber" title="Заказы, где проставлены все четыре отметки: счёт выслан, оплачен, сдали, акт подписан"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
       if(T.mismatch) h+='<div class="kpi" style="border-color:#6b2a2a" title="Колонка карточки на доске не совпадает со статусом оплаты"><div class="k">Доска ≠ статус</div><div class="v" style="color:#f3b3b3">'+T.mismatch+'</div></div>';
       h+='</div>';
@@ -608,6 +613,15 @@
           var r=ROWS.filter(function(x){return x.cardId===cardId;})[0]
                || ((WIDE_RESULTS||[]).filter(function(x){return x.cardId===cardId;})[0]);
           if(!r) return;
+          // «оплачен» — через окно оплаты: сумма, способ, куда; частично → остаток
+          if(field==='paid'){
+            openPayDialog({ cardId:cardId, title:(r.number?'№'+r.number+' ':'')+String(r.name||'').slice(0,40), onDone:function(s){
+              r.paid=!!s.paidFlag; r.paidSum=s.paidSum; r.rest=s.rest; r.hasPayments=(s.payments||[]).some(function(p){return !p.voided;});
+              r.partial=r.paid && r.hasPayments && s.rest>0; if(r.paid && !r.paidAt) r.paidAt=new Date().toISOString();
+              render(); load();   // итоги периода пересчитает сервер
+            }});
+            return;
+          }
           var newVal=!r[field]; var el=this; el.classList.add('busy');
           var p = (field==='paid')
             ? fetch(WORKER+'/calc-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cardId:cardId,paid:newVal})})
@@ -644,7 +658,7 @@
             }
             // пересчитать итоги локально
             var T={orders:0,revenue:0,paidRev:0,unpaidRev:0,closed:0};
-            ROWS.forEach(function(x){ T.orders++; T.revenue+=x.total; if(x.paid)T.paidRev+=x.total; else T.unpaidRev+=x.total;
+            ROWS.forEach(function(x){ T.orders++; T.revenue+=x.total; var got=x.hasPayments?Math.min(x.total,x.paidSum||0):(x.paid?x.total:0); T.paidRev+=got; T.unpaidRev+=x.total-got;
               if(x.invoiceSent&&x.paid&&x.delivered&&x.actSigned)T.closed++; });
             TOTALS=T; render();
           }).catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); el.classList.remove('busy'); });
@@ -837,7 +851,7 @@
       h+='<div class="kpi"><div class="k">Ремонтов</div><div class="v">'+(T.orders||0)+'</div></div>';
       h+='<div class="kpi" title="Общая сумма этих заказов — объём взятой работы, а не деньги в кассе"><div class="k">На сумму</div><div class="v">'+money(T.revenue)+' ₸</div></div>';
       h+='<div class="kpi green" title="Из заказов этого периода — какие уже оплачены клиентом (флажок «оплачен»)"><div class="k">Оплачено</div><div class="v">'+money(T.paidRev)+' ₸</div></div>';
-      h+='<div class="kpi red" title="Дебиторка по заказам периода: работа отдана, деньги не пришли"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div></div>';
+      h+='<div class="kpi red" title="Дебиторка по заказам периода: работа отдана, деньги не пришли"><div class="k">Не оплачено</div><div class="v">'+money(T.unpaidRev)+' ₸</div>'+(T.partial?'<div class="small" style="color:#e8c07d;margin-top:2px">в т.ч. частично: '+T.partial+' зак.</div>':'')+'</div>';
       h+='<div class="kpi amber" title="Заказы, где проставлены все четыре отметки: счёт выслан, оплачен, сдали, акт подписан"><div class="k">Полностью закрыто</div><div class="v">'+(T.closed||0)+' из '+(T.orders||0)+'</div></div>';
       h+='</div>';
       h+='<div style="display:flex;align-items:center;gap:10px;margin:-6px 0 10px;flex-wrap:wrap">'+
