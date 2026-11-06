@@ -321,8 +321,16 @@
   function renderPricing(){
     var MAT=CALC.MAT||{}, CMP=CALC.CMP||{};
     var P=PRICING_EDIT||{}; var c=P.coef||{}, pm=P.mat||{}, pc=P.cmp||{};
-    var h='<h3>Коэффициенты (общие)</h3><div class="prgrid">';
-    h+=coefField('Налог','taxRate', c.taxRate!=null&&c.taxRate!==''? (+c.taxRate*100):16,'%');
+    // НАЛОГ ПО КОМПАНИИ В СЧЁТЕ (решение Асхата, 11.2026): старое поле «Налог» ни на что не влияло
+    // (калькулятор считает без налога) — убрано. Надбавка задаётся по каждой нашей компании
+    // и добавляется к ценам строк в окне «Счёт на оплату». Наличные — без надбавки.
+    function supPct(k, d){ return c[k]!=null&&c[k]!==''? Math.round(+c[k]*10000)/100 : d; }
+    var h='<h3>Надбавка к цене в счёте — по нашей компании</h3><div class="prgrid">';
+    h+=coefField('ТОО «TTMS» — НДС (выделяется в счёте)','supTaxToo', supPct('supTaxToo',16),'%');
+    h+=coefField('ИП «MetalShop» — ОУР без НДС (покрытие ИПН и нагрузки)','supTaxIp', supPct('supTaxIp',10),'%');
+    h+=coefField('ИП «FIRDAUS» — упрощёнка (налог с оборота)','supTaxFirdaus', supPct('supTaxFirdaus',3),'%');
+    h+='</div><div class="muted" style="margin:-4px 0 12px;font-size:12.5px">Наличные — без надбавки. Расчёт заказа всегда без налога; надбавка добавляется только в счёте по выбранной компании.</div>';
+    h+='<h3>Коэффициенты (общие)</h3><div class="prgrid">';
     h+=coefField('Бонус агенту за оформленную заявку на ремонт','repairAgentBonus', c.repairAgentBonus!=null&&c.repairAgentBonus!==''?+c.repairAgentBonus:300,'₸');
     h+=coefField('Шлейфовка реза (зачистка кромки после лазера)','shleifCutRate', c.shleifCutRate!=null&&c.shleifCutRate!==''? (+c.shleifCutRate*100):20,'% от резки');
     h+=coefField('Шлейф / сборка (% от сварки)','shleifRate', c.shleifRate!=null&&c.shleifRate!==''?(+c.shleifRate*100):50,'%');
@@ -423,7 +431,7 @@
       var k=el.getAttribute('data-key'), v=el.value;
       if(v===''){ return; }
       v=+v;
-      if(k==='taxRate'||k==='shleifRate'||k==='shleifCutRate'||k==='electrochemRate'||k==='montazhPct'||k==='opRah'||k==='shareShop'||k==='shareAssembly'||k==='shareMontazh') P.coef[k]=v/100;
+      if(k==='taxRate'||k==='supTaxToo'||k==='supTaxIp'||k==='supTaxFirdaus'||k==='shleifRate'||k==='shleifCutRate'||k==='electrochemRate'||k==='montazhPct'||k==='opRah'||k==='shareShop'||k==='shareAssembly'||k==='shareMontazh') P.coef[k]=v/100;
       else P.coef[k]=v;
     });
     // доли работников редактируются в «Зарплата / Работники» — при сохранении цен

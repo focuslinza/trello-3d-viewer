@@ -173,6 +173,16 @@
   //    (решение Асхата, 09.2026);
   //  • ТОО TTMS — плательщик НДС, 16% включены в цены строк и выделяются в счёте.
   var SUP_TAX = { cash: 1, firdaus: 1.03, ip: 1.10, too: 1.16 };
+  // проценты задаются в панели руководителя → «Цены» → «Надбавка к цене в счёте» (11.2026);
+  // значения выше — запасные, если сервер не ответил
+  var VAT_TOO = 0.16;
+  fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
+    var c=(j&&j.pricing&&j.pricing.coef)||{};
+    function k(v,d){ return (v!=null&&v!==''&&isFinite(+v)) ? 1+(+v) : d; }
+    SUP_TAX.too=k(c.supTaxToo,1.16); SUP_TAX.ip=k(c.supTaxIp,1.10); SUP_TAX.firdaus=k(c.supTaxFirdaus,1.03);
+    VAT_TOO=SUP_TAX.too-1;
+    try{ if(ALL_ORDERS.length) render(); }catch(e){}
+  }).catch(function(){});
   var invNumber = null;
   var showOrphans = false;
   var showPaid = false;
@@ -487,7 +497,7 @@
     });
     if (!supplierKey) html+='</div><div class="small" style="margin-top:8px;color:#e8c07d">⚠ Выберите компанию — от неё зависит налог, реквизиты и печать. Пока не выбрано, счёт не создаётся.</div>';
     else if (supplierKey==='cash') html+='</div><div class="small muted" style="margin-top:8px">Оплата наличными: счёт не формируется, налог не добавляется. Суммы ниже — как в расчётах. Отметить оплату можно кнопкой «оплачен» у заказа.</div></div>';
-    else html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+' · '+(supplierKey==='too'?'НДС 16% включён в цены строк (плательщик НДС)':(supplierKey==='ip'?'ОУР без НДС — к ценам добавляется 10% (налоговая нагрузка); НДС в счёте не выделяется':'налог +'+Math.round(((SUP_TAX[supplierKey]||1)-1)*100)+'% добавляется к ценам строк'))+'</div>';
+    else html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+' · '+(function(){ var pc=Math.round(((SUP_TAX[supplierKey]||1)-1)*1000)/10; return supplierKey==='too'?('НДС '+pc+'% включён в цены строк (плательщик НДС)'):(supplierKey==='ip'?('ОУР без НДС — к ценам добавляется '+pc+'% (налоговая нагрузка); НДС в счёте не выделяется'):('налог +'+pc+'% добавляется к ценам строк')); })()+'</div>';
 
     // buyer — selectable from the directory (default = card's company)
     html+='<div class="sec"><h3>Покупатель</h3>';
@@ -930,7 +940,7 @@
       var c=ceilLine(q, (+x.price||0) * K);
       items.push({ code:'', name:String(x.name).trim(), qty:q, unit:'Услуга', price:c.price });
     });
-    var VAT_PAYERS = { too:0.16 }; // ТОО «TTMS» — плательщик НДС; ИП — без НДС
+    var VAT_PAYERS = { too:VAT_TOO }; // ТОО «TTMS» — плательщик НДС; ИП — без НДС
     var vatRate = VAT_PAYERS[supplierKey] || 0;
     var totalSum = items.reduce(function(s,it){ return s + Math.round((+it.price||0)*(+it.qty||1)*100)/100; }, 0);
     var ndsVal = vatRate ? Math.round(totalSum * vatRate / (1 + vatRate) * 100) / 100 : null;
