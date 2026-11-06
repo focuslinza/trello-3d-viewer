@@ -87,16 +87,17 @@
   <div class="bar">
     <!-- разделы — внизу вкладками, как в Бухгалтерии; открытый раздел подсвечен -->
     <div class="tabs" id="barTabs">
-      <div class="tab active" data-sec="" title="Показатели за период">Обзор</div>
+      <div class="tab" id="financeBtn" data-sec="1" data-per="1" title="Расходы, налоги, чистая прибыль">Финансы</div>
+      <div class="tab" id="discBtn" data-sec="1" data-per="1" title="Где и сколько уступаем клиентам: спеццены в расчётах против тарифа">Уступки</div>
       <div class="tab" id="pricingBtn" data-sec="1" title="Цены материалов и работ, коэффициенты">Цены</div>
       <div class="tab" id="workers" data-sec="1" title="Ставки, работники, зарплата">Зарплата</div>
-      <div class="tab" id="financeBtn" data-sec="1" title="Расходы, налоги, чистая прибыль">Финансы</div>
-      <div class="tab" id="discBtn" data-sec="1" title="Где и сколько уступаем клиентам: спеццены в расчётах против тарифа">Уступки</div>
       <div class="tab" id="tabelBtn" data-sec="1" title="Табель: явка и время работников">Табель</div>
-      <div class="tab" id="boardBtn" data-sec="1" title="Своя доска: импорт из Trello, сравнение и переключение режима">Своя доска</div>
       <div class="tab" id="goalsBtn" data-sec="1" title="Цели управляющему на месяц и бонус за их достижение">Цели</div>
-      <div class="tab" id="healthBtn" data-sec="1" title="Система проверяет себя: права, модули, нумерация, сбои у работников">Здоровье</div>
-      <div class="tab" id="backupBtn" data-sec="1" title="Автоматические резервные копии системы">Копии</div>
+      <div class="tab" id="settingsBtn" data-sec="1" title="Своя доска, здоровье системы, резервные копии">Настройки</div>
+      <!-- входят в «Настройки», отдельными вкладками не показываются -->
+      <div class="tab" id="boardBtn" data-sec="1" data-inset="1" style="display:none">Своя доска</div>
+      <div class="tab" id="healthBtn" data-sec="1" data-inset="1" style="display:none">Здоровье</div>
+      <div class="tab" id="backupBtn" data-sec="1" data-inset="1" style="display:none">Копии</div>
     </div>
     <button class="btn" id="close" type="button">Закрыть</button>
   </div>
@@ -618,7 +619,8 @@
       });
       h+='</div>';
       h+='<div class="sec">'+renderTab()+'</div>';
-
+      // «Обзор» убран (11.2026): наверху остаётся только строка периода для Финансов и Уступок
+      h='<div class="sec" id="perSec" style="margin-bottom:0">'+periodBar()+'</div>';
       document.getElementById('app').innerHTML=h;
       [].forEach.call(document.querySelectorAll('[data-preset]'), function(el){ el.onclick=function(){ applyPreset(this.getAttribute('data-preset')); }; });
       var mp=document.getElementById('mPrev'), mn=document.getElementById('mNext'), ml=document.getElementById('mLbl');
@@ -635,7 +637,7 @@
       var ew=document.getElementById('exclWeekends'); if(ew) ew.onchange=function(){ EXCL_WEEKENDS=this.checked; render(); };
       [].forEach.call(document.querySelectorAll('.tab[data-tab]'), function(el){ el.onclick=function(){ tab=this.getAttribute('data-tab'); render(); }; });
       var aw=document.getElementById('actWho'); if(aw) aw.onchange=function(){ ACT_WORKER=this.value; render(); };
-      renderCharts();
+      try{ renderCharts(); }catch(e){}
     }
     var ps=document.getElementById('prSave'); if(ps) ps.onclick=savePricing;
     var pr=document.getElementById('prReset'); if(pr) pr.onclick=resetPricing;
@@ -1052,51 +1054,86 @@
     document.getElementById('finBack').onclick=finClose;
     document.getElementById('finX').onclick=finClose;
   };
-  // ВКЛАДКИ ВНИЗУ: нажатый раздел подсвечивается сразу; когда его окно закрыли —
-  // подсветка возвращается на «Обзор» (следим, сколько окон-наложений открыто)
-  (function(){
-    var tabs=[].slice.call(document.querySelectorAll('#barTabs .tab')), base=document.body.children.length;
-    function mark(el){ tabs.forEach(function(x){ x.classList.toggle('active', x===el); }); }
-    // нажатие любой вкладки: сначала закрываем открытый раздел, потом открываем новый
-    tabs.forEach(function(el){ el.addEventListener('click', function(){
-      closeAllOverlays(); mark(el);
-      if(!el.getAttribute('data-sec') || el.id!=='pricingBtn'){ if(tab==='pricing'){ tab='people'; render(); } }
-    }, true); });
-    function closeAllOverlays(){ [].slice.call(document.body.children).slice(base).forEach(function(n){ if(n.tagName!=='SCRIPT' && n.style && n.style.position==='fixed'){ n.__msSwitch=1; n.remove(); } }); }
-    // раздел открывается КАК ВКЛАДКА: занимает экран над нижней строкой, строка вкладок остаётся видна
-    var bar=document.querySelector('.bar');
-    new MutationObserver(function(muts){
-      muts.forEach(function(m){ [].forEach.call(m.addedNodes, function(n){
-        if(n.nodeType===1 && n.style && n.style.position==='fixed'){
-          n.style.bottom=(bar?bar.offsetHeight:60)+'px'; n.style.top='0'; n.style.zIndex='40';
-          // своя шапка раздела («← Назад», ✕) больше не нужна: переключение — вкладками внизу
-          // кнопки «← Назад» и ✕ прячем; если в шапке больше ничего полезного нет — прячем её целиком
-          var bk=n.querySelector('button[id$="Back"]'), hd=bk && bk.parentElement;
-          if(hd && hd!==n){
-            // шапку прячем всегда (как во вкладке «Зарплата»); полезные кнопки из неё
-            // (например «↻ Проверить ещё раз») переносим в начало тела раздела
-            var keep=[].filter.call(hd.querySelectorAll('button'), function(x){ return x!==bk && !/X$/.test(x.id||''); });
-            hd.style.display='none';
-            if(keep.length){
-              var bodyEl=hd.nextElementSibling;
-              var row=document.createElement('div');
-              row.style.cssText='display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin:0 0 10px';
-              keep.forEach(function(x){ x.removeAttribute('style'); x.className='btn'; row.appendChild(x); });
-              if(bodyEl){
-                // тело могут перерисовывать целиком (innerHTML) — держим строку кнопок первой
-                var put=function(){ if(row.parentNode!==bodyEl || bodyEl.firstChild!==row) bodyEl.insertBefore(row, bodyEl.firstChild); };
-                put(); new MutationObserver(put).observe(bodyEl,{childList:true});
-              } else n.insertBefore(row, n.firstChild);
-            }
-          }
-        }
-      }); });
-      // раздел закрыли его собственной кнопкой (а не переключением вкладки) — подсветка на «Обзор»
-      var closedByUser=muts.some(function(m){ return [].some.call(m.removedNodes, function(n){ return n.nodeType===1 && n.style && n.style.position==='fixed' && !n.__msSwitch; }); });
-      var open=[].slice.call(document.body.children).slice(base).some(function(n){ return n.style && n.style.position==='fixed'; });
-      if(closedByUser && !open && tab!=='pricing') mark(tabs[0]);
-    }).observe(document.body,{childList:true});
-  })();
+  // ВКЛАДКИ ВНИЗУ (11.2026). «Обзор» убран: панель сразу открывает первый доступный раздел.
+  // Каждый раздел — вкладка: занимает экран над нижней строкой, своя шапка («← Назад», ✕)
+  // спрятана, полезные кнопки из неё — в теле раздела. Разделы «за период» (Финансы, Уступки)
+  // показывают сверху строку периода «‹ месяц › · даты · Применить».
+  var TABS=[].slice.call(document.querySelectorAll('#barTabs .tab')), OV_BASE=document.body.children.length, CUR=null, CUR_KEY='';
+  var BAR=document.querySelector('.bar');
+  function markTab(el){ TABS.forEach(function(x){ x.classList.toggle('active', x===el); }); CUR=el; }
+  function overlays(){ return [].slice.call(document.body.children).slice(OV_BASE).filter(function(n){ return n.tagName!=='SCRIPT' && n.style && n.style.position==='fixed'; }); }
+  function closeAllOverlays(){ overlays().forEach(function(n){ n.remove(); }); }
+  function topOffset(){ if(!(CUR && CUR.getAttribute('data-per'))) return 0; var ps=document.getElementById('perSec'); return ps ? Math.round(ps.getBoundingClientRect().bottom)+6 : 0; }
+  function adaptOverlay(n){
+    if(n.__msAdapted) return; n.__msAdapted=1;
+    n.style.bottom=(BAR?BAR.offsetHeight:60)+'px'; n.style.top=topOffset()+'px'; n.style.zIndex='40';
+    var bk=n.querySelector('button[id$="Back"]'), hd=bk && bk.parentElement;
+    if(hd && hd!==n){
+      var keep=[].filter.call(hd.querySelectorAll('button'), function(x){ return x!==bk && !/X$/.test(x.id||''); });
+      hd.style.display='none';
+      if(keep.length){
+        var bodyEl=hd.nextElementSibling, row=document.createElement('div');
+        row.style.cssText='display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin:0 0 10px';
+        keep.forEach(function(x){ x.removeAttribute('style'); x.className='btn'; row.appendChild(x); });
+        if(bodyEl){
+          var put=function(){ if(bodyEl.firstChild!==row) bodyEl.insertBefore(row, bodyEl.firstChild); };
+          put(); new MutationObserver(put).observe(bodyEl,{childList:true});
+        } else n.insertBefore(row, n.firstChild);
+      }
+    }
+  }
+  new MutationObserver(function(muts){
+    muts.forEach(function(m){ [].forEach.call(m.addedNodes, function(n){ if(n.nodeType===1 && n.style && n.style.position==='fixed') adaptOverlay(n); }); });
+  }).observe(document.body,{childList:true});
+  function periodKey(){ return RANGE.from+'|'+RANGE.to; }
+  function openTab(el){
+    closeAllOverlays(); markTab(el); CUR_KEY=periodKey();
+    if(el.id==='pricingBtn'){ document.getElementById('app').style.display=''; tab='pricing'; render(); return; }
+    if(tab==='pricing'){ tab='people'; render(); }
+    document.getElementById('app').style.display = el.getAttribute('data-per') ? '' : 'none';
+    var fn=el.__msOpen; if(fn) fn.call(el);
+  }
+  // НАСТРОЙКИ: Своя доска + Здоровье системы + Резервные копии — на одной странице
+  function openSettings(){
+    var page=document.createElement('div');
+    page.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;overflow:auto;color:var(--txt)';
+    var wrapEl=document.createElement('div'); wrapEl.style.cssText='max-width:980px;margin:0 auto;padding:16px';
+    page.appendChild(wrapEl); document.body.appendChild(page); adaptOverlay(page);
+    [['boardBtn','🧱 Своя доска'],['healthBtn','🩺 Здоровье системы'],['backupBtn','🗄 Резервные копии']].forEach(function(p){
+      var src=document.getElementById(p[0]); if(!src || !src.__msOpen || src.__msDenied) return;
+      var before=document.body.lastElementChild;
+      src.__msOpen.call(src);
+      var ov=document.body.lastElementChild; if(!ov || ov===before) return;
+      adaptOverlay(ov);
+      var sec=document.createElement('div'); sec.className='sec';
+      sec.innerHTML='<div style="font-weight:700;font-size:15px;color:#e6edf3;margin-bottom:8px">'+p[1]+'</div>';
+      [].slice.call(ov.children).forEach(function(ch){
+        if(ch.style.display==='none') return;
+        ch.style.flex='none'; ch.style.overflow='visible'; ch.style.maxWidth='none'; ch.style.padding='0'; ch.style.margin='0';
+        sec.appendChild(ch);
+      });
+      wrapEl.appendChild(sec); ov.remove();
+    });
+  }
+  // переключение периода: открытый раздел «за период» перезагружается с новыми датами
+  var _origRender=render;
+  render=function(){
+    _origRender.apply(this, arguments);
+    var tp=topOffset()+'px'; overlays().forEach(function(o){ o.style.top=tp; });
+    if(CUR && CUR.getAttribute('data-per') && CUR_KEY && CUR_KEY!==periodKey()) openTab(CUR);
+  };
+  function initTabs(){
+    TABS.forEach(function(el){
+      el.__msOpen = el.onclick; el.onclick=null;
+      el.addEventListener('click', function(){ openTab(el); });
+    });
+    var st=document.getElementById('settingsBtn'); st.__msOpen=openSettings;
+    // нет ни одного раздела «Настроек» — вкладку прячем
+    var anySet=['boardBtn','healthBtn','backupBtn'].some(function(id){ var e=document.getElementById(id); return e && !e.__msDenied; });
+    if(!anySet) st.style.display='none';
+    var first=TABS.filter(function(x){ return x.style.display!=='none'; })[0];
+    if(first) openTab(first);
+  }
   // ТАБЕЛЬ — внутри панели (решение Асхата, 11.2026: убран из шапки доски у руководства)
   window.__MS_T = t;
   document.getElementById('tabelBtn').onclick=function(){
@@ -1187,7 +1224,7 @@
           try{ window.__KNOWN_CUSTOM={ mat:(p.customMat||[]).map(function(x){return x.code;}), cmp:(p.customCmp||[]).map(function(x){return x.code;}), op:(p.customOp||[]).map(function(x){return x.code;}) }; }catch(e){}
           PRICING_EDIT={ mat:p.mat||{}, cmp:p.cmp||{}, coef:p.coef||{}, customMat:p.customMat||[], customCmp:p.customCmp||[], customOp:p.customOp||[],
           matOstBySec:p.matOstBySec||{}, matRahBySec:p.matRahBySec||{}, cmpOstBySec:p.cmpOstBySec||{}, cmpRahBySec:p.cmpRahBySec||{}, opOstBySec:p.opOstBySec||{}, opRahBySec:p.opRahBySec||{}, rates:p.rates||{} }; }
-      }).catch(function(){}).then(load);
+      }).catch(function(){}).then(load).then(initTabs);
       return;
     }
     // не админ: проверяем право «Панель руководителя» (начальник цеха и т.п.)
@@ -1195,13 +1232,13 @@
     var pb=document.getElementById('pricingBtn'); if(pb) pb.style.display='none';
     var fb=document.getElementById('financeBtn'); if(fb) fb.style.display='none';
     var db=document.getElementById('discBtn'); if(db) db.style.display='none';
-    var bb=document.getElementById('boardBtn'); if(bb) bb.style.display='none';
+    var bb=document.getElementById('boardBtn'); if(bb){ bb.style.display='none'; bb.__msDenied=1; }
     var gb=document.getElementById('goalsBtn'); if(gb) gb.style.display='none';
     t.member('id').then(function(me){
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
         .then(function(r){return r.json();});
     }).then(function(j){
-      if(j && j.canDashboard){ load(); }
+      if(j && j.canDashboard){ load(); initTabs(); }
       else boot('Панель доступна руководителю и сотрудникам с правом «Панель руководителя» (включается в «Зарплата / Работники»).');
     }).catch(function(){ boot('Панель доступна только руководителю (администратору доски).'); });
   });
