@@ -325,28 +325,33 @@
     // (калькулятор считает без налога) — убрано. Надбавка задаётся по каждой нашей компании
     // и добавляется к ценам строк в окне «Счёт на оплату». Наличные — без надбавки.
     function supPct(k, d){ return c[k]!=null&&c[k]!==''? Math.round(+c[k]*10000)/100 : d; }
-    var h='<h3>Надбавка к цене в счёте — по нашей компании</h3><div class="prgrid">';
+    var h='<h3>Надбавка к цене клиенту в счёте — по нашей компании</h3><div class="prgrid">';
     h+=coefField('ТОО «TTMS» — НДС (выделяется в счёте)','supTaxToo', supPct('supTaxToo',16),'%');
     h+=coefField('ИП «MetalShop» — ОУР без НДС (покрытие ИПН и нагрузки)','supTaxIp', supPct('supTaxIp',10),'%');
     h+=coefField('ИП «FIRDAUS» — упрощёнка (налог с оборота)','supTaxFirdaus', supPct('supTaxFirdaus',3),'%');
     h+='</div><div class="muted" style="margin:-4px 0 12px;font-size:12.5px">Наличные — без надбавки. Расчёт заказа всегда без налога; надбавка добавляется только в счёте по выбранной компании.</div>';
-    h+='<h3>Коэффициенты (общие)</h3><div class="prgrid">';
-    h+=coefField('Бонус агенту за оформленную заявку на ремонт','repairAgentBonus', c.repairAgentBonus!=null&&c.repairAgentBonus!==''?+c.repairAgentBonus:300,'₸');
-    h+=coefField('Шлейфовка реза (зачистка кромки после лазера)','shleifCutRate', c.shleifCutRate!=null&&c.shleifCutRate!==''? (+c.shleifCutRate*100):20,'% от резки');
-    h+=coefField('Шлейф / сборка (% от сварки)','shleifRate', c.shleifRate!=null&&c.shleifRate!==''?(+c.shleifRate*100):50,'%');
-    h+=coefField('Электрохимобработка шва (% от сварки; 0 = выкл.)','electrochemRate', c.electrochemRate!=null&&c.electrochemRate!==''?(+c.electrochemRate*100):0,'% от сварки');
-    h+=coefField('Монтаж (выезд): наценка клиенту','montazhPct', c.montazhPct!=null&&c.montazhPct!==''?(+c.montazhPct*100):100,'% от сварки+шлейфовок');
-    h+=coefField('Монтаж: минимум по строке (спасает заказы «только выезд»)','montazhMin', c.montazhMin!=null&&c.montazhMin!==''?+c.montazhMin:0,'₸ (0 = выкл.)');
-    h+=coefField('Внеурочный выезд: окладная часовая ставка','mzOtClientRate', c.mzOtClientRate!=null&&c.mzOtClientRate!==''?+c.mzOtClientRate:900,'₸/ч на человека');
-    h+=coefField('Внеурочный выезд: множитель клиенту','mzOtClientMult', c.mzOtClientMult!=null&&c.mzOtClientMult!==''?+c.mzOtClientMult:4,'× от ставки');
-    h+=coefField('Внеурочный выезд: множитель работнику','mzOtWorkerMult', c.mzOtWorkerMult!=null&&c.mzOtWorkerMult!==''?+c.mzOtWorkerMult:2,'× (остальное — компании)');
-    h+=coefField('Ставка резки (множитель)','rateCut', c.rateCut!=null&&c.rateCut!==''?+c.rateCut:1,'×');
-    h+=coefField('Ставка гибки (множитель)','rateBend', c.rateBend!=null&&c.rateBend!==''?+c.rateBend:1,'×');
-    h+=coefField('Ставка сварки (множитель)','rateWeld', c.rateWeld!=null&&c.rateWeld!==''?+c.rateWeld:1,'×');
-    h+=coefField('Ремонт: надбавка на работы клиенту (резка, гибка, сварка, свои работы; материалы не меняются)','repairWorkPct', c.repairWorkPct!=null&&c.repairWorkPct!==''?+c.repairWorkPct:0,'% (0 = без надбавки)');
+    // ПОДПИСИ «КОМУ» (решение Асхата, 11.2026): чтобы не путаться, у каждого поля сказано,
+    // меняет ли оно цену клиенту или касается только работника
+    function cv(k,d,pct){ return c[k]!=null&&c[k]!==''? (pct?+c[k]*100:+c[k]) : d; }
+    h+='<h3>Надбавки к цене клиенту</h3><div class="prgrid">';
+    h+=coefField('Шлейфовка реза — надбавка клиенту','shleifCutRate', cv('shleifCutRate',20,1),'% от резки');
+    h+=coefField('Шлейф / сборка — надбавка клиенту','shleifRate', cv('shleifRate',50,1),'% от сварки');
+    h+=coefField('Электрохимобработка шва — надбавка клиенту (0 = выкл.)','electrochemRate', cv('electrochemRate',0,1),'% от сварки');
+    h+=coefField('Монтаж (выезд) — надбавка клиенту','montazhPct', cv('montazhPct',100,1),'% от сварки + шлейфовок');
+    h+=coefField('Монтаж — минимальная сумма клиенту (0 = выкл.)','montazhMin', cv('montazhMin',0),'₸');
+    h+=coefField('Внеурочный выезд — часовая ставка (база расчёта)','mzOtClientRate', cv('mzOtClientRate',900),'₸/ч на человека');
+    h+=coefField('Внеурочный выезд — множитель цены клиенту','mzOtClientMult', cv('mzOtClientMult',4),'× от ставки');
+    h+=coefField('Резка — множитель цены клиенту (ко всей таблице)','rateCut', cv('rateCut',1),'×');
+    h+=coefField('Гибка — множитель цены клиенту (ко всей таблице)','rateBend', cv('rateBend',1),'×');
+    h+=coefField('Сварка — множитель цены клиенту (ко всей таблице)','rateWeld', cv('rateWeld',1),'×');
+    h+=coefField('Ремонт — надбавка клиенту на работы (материалы не меняются)','repairWorkPct', cv('repairWorkPct',0),'%');
+    h+='</div>';
+    h+='<div class="small muted" style="margin-top:6px">Множитель ставок поднимает или опускает сразу всю таблицу ставок ниже (резка/гибка используют одну таблицу с разным множителем, сварка — свою). Отдельные ячейки таблицы можно поправить точечно — см. «Таблицы ставок» ниже.</div>';
+    h+='<h3 style="margin-top:14px">Работникам — на цену клиенту не влияет</h3><div class="prgrid">';
+    h+=coefField('Бонус агенту за оформленную заявку на ремонт','repairAgentBonus', cv('repairAgentBonus',300),'₸');
+    h+=coefField('Внеурочный выезд — доплата работнику (остальное компании)','mzOtWorkerMult', cv('mzOtWorkerMult',2),'× от ставки');
     h+='</div>';
     // «Доля работника от стоимости работ» убрана (решение Асхата, 11.2026): зарплата сейчас по окладу
-    h+='<div class="small muted" style="margin-top:6px">Множитель ставок поднимает или опускает сразу всю таблицу ставок ниже (резка/гибка используют одну таблицу с разным множителем, сварка — свою). Отдельные ячейки таблицы можно поправить точечно — см. «Таблицы ставок» ниже.</div>';
 
     // --- остатки / расходники: теперь по каждому разделу отдельно, а не одной цифрой на всё ---
     h+='<h3 style="margin-top:18px">Остатки и расходники — работы (резка / гибка / сварка)</h3>';
