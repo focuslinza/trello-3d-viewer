@@ -1073,10 +1073,21 @@
           // кнопки «← Назад» и ✕ прячем; если в шапке больше ничего полезного нет — прячем её целиком
           var bk=n.querySelector('button[id$="Back"]'), hd=bk && bk.parentElement;
           if(hd && hd!==n){
-            bk.style.display='none';
-            [].forEach.call(hd.querySelectorAll('button[id$="X"]'), function(x){ x.style.display='none'; });
-            var useful=[].some.call(hd.querySelectorAll('button'), function(x){ return x.style.display!=='none'; });
-            if(!useful) hd.style.display='none';
+            // шапку прячем всегда (как во вкладке «Зарплата»); полезные кнопки из неё
+            // (например «↻ Проверить ещё раз») переносим в начало тела раздела
+            var keep=[].filter.call(hd.querySelectorAll('button'), function(x){ return x!==bk && !/X$/.test(x.id||''); });
+            hd.style.display='none';
+            if(keep.length){
+              var bodyEl=hd.nextElementSibling;
+              var row=document.createElement('div');
+              row.style.cssText='display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin:0 0 10px';
+              keep.forEach(function(x){ x.removeAttribute('style'); x.className='btn'; row.appendChild(x); });
+              if(bodyEl){
+                // тело могут перерисовывать целиком (innerHTML) — держим строку кнопок первой
+                var put=function(){ if(row.parentNode!==bodyEl || bodyEl.firstChild!==row) bodyEl.insertBefore(row, bodyEl.firstChild); };
+                put(); new MutationObserver(put).observe(bodyEl,{childList:true});
+              } else n.insertBefore(row, n.firstChild);
+            }
           }
         }
       }); });
