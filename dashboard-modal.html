@@ -36,7 +36,10 @@
     .pill.unpaid{background:#3a2320;color:#e8a59d;border:1px solid #7a3a32}
     .chartbox{position:relative;height:220px}
     .chartbox2{position:relative;height:200px;margin-top:10px}
-    .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;gap:10px}
+    .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;z-index:50}
+    .bar .tabs{margin:0;flex:1;min-width:0}
+    .bar .tab{padding:7px 14px;font-size:13px;white-space:nowrap}
+    .bar .tab.active{margin-top:-13px;padding-top:19px;border-top-color:transparent;border-radius:0 0 8px 8px}
     .btn{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
     .barw{background:var(--bg);border-radius:4px;overflow:hidden;min-width:60px}
     .barf{height:8px;background:var(--accent);border-radius:4px}
@@ -71,16 +74,18 @@
 
   <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
   <div class="bar">
-    <div style="display:flex;gap:10px">
-      <button class="btn" id="pricingBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">💲 Цены и коэффициенты</button>
-      <button class="btn" id="workers" type="button" style="border-color:#4f7cff;color:#a9c2ff">⚙ Зарплата / Работники</button>
-      <button class="btn" id="financeBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff">₸ Финансы</button>
-      <button class="btn" id="discBtn" type="button" style="border-color:#e8c07d;color:#e8c07d" title="Где и сколько уступаем клиентам: спеццены в расчётах против тарифа">% Уступки</button>
-      <button class="btn" id="tabelBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff" title="Табель: явка и время работников">📅 Табель</button>
-      <button class="btn" id="boardBtn" type="button" style="border-color:#4caf7d;color:#9ee6bd" title="Своя доска: импорт из Trello, сравнение и переключение режима">🧱 Своя доска</button>
-      <button class="btn" id="goalsBtn" type="button" style="border-color:#c9a8ff;color:#c9a8ff" title="Цели управляющему на месяц и бонус за их достижение">🎯 Цели управляющему</button>
-      <button class="btn" id="healthBtn" type="button" style="border-color:#4caf7d;color:#9ee6bd" title="Система проверяет себя: права, модули, нумерация, сбои у работников">🩺 Здоровье системы</button>
-      <button class="btn" id="backupBtn" type="button" style="border-color:#4f7cff;color:#a9c2ff" title="Автоматические резервные копии системы">🗄 Резервные копии</button>
+    <!-- разделы — внизу вкладками, как в Бухгалтерии; открытый раздел подсвечен -->
+    <div class="tabs" id="barTabs">
+      <div class="tab active" data-sec="" title="Показатели за период">Обзор</div>
+      <div class="tab" id="pricingBtn" data-sec="1" title="Цены материалов и работ, коэффициенты">Цены</div>
+      <div class="tab" id="workers" data-sec="1" title="Ставки, работники, зарплата">Зарплата</div>
+      <div class="tab" id="financeBtn" data-sec="1" title="Расходы, налоги, чистая прибыль">Финансы</div>
+      <div class="tab" id="discBtn" data-sec="1" title="Где и сколько уступаем клиентам: спеццены в расчётах против тарифа">Уступки</div>
+      <div class="tab" id="tabelBtn" data-sec="1" title="Табель: явка и время работников">Табель</div>
+      <div class="tab" id="boardBtn" data-sec="1" title="Своя доска: импорт из Trello, сравнение и переключение режима">Своя доска</div>
+      <div class="tab" id="goalsBtn" data-sec="1" title="Цели управляющему на месяц и бонус за их достижение">Цели</div>
+      <div class="tab" id="healthBtn" data-sec="1" title="Система проверяет себя: права, модули, нумерация, сбои у работников">Здоровье</div>
+      <div class="tab" id="backupBtn" data-sec="1" title="Автоматические резервные копии системы">Копии</div>
     </div>
     <button class="btn" id="close" type="button">Закрыть</button>
   </div>
@@ -1014,6 +1019,15 @@
     document.getElementById('finBack').onclick=finClose;
     document.getElementById('finX').onclick=finClose;
   };
+  // ВКЛАДКИ ВНИЗУ: нажатый раздел подсвечивается сразу; когда его окно закрыли —
+  // подсветка возвращается на «Обзор» (следим, сколько окон-наложений открыто)
+  (function(){
+    var tabs=[].slice.call(document.querySelectorAll('#barTabs .tab')), base=document.body.children.length;
+    function mark(el){ tabs.forEach(function(x){ x.classList.toggle('active', x===el); }); }
+    tabs.forEach(function(el){ el.addEventListener('click', function(){ mark(el); if(!el.getAttribute('data-sec')) closeAllOverlays(); }, true); });
+    function closeAllOverlays(){ [].slice.call(document.body.children).slice(base).forEach(function(n){ if(n.tagName!=='SCRIPT') n.remove(); }); }
+    new MutationObserver(function(){ if(document.body.children.length<=base) mark(tabs[0]); }).observe(document.body,{childList:true});
+  })();
   // ТАБЕЛЬ — внутри панели (решение Асхата, 11.2026: убран из шапки доски у руководства)
   window.__MS_T = t;
   document.getElementById('tabelBtn').onclick=function(){
