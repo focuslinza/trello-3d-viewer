@@ -65,8 +65,8 @@
         var earnBtn = {
           // эксперимент: подпись нарисована в самой иконке (новая шапка Trello не
           // показывает текст кнопок Power-Up). Если отрендерится читаемо — переведём все.
-          icon: { dark: ICON_BASE + 'ic-lbl-earnings-w.png', light: ICON_BASE + 'ic-lbl-earnings-b.png' },
-          text: 'Мой заработок',
+          icon: { dark: ICON_BASE + 'ic-t-earnings-w.png', light: ICON_BASE + 'ic-t-earnings-b.png' },
+          text: 'ЗП',
           callback: function (t) {
             return t.modal({
               url: t.signUrl('./my-earnings-modal.html') + '?t=' + Date.now(),
@@ -76,8 +76,8 @@
           }
         };
         var crmBtn = {
-          icon: { dark: ICON_BASE + 'ic-crm-w.png', light: ICON_BASE + 'ic-crm-b.png' },
-          text: 'CRM / Клиенты',
+          icon: { dark: ICON_BASE + 'ic-t-crm-w.png', light: ICON_BASE + 'ic-t-crm-b.png' },
+          text: 'CRM',
           callback: function (t) {
             return t.modal({
               url: './crm-modal.html?t=' + Date.now(),
@@ -87,8 +87,8 @@
           }
         };
         var buhBtn = {
-          icon: { dark: ICON_BASE + 'ic-buh-w.png', light: ICON_BASE + 'ic-buh-b.png' },
-          text: 'Бухгалтерия',
+          icon: { dark: ICON_BASE + 'ic-t-buh-w.png', light: ICON_BASE + 'ic-t-buh-b.png' },
+          text: 'Бух',
           callback: function (t) {
             return t.modal({
               url: './buh-modal.html?t=' + Date.now(),
@@ -98,8 +98,8 @@
           }
         };
         var repairBtn = {
-          icon: { dark: ICON_BASE + 'ic-repair-w.png', light: ICON_BASE + 'ic-repair-b.png' },
-          text: 'Ремонт',
+          icon: { dark: ICON_BASE + 'ic-t-repair-w.png', light: ICON_BASE + 'ic-t-repair-b.png' },
+          text: 'Рем',
           callback: function (t) {
             return t.modal({
               url: './repair-board-modal.html?t=' + Date.now(),
@@ -109,8 +109,8 @@
           }
         };
         var salesBtn = {
-          icon: { dark: ICON_BASE + 'ic-sales-w.png', light: ICON_BASE + 'ic-sales-b.png' },
-          text: 'Продажи',
+          icon: { dark: ICON_BASE + 'ic-t-sales-w.png', light: ICON_BASE + 'ic-t-sales-b.png' },
+          text: 'Прод',
           callback: function (t) {
             return t.modal({
               url: './sales-board-modal.html?t=' + Date.now(),
@@ -120,8 +120,8 @@
           }
         };
         var supBtn = {
-          icon: { dark: ICON_BASE + 'ic-supply-w.png', light: ICON_BASE + 'ic-supply-b.png' },
-          text: 'Снабжение',
+          icon: { dark: ICON_BASE + 'ic-t-supply-w.png', light: ICON_BASE + 'ic-t-supply-b.png' },
+          text: 'Снаб',
           callback: function (t) {
             return t.modal({
               url: './supply-modal.html?t=' + Date.now(),
@@ -131,8 +131,8 @@
           }
         };
         var tabelBtn = {
-          icon: { dark: ICON_BASE + 'ic-tabel-w.png', light: ICON_BASE + 'ic-tabel-b.png' },
-          text: 'Табель',
+          icon: { dark: ICON_BASE + 'ic-t-tabel-w.png', light: ICON_BASE + 'ic-t-tabel-b.png' },
+          text: 'Таб',
           callback: function (t) {
             return t.modal({
               url: './timesheet-modal.html?t=' + Date.now(),
@@ -142,8 +142,8 @@
           }
         };
         var dashBtn = {
-          icon: { dark: ICON_BASE + 'ic-dashboard-w.png', light: ICON_BASE + 'ic-dashboard-b.png' },
-          text: 'Панель руководителя',
+          icon: { dark: ICON_BASE + 'ic-t-dashboard-w.png', light: ICON_BASE + 'ic-t-dashboard-b.png' },
+          text: 'Рук',
           callback: function (t) {
             return t.modal({
               url: t.signUrl('./dashboard-modal.html') + '?t=' + Date.now(),
@@ -179,12 +179,12 @@
         // тем выше шанс, что Trello покажет подписи текстом, а не свернёт в иконки
         function mgmtBtn(items){
           return {
-            icon: { dark: ICON_BASE + 'ic-dashboard-w.png', light: ICON_BASE + 'ic-dashboard-b.png' },
-            text: 'Управление',
+            icon: { dark: ICON_BASE + 'ic-t-mgmt-w.png', light: ICON_BASE + 'ic-t-mgmt-b.png' },
+            text: 'Упр',
             callback: function (t) {
               return t.popup({
                 title: 'Управление', // заголовок попап-меню — не шапка модала
-                items: items.map(function(b){ return { text: b.text, callback: b.callback }; })
+                items: items.map(function(b){ var FULL={'Рук':'Панель руководителя','CRM':'CRM / Клиенты','Бух':'Бухгалтерия','Снаб':'Снабжение','Прод':'Продажи','Рем':'Ремонт','Таб':'Табель','ЗП':'Мой заработок'}; return { text: FULL[b.text]||b.text, callback: b.callback }; })
               });
             }
           };
