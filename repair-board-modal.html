@@ -467,6 +467,18 @@
       }
 
       // 6. вложения — низ левой колонки
+      // ДЕТАЛЬ ДЛЯ РЕМОНТА (07.11.2026): карточка в производстве, цена — в сумме ремонта
+      h+='<div class="sec"><div class="sh">Детали из цеха</div>';
+      h+='<div id="partsList" class="muted" style="font-size:13px">Загрузка…</div>';
+      h+='<div id="partForm" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px">'+
+         '<div class="muted" style="font-size:12px;margin-bottom:6px">Карточка появится в «В производстве» с пометкой «🔧 Для ремонта '+esc(r.number||('Р-'+r.id))+'». Цех ведёт её как обычный заказ. Цену детали (расчёт в карточке) система добавит к сумме ремонта — отдельный счёт не нужен.</div>'+
+         '<input id="pfTitle" placeholder="Что изготовить, напр. «Вал Ø40, нерж.»" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px">'+
+         '<div style="display:flex;gap:6px;margin-bottom:6px"><input id="pfQty" type="number" min="1" value="1" title="Количество, шт" style="width:90px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px">'+
+         '<input id="pfDue" type="date" title="Срок" style="flex:1;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px"></div>'+
+         '<textarea id="pfDesc" rows="3" placeholder="Размеры, материал, толщина, покраска — всё, что нужно цеху" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>'+
+         '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin:6px 0"><input type="checkbox" id="pfPh" checked> приложить к карточке фото из заявки</label>'+
+         '<div style="display:flex;gap:6px;align-items:center"><button class="btn green" id="pfSend" type="button">Отправить в цех</button><button class="btn" id="pfCancel" type="button">Отмена</button><span id="pfMsg" class="muted" style="font-size:12px"></span></div></div>';
+      h+='<div style="margin-top:8px"><button class="btn" id="partAdd" type="button">🛠 Изготовить деталь</button></div></div>';
       h+='<div class="sec"><div class="sh">Вложения</div>';
       h+='<div class="thumbs" id="thumbs"></div>';
       h+='<div style="margin-top:12px;margin-bottom:6px"><label class="btn" style="cursor:pointer">➕ фото / PDF<input type="file" id="attachInp" accept="image/*,application/pdf" style="display:none"></label></div></div>';
@@ -533,6 +545,37 @@
               .catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); });
           };
         }
+      })();
+      // детали из цеха
+      function loadParts(){
+        var el=document.getElementById('partsList'); if(!el) return;
+        fetch(WORKER+'/repair-parts?repairId='+r.id).then(function(x){return x.json();}).then(function(j){
+          var ps=(j&&j.parts)||[];
+          if(!ps.length){ el.innerHTML='Деталей в изготовлении нет.'; return; }
+          el.innerHTML=ps.map(function(p){
+            var st=p.done?'<b style="color:#4bce97">✅ готово</b>':(p.list?'<span style="color:#e8c07d">'+esc(p.list)+'</span>':'');
+            return '<div style="padding:5px 0;border-bottom:1px solid var(--line);color:var(--txt)">🔧 '+esc(p.title)+(p.qty>1?' — '+p.qty+' шт':'')+' · '+st+
+              (p.url?' · <a href="'+esc(p.url)+'" target="_blank" style="color:#579dff">карточка'+(p.number?' №'+p.number:'')+'</a>':(p.number?' · №'+p.number:''))+'</div>';
+          }).join('');
+        }).catch(function(){ el.textContent='Не удалось загрузить детали'; });
+      }
+      loadParts();
+      (function(){
+        var add=document.getElementById('partAdd'), f=document.getElementById('partForm'); if(!add||!f) return;
+        add.onclick=function(){ f.style.display=''; add.style.display='none'; document.getElementById('pfTitle').focus(); };
+        document.getElementById('pfCancel').onclick=function(){ f.style.display='none'; add.style.display=''; };
+        document.getElementById('pfSend').onclick=function(){
+          var t=document.getElementById('pfTitle').value.trim(), m=document.getElementById('pfMsg'), b=this;
+          if(!t){ m.textContent='Напишите, что изготовить'; document.getElementById('pfTitle').focus(); return; }
+          b.disabled=true; m.textContent='Создаю карточку…';
+          post('/repair-part-create',{ repairId:r.id, title:t, qty:+document.getElementById('pfQty').value||1, due:document.getElementById('pfDue').value||'',
+            desc:document.getElementById('pfDesc').value, withPhotos:document.getElementById('pfPh').checked, byName:ME.name })
+            .then(function(j){ b.disabled=false; if(!j||!j.ok) throw new Error((j&&j.error)||'?');
+              m.textContent='✓ В цехе: «'+(j.list||'')+'»'; f.style.display='none'; add.style.display='';
+              ['pfTitle','pfDesc','pfDue'].forEach(function(id){ document.getElementById(id).value=''; }); document.getElementById('pfQty').value=1;
+              loadParts(); loadFeed(r.id); })
+            .catch(function(e){ b.disabled=false; m.textContent='Ошибка: '+(e&&e.message||e); });
+        };
       })();
       // лента комментариев и событий
       loadFeed(r.id);
@@ -654,7 +697,7 @@
         };
         document.getElementById('archBtn').onclick=function(){
           if(!confirm('Убрать заявку в архив? Она исчезнет из списков и аналитики; данные останутся.')) return;
-          post('/repair-archive',{id:r.id}).then(function(){ closeOvl(); loadAll(); });
+          post('/repair-archive',{id:r.id}).then(function(j){ if(j&&j.error){ alert(j.error); return; } closeOvl(); loadAll(); });
         };
         document.getElementById('delBtn').onclick=function(){
           if(!confirm('УДАЛИТЬ заявку безвозвратно вместе с фото? Для рабочих заявок используйте архив.')) return;

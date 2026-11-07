@@ -29,6 +29,17 @@
   // Чтобы в журнале статусов было видно настоящего автора, имя открывшего окно
   // дописывается в запросы смены статусов, если окно само его не передало.
   var WHO_PATHS = ['/calc-paid', '/acct-set', '/repair-flags', '/calc-cancel', '/calc-hide', '/order-flag', '/invoice-archive', '/invoice-mark-sent', '/order-payment-add', '/order-payment-void'];
+  var FOUNDER_PATHS = ['/repair-flags'];
+  function msTok() { try { return localStorage.getItem('ms_board_token') || ''; } catch (e) { return ''; } }
+  function askFounderLink() {
+    var v = prompt('Это действие может сделать только учредитель.\n\nВставьте свою личную ссылку входа (Управление → Зарплата → 📱 у себя, или ссылку своей доски). Нужно один раз на этом компьютере.');
+    if (!v) return false;
+    var m = String(v).match(/(?:#mt=|[?&]token=|[?&]bt=)([A-Za-z0-9]{16,})/) || String(v).trim().match(/^([A-Za-z0-9]{16,})$/);
+    if (!m) { alert('Не нашёл в ссылке ключ входа. Скопируйте ссылку целиком.'); return false; }
+    try { localStorage.setItem('ms_board_token', m[1]); } catch (e) { return false; }
+    return true;
+  }
+  window.__msAskFounderLink = askFounderLink;
   var sent = 0, origFetch = window.fetch ? window.fetch.bind(window) : null;
   function report(kind, msg) {
     try {
@@ -60,6 +71,22 @@
           }
         }
       } catch (e) {}
+      // ОПЛАТУ РЕМОНТА ОТМЕЧАЕТ ТОЛЬКО УЧРЕДИТЕЛЬ (07.11.2026): сервер узнаёт его по личному
+      // ключу. Ключ берём из памяти браузера; нет или не подошёл — один раз спросить ссылку.
+      if (ours && init && FOUNDER_PATHS.indexOf(pth) >= 0) {
+        var _tk = msTok();
+        if (_tk) init = Object.assign({}, init, { headers: Object.assign({}, init.headers || {}, { 'X-MS-Token': _tk }) });
+        var _init0 = init;
+        return wf(input, init).then(function (r) {
+          if (!r || r.status !== 403) return r;
+          return r.clone().json().then(function (j) {
+            if (!(j && j.protected)) return r;
+            try { localStorage.removeItem('ms_board_token'); } catch (e) {}
+            if (!askFounderLink()) return r;
+            return wf(input, Object.assign({}, _init0, { headers: Object.assign({}, _init0.headers || {}, { 'X-MS-Token': msTok() }) }));
+          }).catch(function () { return r; });
+        });
+      }
       // ПРАВА — С ПОВТОРОМ во ВСЕХ окнах (урок 10.2026): разовый сбой связи при запросе
       // прав раньше выглядел как «нет доступа». До 3 попыток с паузой 1,5 с.
       var p = (ours && u.indexOf('/worker-perms') >= 0) ? (function attempt(n){
