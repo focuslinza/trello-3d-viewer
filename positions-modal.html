@@ -66,7 +66,9 @@
     {fld:'can_see_cost',label:'Видит стоимость',hint:'цены в калькуляторе'},
     {fld:'can_see_repair_cost',label:'Стоимость ремонтов',hint:'цены только в разделе «Ремонт»'},
     {fld:'can_issue_repair_invoice',label:'Счета по ремонту',hint:'счёт на оплату только в заявках на ремонт'},
-    {fld:'is_repair_agent',label:'Агент ремонта',hint:'бонус за каждую полностью оформленную заявку на ремонт'}
+    {fld:'is_repair_agent',label:'Агент ремонта',hint:'бонус за каждую полностью оформленную заявку на ремонт'},
+    {fld:'is_sales_manager',label:'Менеджер продаж',hint:'ему засчитываются заказы с сайта и из воронки продаж (процент — в его карточке)'},
+    {fld:'no_timesheet',label:'Не в табеле',hint:'внештатный: агент, подрядчик — не попадает в табель, платим за результат'}
   ];
   var POS=[], ASSIGN={}, WORKERS=[];
   function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
