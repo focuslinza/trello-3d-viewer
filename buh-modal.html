@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>Бухгалтерия</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script src="./pay-dialog.js?v=1"></script>
+  <script src="./pay-dialog.js?v=2"></script>
   <script src="./config.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
@@ -1142,8 +1142,8 @@
         var id=this.getAttribute('data-card'); var r=ROWS.filter(function(x){return x.cardId===id;})[0]; if(!r) return;
         var msg='Заказ №'+(r.number||'')+': '+r.mismatch.join('; ')+'.\n\n';
         if(!r.paid){
-          if(confirm(msg+'Карточку перенесли в «'+(r.boardColumn||'')+'», но оплата не отмечена.\n\nОК — отметить заказ оплаченным (деньги получены).\nОтмена — оставить как есть и вернуть карточку вручную на доске.')){
-            post('/calc-paid',{cardId:id,paid:1,why:'подтверждено по сверке с доской'}).then(function(){ load(); }).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+          if(confirm(msg+'Карточку перенесли в «'+(r.boardColumn||'')+'», но оплата не отмечена.\n\nОК — внести оплату (сумма, способ, куда).\nОтмена — оставить как есть и вернуть карточку вручную на доске.')){
+            if(window.openPayDialog) openPayDialog({ cardId:id, title:(r.number?'№'+r.number+' ':'')+String(r.name||'').slice(0,40), onDone:function(){ load(); } });
           }
         } else {
           alert(msg+'Оплата отмечена, а карточка стоит в «'+(r.boardColumn||'')+'». Перенесите её на доске в нужную колонку.');

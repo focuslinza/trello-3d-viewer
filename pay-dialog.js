@@ -59,6 +59,14 @@
         '<div class="kp"><div><span>Сумма заказа</span><b>' + money(S.total) + ' ₸</b></div>' +
         '<div><span>Оплачено</span><b style="color:#4bce97">' + money(S.paidSum) + ' ₸</b></div>' +
         '<div><span>Остаток</span><b style="color:' + (S.rest > 0 ? '#e8c07d' : '#4bce97') + '">' + money(S.rest) + ' ₸</b></div></div>';
+      // В РАБОТУ — ТОЛЬКО ПРИ ОПЛАТЕ ОТ 50% (решение Асхата, 07.11.2026)
+      if (S.total > 0) {
+        var _min = 0.5, _paid = (S.payments || []).length ? S.paidSum : (S.paidFlag ? S.total : 0), _pct = Math.round(_paid / S.total * 100);
+        var _need = Math.max(0, Math.ceil(S.total * _min - _paid));
+        h += _need > 0
+          ? '<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#3a2226;color:#f3b3b3;font-size:13px">⛔ В работу нельзя: оплачено ' + _pct + '%. Для запуска нужно не меньше 50% — ещё ' + money(_need) + ' ₸.</div>'
+          : '<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#1c3329;color:#4bce97;font-size:13px">✓ Оплачено ' + _pct + '% — заказ можно запускать в работу.</div>';
+      }
       var pays = S.payments || [];
       if (pays.length) {
         h += '<table>';
@@ -126,7 +134,7 @@
           S = j; method = '';
           if (opts.onDone) try { opts.onDone(j); } catch (x) {}
           draw();
-          var e2 = ov.querySelector('#pdE'); if (e2) { e2.style.color = '#4bce97'; e2.textContent = path.indexOf('void') >= 0 ? 'Оплата отменена' : '✓ Оплата внесена'; }
+          var e2 = ov.querySelector('#pdE'); if (e2) { e2.style.color = '#4bce97'; e2.textContent = path.indexOf('void') >= 0 ? 'Оплата отменена' : (j.belowGate ? 'Оплата внесена, но меньше 50% — в работу нельзя' : '✓ Оплата внесена'); if (j.belowGate) e2.style.color = '#e8c07d'; }
         }).catch(function (x) { busy = false; if (ok) ok.disabled = false; if (e) { e.style.color = ''; e.textContent = 'Ошибка: ' + (x && x.message || x); } });
     }
     fetch(W() + '/order-payments?cardId=' + encodeURIComponent(cardId)).then(function (r) {
