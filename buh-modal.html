@@ -676,49 +676,7 @@
         '<div class="kpi" title="Производственный календарь РК с учётом праздников и переносов; правится в табеле"><div class="k">Рабочих дней</div><div class="v">'+(PAY.workdays||0)+'</div></div>'+
         '</div>';
       var f=FILTER.toLowerCase();
-      // --- сдельщики ---
-      var ps=(PAY.piece||[]).filter(function(p){ return !f || p.name.toLowerCase().indexOf(f)>=0; });
-      h+='<h3 style="margin:14px 0 6px">Сдельная зарплата</h3>';
-      if(!ps.length) h+='<div class="empty">Нет сдельных заработков за период.</div>';
-      else {
-        h+='<table><thead><tr><th></th><th>Работник</th><th class="num">Заработал</th><th class="num">Заказов</th></tr></thead><tbody>';
-        ps.forEach(function(p){
-          var open=!!PAY_OPEN[p.id];
-          h+='<tr class="prow" data-w="'+esc(p.id)+'" style="cursor:pointer">'+
-             '<td style="width:24px;color:#579dff">'+(p.ordersCount?(open?'▾':'▸'):'')+'</td>'+
-             '<td>'+esc(p.name)+(p.agentBonus?' <span style="display:inline-block;background:#1c3329;color:var(--green);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700" title="Бонус агента за оформленные заявки на ремонт: '+p.agentBonus.count+' шт × '+p.agentBonus.perItem+' ₸">агент +'+money(p.agentBonus.total)+' ₸</span>':'')+
-             (p.held?' <span style="display:inline-block;background:#3a2f1a;color:#e8c07d;border-radius:10px;padding:1px 8px;font-size:11px" title="Срезано порогом сдельной с больших заказов. Видно только руководству — работнику не показывается.">удержано '+money(p.held.inPeriod)+' ₸'+(p.held.total&&p.held.total!==p.held.inPeriod?(' · всего '+money(p.held.total)+' ₸'):'')+'</span>':'')+'</td>'+
-             '<td class="num"><b>'+money(p.earned)+' ₸</b></td>'+
-             '<td class="num">'+p.ordersCount+'</td></tr>';
-          if(open && p.orders && p.orders.length){
-            p.orders.forEach(function(o){
-              h+='<tr class="osub"><td></td>'+
-                 '<td class="muted" style="padding-left:18px">'+(o.number?('№'+esc(o.number)+' · '):'')+esc(o.name)+
-                 (o.stages&&o.stages.length?(' <span style="font-size:11px;color:#7a8794">('+esc(o.stages.join(', '))+')</span>'):'')+
-                 (o.ledger==='reversal'?' <span class="pill" style="background:#3a2226;color:#f3b3b3" title="'+esc(o.note||'')+'">сторно</span>':'')+
-                 (o.ledger==='correction'?' <span class="pill" style="background:#3a2f14;color:#e8c07d" title="'+esc(o.note||'')+'">поправка</span>':'')+'</td>'+
-                 '<td class="num">'+money(o.earned)+' ₸</td><td></td></tr>';
-            });
-          }
-        });
-        h+='</tbody></table>';
-      }
-      // --- правила оплаты статусов табеля ---
-      var AP=(PAY.attPay)||{p:100,n:0,b:0,o:0,v:0,l:100,e:100,t:0,minDeduct:1};
-      if(AP.l==null) AP.l=100; if(AP.e==null) AP.e=100; if(AP.t==null) AP.t=0; if(AP.minDeduct==null) AP.minDeduct=1; if(AP.lateGrace==null) AP.lateGrace=15;
-      h+='<h3 style="margin:18px 0 6px">Правила оплаты статусов табеля <span class="muted" style="font-weight:400;font-size:12px">— сколько % дневной ставки начисляется за день</span></h3>';
-      h+='<div class="row" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
-         '<label>Я явка <input class="ap" data-k="p" value="'+AP.p+'" style="width:56px;text-align:right"> %</label>'+
-         '<label>Б больничный <input class="ap" data-k="b" value="'+AP.b+'" style="width:56px;text-align:right"> %</label>'+
-         '<label>О отпуск <input class="ap" data-k="o" value="'+AP.o+'" style="width:56px;text-align:right"> %</label>'+
-         '<label>Н неявка <input class="ap" data-k="n" value="'+AP.n+'" style="width:56px;text-align:right"> %</label>'+
-         '<label>В выходной <input class="ap" data-k="v" value="'+AP.v+'" style="width:56px;text-align:right"> %</label>'+
-         '<label title="Опоздание: день считается явкой">Оп опоздание <input class="ap" data-k="l" value="'+AP.l+'" style="width:56px;text-align:right"> %</label>'+
-         '<label title="Отпросился / ушёл раньше: день считается явкой">Уш ушёл раньше <input class="ap" data-k="e" value="'+AP.e+'" style="width:56px;text-align:right"> %</label>'+
-         '<label>От отгул <input class="ap" data-k="t" value="'+AP.t+'" style="width:56px;text-align:right"> %</label>'+
-         '<label title="Минуты опоздания и раннего ухода вычитаются из оклада по часовой ставке (оклад ÷ раб.дни ÷ 8)"><input type="checkbox" id="apMin" '+(+AP.minDeduct?'checked':'')+' style="width:auto"> вычитать время опоздания/ухода</label>'+
-         '<label title="Опоздание до этого числа минут не вычитается; больше — округляется вверх до целого часа (16–60 мин = 1 ч, 61–120 мин = 2 ч)">опоздание до <input class="ap" data-k="lateGrace" value="'+AP.lateGrace+'" style="width:46px;text-align:right"> мин — без вычета, больше — до целого часа</label>'+
-         '<button class="btn" id="apSave" type="button">Сохранить правила</button><span id="apMsg" class="muted"></span></div>';
+      // «Сдельная зарплата» убрана (решение Асхата, 11.2026): зарплата по окладу
       // --- окладники ---
       // ведомость на ВСЕХ: сдельщики, окладники и «оклад + сдельная».
       // paySlip приходит от нового worker.js; старый отдаёт только salaried — тогда работаем по нему
@@ -740,7 +698,6 @@
       h+='<h3 style="margin:14px 0 6px">Зарплата к выдаче</h3>';
       if(!ss.length) h+='<div class="empty">Нет начислений за период.</div>';
       else {
-        h+='<div class="muted" style="margin-bottom:6px">Оклад начислен = оклад ÷ рабочие дни периода ('+(PAY.workdays||0)+') × оплачиваемые дни. Оплачиваемые дни = Σ(дни статуса × его %). Выход в выходной с отметкой «Я» оплачивается сверх нормы. Внеурочные (отметка ⏱ в табеле) = часы × (оклад ÷ раб.дни ÷ 8) × 2 — только окладникам, к сдельной не относится. Сдельная — доля по сданным заказам, та же сумма, что в разделе «Сдельная зарплата» выше (в ФОТ не задваивается). К выдаче наличными = начислено − «официально на карту» − «еда сверх нормы»; обе колонки вписываются прямо в таблице и сохраняются за месяц выплаты.</div>';
         h+='<table><thead><tr><th>Работник</th><th class="num">Оклад/мес</th><th class="num">Явок</th>'+
            '<th class="num">Б/О/Н/В</th><th class="num">Оплач. дней</th>'+
            '<th class="num">Оклад начислен</th><th class="num">Внеуроч. ×2</th><th class="num">Сдельная</th><th class="num">Начислено</th>'+
@@ -791,7 +748,24 @@
         if(PAY.paySlip && T.all!=null && Math.abs(TS.pay-T.all)>1){
           h+='<div style="color:#f28b82;font-size:12px;margin-top:6px">⚠ Итого к выдаче ('+money(TS.pay)+' ₸) не сходится с ФОТ ('+money(T.all)+' ₸). Сообщите разработчику.</div>';
         }
+          h+='<div class="muted" style="margin-top:8px;font-size:12px">Оклад начислен = оклад ÷ рабочие дни периода ('+(PAY.workdays||0)+') × оплачиваемые дни. Оплачиваемые дни = Σ(дни статуса × его %). Выход в выходной с отметкой «Я» оплачивается сверх нормы. Внеурочные (отметка ⏱ в табеле) = часы × (оклад ÷ раб.дни ÷ 8) × 2 — только окладникам, к сдельной не относится. Сдельная — доля по сданным заказам (в ФОТ не задваивается). К выдаче наличными = начислено − «официально на карту» − «еда сверх нормы»; обе колонки вписываются прямо в таблице и сохраняются за месяц выплаты.</div>';
       }
+      // --- правила оплаты статусов табеля ---
+      var AP=(PAY.attPay)||{p:100,n:0,b:0,o:0,v:0,l:100,e:100,t:0,minDeduct:1};
+      if(AP.l==null) AP.l=100; if(AP.e==null) AP.e=100; if(AP.t==null) AP.t=0; if(AP.minDeduct==null) AP.minDeduct=1; if(AP.lateGrace==null) AP.lateGrace=15;
+      h+='<h3 style="margin:18px 0 6px">Правила оплаты статусов табеля <span class="muted" style="font-weight:400;font-size:12px">— сколько % дневной ставки начисляется за день</span></h3>';
+      h+='<div class="row" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
+         '<label>Я явка <input class="ap" data-k="p" value="'+AP.p+'" style="width:56px;text-align:right"> %</label>'+
+         '<label>Б больничный <input class="ap" data-k="b" value="'+AP.b+'" style="width:56px;text-align:right"> %</label>'+
+         '<label>О отпуск <input class="ap" data-k="o" value="'+AP.o+'" style="width:56px;text-align:right"> %</label>'+
+         '<label>Н неявка <input class="ap" data-k="n" value="'+AP.n+'" style="width:56px;text-align:right"> %</label>'+
+         '<label>В выходной <input class="ap" data-k="v" value="'+AP.v+'" style="width:56px;text-align:right"> %</label>'+
+         '<label title="Опоздание: день считается явкой">Оп опоздание <input class="ap" data-k="l" value="'+AP.l+'" style="width:56px;text-align:right"> %</label>'+
+         '<label title="Отпросился / ушёл раньше: день считается явкой">Уш ушёл раньше <input class="ap" data-k="e" value="'+AP.e+'" style="width:56px;text-align:right"> %</label>'+
+         '<label>От отгул <input class="ap" data-k="t" value="'+AP.t+'" style="width:56px;text-align:right"> %</label>'+
+         '<label title="Минуты опоздания и раннего ухода вычитаются из оклада по часовой ставке (оклад ÷ раб.дни ÷ 8)"><input type="checkbox" id="apMin" '+(+AP.minDeduct?'checked':'')+' style="width:auto"> вычитать время опоздания/ухода</label>'+
+         '<label title="Опоздание до этого числа минут не вычитается; больше — округляется вверх до целого часа (16–60 мин = 1 ч, 61–120 мин = 2 ч)">опоздание до <input class="ap" data-k="lateGrace" value="'+AP.lateGrace+'" style="width:46px;text-align:right"> мин — без вычета, больше — до целого часа</label>'+
+         '<button class="btn" id="apSave" type="button">Сохранить правила</button><span id="apMsg" class="muted"></span></div>';
       return h;
     }
 
