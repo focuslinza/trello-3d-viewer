@@ -3,7 +3,7 @@
 // (Бухгалтерия, окно счёта, просмотр счёта).
 // Отметка «оплачен» вносится суммой: сколько, когда, каким способом и куда.
 // Показывает сумму заказа, уже внесённые оплаты, остаток и остаток ПОСЛЕ этой оплаты.
-// Неполная оплата — «частично»: заказ идёт в работу, остаток виден везде.
+// Оплату, внесённую не учредителем, подтверждает учредитель; в работу — от 50% подтверждённой.
 // Использование: openPayDialog({ cardId, title, onDone: function(summary){…} })
 // summary = { total, paidSum, rest, paidFlag, payments:[…], moved, moveReason }
 // ============================================================================
@@ -18,6 +18,18 @@
   ];
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function money(n) { n = Math.round((+n || 0) * 100) / 100; var s = String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); return s; }
+  // ПОДТВЕРЖДЕНИЕ УЧРЕДИТЕЛЕМ (07.11.2026): сервер узнаёт учредителя по личному токену.
+  // На своей доске он уже есть; в окнах Trello — один раз вставить свою личную ссылку.
+  function TOK() { try { return localStorage.getItem('ms_board_token') || ''; } catch (e) { return ''; } }
+  function hdr() { var h = { 'Content-Type': 'application/json' }; var t = TOK(); if (t) h['X-MS-Token'] = t; return h; }
+  function askFounderLink() {
+    var v = prompt('Подтверждать оплаты может только учредитель.\n\nВставьте свою личную ссылку входа (из «Зарплата» → 📱, или ссылку своей доски). Это нужно сделать один раз на этом компьютере.');
+    if (!v) return false;
+    var m = String(v).match(/(?:#mt=|[?&]token=|[?&]bt=)([A-Za-z0-9]{16,})/) || String(v).trim().match(/^([A-Za-z0-9]{16,})$/);
+    if (!m) { alert('Не нашёл в ссылке ключ входа. Скопируйте ссылку целиком.'); return false; }
+    try { localStorage.setItem('ms_board_token', m[1]); } catch (e) { alert('Браузер не дал сохранить ключ.'); return false; }
+    return true;
+  }
   function today() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
   function css() {
     if (document.getElementById('payDlgCss')) return;
@@ -43,6 +55,26 @@
       '.pdl .err{color:#f87168;margin-right:auto;font-size:12.5px}';
     document.head.appendChild(st);
   }
+  // плашка «ждут подтверждения» для Бухгалтерии: renderPendingPayments(el, onChange)
+  window.renderPendingPayments = function (el, onChange) {
+    if (!el) return;
+    fetch(W() + '/payments-pending').then(function (r) { return r.json(); }).then(function (j) {
+      var rows = (j && j.rows) || [];
+      if (!rows.length) { el.innerHTML = ''; return; }
+      el.innerHTML = '<div style="margin:8px 0 12px;padding:10px 12px;border:1px solid #5a4a2a;background:#2b2516;border-radius:10px">' +
+        '<b style="color:#e8c07d">⏳ Оплаты ждут подтверждения учредителя: ' + rows.length + '</b>' +
+        '<div style="font-size:12px;color:var(--muted,#9fadbc);margin:2px 0 6px">Пока оплата не подтверждена, она не считается и заказ в работу не идёт.</div>' +
+        rows.map(function (r) {
+          return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #3a3322;font-size:13px">' +
+            '<span style="flex:1">' + (r.number ? '№' + esc(r.number) + ' · ' : '') + esc(String(r.name || '').slice(0, 60)) + ' — <b>' + money(r.amount) + ' ₸</b> · ' + esc(r.method) + (r.person ? ' (' + esc(r.person) + ')' : '') +
+            ' <span style="color:var(--muted,#9fadbc)">· ' + esc(r.date) + (r.by ? ' · внёс ' + esc(r.by) : '') + '</span></span>' +
+            '<button type="button" data-pcard="' + esc(r.cardId) + '" data-ptitle="' + esc((r.number ? '№' + r.number + ' ' : '') + String(r.name || '').slice(0, 40)) + '" style="padding:4px 10px;border-radius:7px;border:1px solid #2e5c44;background:#1c3329;color:#4bce97;cursor:pointer;font-size:12.5px">Открыть</button></div>';
+        }).join('') + '</div>';
+      [].forEach.call(el.querySelectorAll('[data-pcard]'), function (b) {
+        b.onclick = function () { window.openPayDialog({ cardId: b.getAttribute('data-pcard'), title: b.getAttribute('data-ptitle'), onDone: function () { window.renderPendingPayments(el, onChange); if (onChange) onChange(); } }); };
+      });
+    }).catch(function () { el.innerHTML = ''; });
+  };
   window.openPayDialog = function (opts) {
     css();
     var cardId = opts.cardId, S = null, method = '', busy = false;
@@ -57,14 +89,14 @@
       var h = '<h3>Оплата заказа' + (opts.title ? ' · ' + esc(opts.title) : '') + '</h3>' +
         '<div class="sub">Укажите, сколько оплатили, когда, каким способом и куда.</div>' +
         '<div class="kp"><div><span>Сумма заказа</span><b>' + money(S.total) + ' ₸</b></div>' +
-        '<div><span>Оплачено</span><b style="color:#4bce97">' + money(S.paidSum) + ' ₸</b></div>' +
+        '<div><span>Оплачено (подтв.)</span><b style="color:#4bce97">' + money(S.paidSum) + ' ₸</b>' + (S.pendingSum > 0 ? '<div style="font-size:11.5px;color:#e8c07d">+ ' + money(S.pendingSum) + ' ₸ ждёт подтв.</div>' : '') + '</div>' +
         '<div><span>Остаток</span><b style="color:' + (S.rest > 0 ? '#e8c07d' : '#4bce97') + '">' + money(S.rest) + ' ₸</b></div></div>';
       // В РАБОТУ — ТОЛЬКО ПРИ ОПЛАТЕ ОТ 50% (решение Асхата, 07.11.2026)
       if (S.total > 0) {
         var _min = 0.5, _paid = (S.payments || []).length ? S.paidSum : (S.paidFlag ? S.total : 0), _pct = Math.round(_paid / S.total * 100);
         var _need = Math.max(0, Math.ceil(S.total * _min - _paid));
         h += _need > 0
-          ? '<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#3a2226;color:#f3b3b3;font-size:13px">⛔ В работу нельзя: оплачено ' + _pct + '%. Для запуска нужно не меньше 50% — ещё ' + money(_need) + ' ₸.</div>'
+          ? '<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#3a2226;color:#f3b3b3;font-size:13px">⛔ В работу нельзя: подтверждено ' + _pct + '%. Для запуска нужно не меньше 50% — ещё ' + money(_need) + ' ₸.' + (S.pendingSum > 0 ? ' Внесённые, но не подтверждённые оплаты не считаются — их подтверждает учредитель.' : '') + '</div>'
           : '<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#1c3329;color:#4bce97;font-size:13px">✓ Оплачено ' + _pct + '% — заказ можно запускать в работу.</div>';
       }
       var pays = S.payments || [];
@@ -73,14 +105,16 @@
         pays.forEach(function (p) {
           h += '<tr class="' + (p.voided ? 'vd' : '') + '"><td>' + esc(p.date) + '</td><td style="text-align:right;white-space:nowrap">' + money(p.amount) + ' ₸</td>' +
             '<td>' + esc(p.methodLabel) + (p.person ? ' — ' + esc(p.person) : '') + (p.note ? '<div style="color:var(--muted,#9fadbc)">' + esc(p.note) + '</div>' : '') + '</td>' +
-            '<td style="color:var(--muted,#9fadbc)">' + esc(p.by || '') + (p.voided ? '<div>отменена' + (p.voidBy ? ': ' + esc(p.voidBy) : '') + '</div>' : '') + '</td>' +
+            '<td style="color:var(--muted,#9fadbc)">' + esc(p.by || '') + (p.voided ? '<div>отменена' + (p.voidBy ? ': ' + esc(p.voidBy) : '') + '</div>'
+              : (p.confirmed ? (p.confirmedBy && p.confirmedBy !== 'авто' ? '<div style="color:#4bce97">✓ подтвердил ' + esc(p.confirmedBy) + '</div>' : '')
+                : '<div style="color:#e8c07d">⏳ ждёт подтверждения</div><button class="b" data-conf="' + p.id + '" style="padding:3px 8px;font-size:12px;margin-top:3px;border-color:#2e5c44;color:#4bce97">✓ Подтвердить</button>')) + '</td>' +
             '<td style="width:24px">' + (p.voided || p.method === 'bank' ? '' : '<button class="x" data-void="' + p.id + '" title="Отменить эту оплату">✕</button>') + '</td></tr>';
         });
         h += '</table>';
       } else if (S.paidFlag) {
         h += '<div class="sub" style="color:#e8c07d">Заказ отмечен «оплачен» раньше, без суммы. Внесите оплату, чтобы были видны сумма и способ.</div>';
       }
-      h += '<div class="row2"><div><div class="lbl">Сумма, ₸ *</div><input type="number" id="pdA" min="0" step="any" value="' + (S.rest > 0 ? S.rest : '') + '"></div>' +
+      h += '<div class="row2"><div><div class="lbl">Сумма, ₸ *</div><input type="number" id="pdA" min="0" step="any" value="' + ((S.rest - (S.pendingSum || 0)) > 0 ? Math.round((S.rest - (S.pendingSum || 0)) * 100) / 100 : '') + '"></div>' +
         '<div><div class="lbl">Дата оплаты</div><input type="date" id="pdD" value="' + today() + '"></div></div>' +
         '<div class="lbl">Способ и куда *</div><div class="ms">' +
         METHODS.map(function (m) { return '<span data-m="' + m[0] + '" class="' + (method === m[0] ? 'on' : '') + '">' + esc(m[1]) + '</span>'; }).join('') + '</div>' +
@@ -91,9 +125,9 @@
       ov.firstChild.innerHTML = h;
       var a = ov.querySelector('#pdA');
       function after() {
-        var v = +a.value || 0, r = Math.round((S.total - S.paidSum - v) * 100) / 100, el = ov.querySelector('#pdAfter');
+        var v = +a.value || 0, r = Math.round((S.total - S.paidSum - (S.pendingSum || 0) - v) * 100) / 100, el = ov.querySelector('#pdAfter');
         if (!(v > 0)) { el.innerHTML = '<span style="color:var(--muted,#9fadbc)">Введите сумму оплаты.</span>'; return; }
-        el.innerHTML = r > 0 ? 'После этой оплаты: <b>частично</b>, остаток <b style="color:#e8c07d">' + money(r) + ' ₸</b>. Заказ можно запускать в работу.'
+        el.innerHTML = r > 0 ? 'После этой оплаты: <b>частично</b>, остаток <b style="color:#e8c07d">' + money(r) + ' ₸</b>. ' + ((S.paidSum + (S.pendingSum || 0) + v) >= S.total * 0.5 ? 'В работу — после подтверждения учредителем.' : 'Меньше 50% — в работу нельзя.')
           : (r < 0 ? 'После этой оплаты: <b style="color:#4bce97">полностью</b>, переплата <b style="color:#f87168">' + money(-r) + ' ₸</b> — проверьте сумму.'
             : 'После этой оплаты: <b style="color:#4bce97">оплачен полностью</b>.');
       }
@@ -107,6 +141,14 @@
         };
       });
       ov.querySelector('#pdC').onclick = close;
+      [].forEach.call(ov.querySelectorAll('[data-conf]'), function (b) {
+        b.onclick = function () {
+          var p = (S.payments || []).filter(function (x) { return String(x.id) === b.getAttribute('data-conf'); })[0];
+          if (!p || !confirm('Подтвердить, что деньги получены: ' + money(p.amount) + ' ₸ (' + p.methodLabel + (p.person ? ' — ' + p.person : '') + ')?')) return;
+          if (!TOK() && !askFounderLink()) return;
+          post('/order-payment-confirm', { id: p.id });
+        };
+      });
       [].forEach.call(ov.querySelectorAll('[data-void]'), function (b) {
         b.onclick = function () {
           var p = (S.payments || []).filter(function (x) { return String(x.id) === b.getAttribute('data-void'); })[0];
@@ -127,14 +169,19 @@
       if (busy) return; busy = true;
       var e = ov.querySelector('#pdE'); if (e) e.textContent = 'Сохраняю…';
       var ok = ov.querySelector('#pdOk'); if (ok) ok.disabled = true;
-      fetch(W() + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      fetch(W() + path, { method: 'POST', headers: hdr(), body: JSON.stringify(body) })
         .then(function (r) { return r.json(); }).then(function (j) {
           busy = false;
+          if (j && j.protected && path.indexOf('confirm') >= 0) {
+            // ключ не подошёл (или его нет) — спросить ссылку учредителя и повторить один раз
+            try { localStorage.removeItem('ms_board_token'); } catch (x) {}
+            if (!body.__retry && askFounderLink()) { body.__retry = 1; if (ok) ok.disabled = false; return post(path, body); }
+          }
           if (!j || !j.ok) throw new Error((j && j.error) || 'сервер не подтвердил');
           S = j; method = '';
           if (opts.onDone) try { opts.onDone(j); } catch (x) {}
           draw();
-          var e2 = ov.querySelector('#pdE'); if (e2) { e2.style.color = '#4bce97'; e2.textContent = path.indexOf('void') >= 0 ? 'Оплата отменена' : (j.belowGate ? 'Оплата внесена, но меньше 50% — в работу нельзя' : '✓ Оплата внесена'); if (j.belowGate) e2.style.color = '#e8c07d'; }
+          var e2 = ov.querySelector('#pdE'); if (e2) { e2.style.color = '#4bce97'; e2.textContent = path.indexOf('void') >= 0 ? 'Оплата отменена' : path.indexOf('confirm') >= 0 ? ('✓ Оплата подтверждена' + (j.gate && j.gate.checked && !j.gate.ok ? ', но подтверждено меньше 50% — в работу нельзя' : '')) : (j.pendingConfirm ? 'Оплата внесена — ждёт подтверждения учредителя' : j.belowGate ? 'Оплата внесена, но меньше 50% — в работу нельзя' : '✓ Оплата внесена'); if (j.belowGate || j.pendingConfirm || (j.gate && j.gate.checked && !j.gate.ok)) e2.style.color = '#e8c07d'; }
         }).catch(function (x) { busy = false; if (ok) ok.disabled = false; if (e) { e.style.color = ''; e.textContent = 'Ошибка: ' + (x && x.message || x); } });
     }
     fetch(W() + '/order-payments?cardId=' + encodeURIComponent(cardId)).then(function (r) {
