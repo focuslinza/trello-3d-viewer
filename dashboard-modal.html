@@ -215,7 +215,6 @@
        '<label class="small muted" style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="exclWeekends"'+(EXCL_WEEKENDS?' checked':'')+'> без выходных (для средних)</label>'+
        '<button type="button" id="applyRange" class="btn green">Применить</button>'+
        '</div>';
-    h+='<div class="lbl" style="text-align:left;font-weight:700;font-size:15px">'+esc(periodLabel())+'</div>';
     return h;
   }
   function kpi(k,v,cls){ return '<div class="kpi '+(cls||'')+'"><div class="k">'+esc(k)+'</div><div class="v">'+v+'</div></div>'; }
