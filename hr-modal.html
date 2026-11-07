@@ -168,9 +168,33 @@
       h += '</div><div class="muted" style="font-size:11px">🟩 явки · 🟧 отклонения (прогул/опоздание/ушёл раньше)</div></div>';
     }
 
+    // ---- должность и рост (из «Должностей» в Управлении) ----
+    var PS = j.positions||[];
+    var hired = p.hiredAt||w.createdAt||'', months = 0;
+    if(hired){ var a0=new Date(hired), b0=new Date(); months=Math.max(0,(b0.getFullYear()-a0.getFullYear())*12+(b0.getMonth()-a0.getMonth())-(b0.getDate()<a0.getDate()?1:0)); }
+    h += '<h3>Должность и рост</h3><div class="sec">';
+    if(!PS.length) h += '<div class="muted">Должность не назначена. Назначает руководитель: Управление → Зарплата.</div>';
+    PS.forEach(function(x, xi){
+      var gr=x.grades||[], g=gr[x.grade]||{}, nx=gr[x.grade+1];
+      var sk=[]; gr.forEach(function(G){ (G.skills||[]).forEach(function(k){ if(sk.indexOf(k)<0) sk.push(k); }); });
+      h += '<div style="margin-bottom:10px"><div><b>'+esc(x.name)+'</b>'+(g.name?' · разряд «'+esc(g.name)+'»':'')+(xi===0&&PS.length>1?' <span class="muted">(основная)</span>':'')+
+        ' <span class="muted">· стаж '+months+' мес</span></div>'+
+        (x.duties?'<div class="muted" style="white-space:pre-wrap;margin:4px 0">'+esc(x.duties)+'</div>':'')+
+        (sk.length?'<div style="margin:6px 0" class="hrsk" data-pid="'+esc(x.positionId)+'">Навыки / обучение: '+sk.map(function(k){ var on=(x.skills||[]).indexOf(k)>=0;
+          return '<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 8px 2px 0;cursor:pointer"><input type="checkbox" value="'+esc(k)+'"'+(on?' checked':'')+' style="width:auto">'+esc(k)+'</label>'; }).join('')+
+          ' <span class="muted hrskmsg" style="font-size:11.5px"></span></div>':'');
+      if(nx){
+        var need=[]; if(months<(+nx.minMonths||0)) need.push('стаж ещё '+((+nx.minMonths||0)-months)+' мес');
+        var miss=(nx.skills||[]).filter(function(k){ return (x.skills||[]).indexOf(k)<0; }); if(miss.length) need.push('освоить: '+miss.join(', '));
+        h += '<div style="font-size:12.5px;color:'+(need.length?'var(--muted,#9fadbc)':'#4bce97')+'">'+(need.length?'До разряда «'+esc(nx.name)+'»: '+esc(need.join('; ')):'⬆ Готов к разряду «'+esc(nx.name)+'» — повышение делает руководитель')+'</div>';
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+
     // ---- кадровые данные ----
     h += '<h3>Личные данные</h3><div class="sec"><div class="grid">'+
-      fld('Должность','f_position',p.position)+
+      (PS.length ? '<div class="fld"><label>Должность</label><input id="f_position" value="'+esc(PS.map(function(x){return x.name;}).join(', '))+'" readonly title="Из назначенных должностей"></div>' : fld('Должность','f_position',p.position))+
       fld('ФИО полностью','f_fullName',p.fullName||w.name)+
       fld('Дата рождения','f_birthDate',p.birthDate,'date')+
       fld('Телефон','f_phone',p.phone)+
@@ -229,6 +253,16 @@
       };
     });
 
+    // навыки сохраняются сразу при отметке
+    [].forEach.call(document.querySelectorAll('.hrsk'), function(box){
+      [].forEach.call(box.querySelectorAll('input'), function(cb){ cb.onchange=function(){
+        var m=box.querySelector('.hrskmsg'); m.textContent='сохраняю…';
+        fetch(WORKER+'/worker-skills-save',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({workerId:w.id, positionId:box.getAttribute('data-pid'), skills:[].map.call(box.querySelectorAll('input:checked'),function(c){return c.value;}), memberId:ME_ID, admin:IS_ADMIN})})
+          .then(function(r){return r.json();}).then(function(r){ m.textContent=(r&&r.ok)?'✓ сохранено':('⚠ '+((r&&r.error)||'ошибка')); })
+          .catch(function(){ m.textContent='⚠ нет связи'; });
+      }; });
+    });
     document.getElementById('saveProf').onclick = function(){
       var kids = document.getElementById('f_children').value.split(',').map(function(x){
         x = x.trim(); if(!x) return null;

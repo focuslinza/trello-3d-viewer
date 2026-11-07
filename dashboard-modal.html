@@ -91,9 +91,11 @@
       <!-- «Уступки» убраны (решение Асхата, 11.2026): механизм цены и скидок продумаем заново -->
       <div class="tab" id="discBtn" data-sec="1" style="display:none">Уступки</div>
       <div class="tab" id="pricingBtn" data-sec="1" title="Цены материалов и работ, коэффициенты">Цены</div>
+      <div class="tab" id="positionsBtn" data-sec="1" title="Должности: права, этапы, обязанности, сетка окладов">Должности</div>
       <div class="tab" id="workers" data-sec="1" title="Ставки, работники, зарплата">Зарплата</div>
       <div class="tab" id="tabelBtn" data-sec="1" title="Табель: явка и время работников">Табель</div>
-      <div class="tab" id="goalsBtn" data-sec="1" title="Цели управляющему на месяц и бонус за их достижение">Цели</div>
+      <!-- «Цели» убраны (решение Асхата, 11.2026) -->
+      <div class="tab" id="goalsBtn" data-sec="1" style="display:none">Цели</div>
       <div class="tab" id="settingsBtn" data-sec="1" title="Своя доска, здоровье системы, резервные копии">Настройки</div>
       <!-- входят в «Настройки», отдельными вкладками не показываются -->
       <div class="tab" id="boardBtn" data-sec="1" data-inset="1" style="display:none">Своя доска</div>
@@ -740,6 +742,13 @@
     ov.innerHTML='<iframe src="./workers-modal.html?embed=1&t='+Date.now()+'" style="flex:1;border:0;width:100%"></iframe>';
     document.body.appendChild(ov);
   };
+  // ДОЛЖНОСТИ (решение Асхата, 11.2026): права и оклад задаются у должности
+  document.getElementById('positionsBtn').onclick=function(){
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;display:flex;flex-direction:column';
+    ov.innerHTML='<iframe src="./positions-modal.html?embed=1&t='+Date.now()+'" style="flex:1;border:0;width:100%"></iframe>';
+    document.body.appendChild(ov);
+  };
   // ОТЧЁТ «УСТУПКИ» (решение Асхата, 09.2026): спеццены из расчётов против тарифа —
   // по операциям/толщинам (где торг стал нормой → тариф завышен), по клиентам, по инженерам
   // СВОЯ ДОСКА (этап ухода от Trello, решение Асхата, 09.2026): импорт, сравнение
@@ -1246,6 +1255,7 @@
     }
     // не админ: проверяем право «Панель руководителя» (начальник цеха и т.п.)
     var wb=document.getElementById('workers'); if(wb) wb.style.display='none';
+    var psb=document.getElementById('positionsBtn'); if(psb) psb.style.display='none';
     var pb=document.getElementById('pricingBtn'); if(pb) pb.style.display='none';
     var fb=document.getElementById('financeBtn'); if(fb) fb.style.display='none';
     var db=document.getElementById('discBtn'); if(db) db.style.display='none';

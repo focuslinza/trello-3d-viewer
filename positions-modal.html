@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Должности</title>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f8cff; --accent2:#2f6f4f; }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px;overflow-x:clip}
+    #app{max-width:900px;margin:0 auto;padding:16px 16px 40px}
+    h2{margin:0 0 4px;font-size:18px}
+    .sub{color:var(--muted);font-size:12.5px;margin-bottom:14px;line-height:1.45}
+    .pcard{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+    .pcard.new{border-style:dashed}
+    .ptop{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .ptop .nm{flex:1 1 220px;font-weight:700;font-size:15px}
+    input,select,textarea{background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13.5px;font-family:inherit}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+    textarea{width:100%;resize:vertical}
+    .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 5px}
+    .chips{display:flex;flex-wrap:wrap;gap:5px 6px}
+    .chipcb{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:14px;padding:4px 10px;font-size:12px;cursor:pointer;user-select:none;background:var(--bg);color:var(--muted)}
+    .chipcb input{display:none}
+    .chipcb.on{border-color:#2e5c44;background:#1c3329;color:#4bce97}
+    table.gr{width:100%;border-collapse:collapse}
+    table.gr th{font-size:11px;color:var(--muted);font-weight:500;text-align:left;padding:2px 4px}
+    table.gr td{padding:3px 4px;vertical-align:top}
+    table.gr input{width:100%}
+    table.gr .num{text-align:right}
+    .btn{border:1px solid var(--line);background:var(--bg);color:var(--txt);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px}
+    .btn:hover{border-color:var(--accent)}
+    .btn.save{background:var(--accent2);border-color:var(--accent2)}
+    .btn.del{color:#e9b3b3;border-color:#5a3a3a}
+    .btn.sm{padding:3px 9px;font-size:12px}
+    .btn.add{border-style:dashed;color:var(--accent);width:100%;padding:10px}
+    .people{font-size:12.5px;color:var(--muted);margin-top:10px}
+    .people b{color:var(--txt);font-weight:500}
+    .muted{color:var(--muted)}
+    .acts{display:flex;gap:6px;margin-left:auto}
+    @media (max-width:600px){ table.gr .hm{display:none} }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2>Должности</h2>
+    <div class="sub">У должности — этапы работ, обязанности, права доступа и сетка окладов по разрядам (рост по стажу и навыкам).
+      Людей назначают на должности во вкладке «Зарплата»; права и оклад человека берутся из его должностей. Изменили должность — у всех, кто на ней, права и оклад обновятся сами.</div>
+    <div id="list" class="muted">Загрузка…</div>
+    <button class="btn add" id="addPos" type="button">+ новая должность</button>
+    <div id="msg" class="muted" style="margin-top:8px;font-size:12.5px"></div>
+  </div>
+<script>
+(function(){
+  var WORKER=(window.WORKER_URL||'').replace(/\/+$/,'');
+  var STAGES=[{key:'eng',label:'Инж'},{key:'cut',label:'Резка'},{key:'bend',label:'Гибка'},{key:'weld',label:'Сварка'},{key:'assembly',label:'Сборка'},{key:'montazh',label:'Монтаж'},{key:'repair',label:'Ремонт'}];
+  var PERMS=[
+    {fld:'can_timesheet',label:'Табель',hint:'заполняет посещаемость'},
+    {fld:'can_hr',label:'HR кабинет',hint:'личные дела сотрудников; собственное дело недоступно'},
+    {fld:'can_dashboard',label:'Панель руководителя',hint:'выручка, прибыль, этапы, заработки, оплаты'},
+    {fld:'can_supply',label:'Снабжение',hint:'заявки, инструмент, наличные'},
+    {fld:'can_issue_invoice',label:'Выставлять счета',hint:'кнопка «Выставить счёт» на карточке заказа'},
+    {fld:'can_invoice',label:'Бухгалтерия',hint:'панель бухгалтера'},
+    {fld:'can_crm',label:'CRM',hint:'клиенты, выручка, долги'},
+    {fld:'can_see_cost',label:'Видит стоимость',hint:'цены в калькуляторе'},
+    {fld:'can_see_repair_cost',label:'Стоимость ремонтов',hint:'цены только в разделе «Ремонт»'},
+    {fld:'can_issue_repair_invoice',label:'Счета по ремонту',hint:'счёт на оплату только в заявках на ремонт'},
+    {fld:'is_repair_agent',label:'Агент ремонта',hint:'бонус за каждую полностью оформленную заявку на ремонт'}
+  ];
+  var POS=[], ASSIGN={}, WORKERS=[];
+  function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function fmt(n){ return Math.round(+n||0).toLocaleString('ru-RU'); }
+  function msg(s){ document.getElementById('msg').textContent=s||''; }
+  function chip(cls,val,label,hint,on){ return '<label class="chipcb'+(on?' on':'')+'"'+(hint?' title="'+esc(hint)+'"':'')+'><input type="checkbox" class="'+cls+'" value="'+val+'"'+(on?' checked':'')+'>'+esc(label)+'</label>'; }
+  function gradeRow(g){
+    g=g||{name:'',salary:'',minMonths:'',skills:[]};
+    return '<tr><td><input class="gn" placeholder="напр. Стажёр" value="'+esc(g.name)+'"></td>'+
+      '<td style="width:120px"><input class="gs num" type="number" min="0" step="1000" placeholder="₸/мес" value="'+(+g.salary>0?g.salary:'')+'"></td>'+
+      '<td style="width:80px"><input class="gm num" type="number" min="0" step="1" placeholder="0" value="'+(+g.minMonths>0?g.minMonths:'')+'"></td>'+
+      '<td class="hm"><input class="gk" placeholder="через запятую" value="'+esc((g.skills||[]).join(', '))+'"></td>'+
+      '<td style="width:34px"><button class="btn sm gdel" type="button" title="Убрать разряд">✕</button></td></tr>';
+  }
+  function peopleOf(pid){
+    var p=POS.filter(function(x){return x.id===pid;})[0]||{grades:[]};
+    var out=[];
+    WORKERS.forEach(function(w){
+      (ASSIGN[w.id]||[]).forEach(function(a,i){
+        if(a.positionId!==pid) return;
+        var g=(p.grades||[])[a.grade]||{};
+        out.push('<b>'+esc(w.name)+'</b>'+(g.name?' · '+esc(g.name):'')+(i>0?' <span title="не основная должность">(совм.)</span>':''));
+      });
+    });
+    return out;
+  }
+  function card(p, isNew){
+    p=p||{id:'',name:'',duties:'',stages:[],perms:{},grades:[{name:'Основной',salary:'',minMonths:0,skills:[]}]};
+    var el=document.createElement('div'); el.className='pcard'+(isNew?' new':''); el.setAttribute('data-id',p.id||'');
+    var ppl=p.id?peopleOf(p.id):[];
+    var h='<div class="ptop"><input class="nm" placeholder="Название должности" value="'+esc(p.name)+'">'+
+      '<span class="acts"><button class="btn save" type="button">Сохранить</button>'+
+      (p.id?'<button class="btn del" type="button">Удалить</button>':'<button class="btn del" type="button">Отмена</button>')+'</span></div>';
+    if(isNew && WORKERS.length){
+      h+='<div style="margin-top:8px;font-size:12.5px" class="muted">Взять за основу сотрудника: <select class="from"><option value="">—</option>'+
+        WORKERS.filter(function(w){return !(ASSIGN[w.id]||[]).length;}).map(function(w){ return '<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>'; }).join('')+
+        '</select> <span title="Скопирует его этапы, права и оклад">ⓘ</span></div>';
+    }
+    h+='<div class="lbl">Обязанности</div><textarea class="du" rows="2" placeholder="Что делает, за что отвечает">'+esc(p.duties)+'</textarea>';
+    h+='<div class="lbl">Этапы работ</div><div class="chips">'+STAGES.map(function(s){ return chip('st',s.key,s.label,'',(p.stages||[]).indexOf(s.key)>=0); }).join('')+'</div>';
+    h+='<div class="lbl">Права доступа</div><div class="chips">'+PERMS.map(function(x){ return chip('pm',x.fld,x.label,x.hint,!!(p.perms||{})[x.fld]); }).join('')+'</div>';
+    h+='<div class="lbl">Сетка окладов — разряды по росту</div>'+
+      '<table class="gr"><thead><tr><th>Разряд</th><th>Оклад</th><th>Стаж от, мес</th><th class="hm">Нужные навыки</th><th></th></tr></thead><tbody>'+
+      (p.grades||[]).map(gradeRow).join('')+'</tbody></table>'+
+      '<button class="btn sm gadd" type="button" style="margin-top:6px">+ разряд</button>'+
+      '<span class="muted" style="font-size:11.5px;margin-left:8px">Первый разряд — начальный. Система подскажет, когда у человека хватает стажа и навыков для следующего.</span>';
+    if(p.id) h+='<div class="people">'+(ppl.length?'Назначены: '+ppl.join(', '):'Пока никто не назначен')+'</div>';
+    el.innerHTML=h;
+    wire(el);
+    return el;
+  }
+  function wire(el){
+    [].forEach.call(el.querySelectorAll('.chipcb input'),function(cb){ cb.onchange=function(){ this.parentNode.classList.toggle('on',this.checked); }; });
+    el.querySelector('.gadd').onclick=function(){ var tb=el.querySelector('tbody'); tb.insertAdjacentHTML('beforeend',gradeRow()); wireGr(el); };
+    wireGr(el);
+    el.querySelector('.save').onclick=function(){ save(el); };
+    el.querySelector('.del').onclick=function(){ del(el); };
+    var fr=el.querySelector('.from');
+    if(fr) fr.onchange=function(){
+      var w=WORKERS.filter(function(x){return x.id===fr.value;})[0]; if(!w) return;
+      [].forEach.call(el.querySelectorAll('.st'),function(cb){ cb.checked=(w.stages||[]).indexOf(cb.value)>=0; cb.parentNode.classList.toggle('on',cb.checked); });
+      [].forEach.call(el.querySelectorAll('.pm'),function(cb){ cb.checked=(w[cb.value]==1); cb.parentNode.classList.toggle('on',cb.checked); });
+      var gs=el.querySelector('.gs'); if(gs && +w.salary>0) gs.value=w.salary;
+    };
+  }
+  function wireGr(el){
+    [].forEach.call(el.querySelectorAll('.gdel'),function(b){ b.onclick=function(){
+      if(el.querySelectorAll('tbody tr').length<=1){ alert('Нужен хотя бы один разряд.'); return; }
+      b.closest('tr').remove(); }; });
+  }
+  function collect(el){
+    return { id: el.getAttribute('data-id')||undefined,
+      name: el.querySelector('.nm').value.trim(), duties: el.querySelector('.du').value,
+      stages: [].map.call(el.querySelectorAll('.st:checked'),function(c){return c.value;}),
+      perms: [].reduce.call(el.querySelectorAll('.pm:checked'),function(o,c){ o[c.value]=1; return o; },{}),
+      grades: [].map.call(el.querySelectorAll('tbody tr'),function(tr){
+        return { name: tr.querySelector('.gn').value.trim(), salary: +tr.querySelector('.gs').value||0,
+          minMonths: +tr.querySelector('.gm').value||0, skills: tr.querySelector('.gk').value.split(',').map(function(s){return s.trim();}).filter(Boolean) };
+      }) };
+  }
+  function save(el){
+    var p=collect(el);
+    if(!p.name){ el.querySelector('.nm').focus(); msg('Введите название должности.'); return; }
+    var btn=el.querySelector('.save'), b0=btn.textContent; btn.disabled=true; btn.textContent='Сохраняю…';
+    fetch(WORKER+'/position-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({position:p})})
+      .then(function(r){return r.json();}).then(function(j){
+        btn.disabled=false;
+        if(!j||!j.ok){ btn.textContent=b0; alert('Не сохранилось: '+((j&&j.error)||'?')); return; }
+        msg('Сохранено: '+p.name+(j.updatedWorkers?' · обновлены права и оклад у '+j.updatedWorkers+' чел.':''));
+        load();
+      }).catch(function(e){ btn.disabled=false; btn.textContent=b0; alert('Нет связи: '+(e&&e.message||e)); });
+  }
+  function del(el){
+    var id=el.getAttribute('data-id');
+    if(!id){ el.remove(); return; }
+    if(!confirm('Удалить должность «'+el.querySelector('.nm').value+'»?')) return;
+    fetch(WORKER+'/position-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+      .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok){ alert((j&&j.error)||'Не удалось'); return; } load(); });
+  }
+  function render(){
+    var list=document.getElementById('list'); list.className=''; list.innerHTML='';
+    if(!POS.length) list.innerHTML='<div class="muted" style="padding:6px 0 12px">Должностей пока нет. Создайте первую — например «Сварщик», «Начальник цеха», «Бухгалтер».</div>';
+    POS.forEach(function(p){ list.appendChild(card(p,false)); });
+  }
+  function load(){
+    return Promise.all([
+      fetch(WORKER+'/positions-list').then(function(r){return r.json();}),
+      fetch(WORKER+'/workers-list').then(function(r){return r.json();}).catch(function(){return {};})
+    ]).then(function(a){
+      if(!a[0]||!a[0].ok) throw new Error((a[0]&&a[0].error)||'ошибка');
+      POS=a[0].positions||[]; ASSIGN=a[0].assign||{}; WORKERS=(a[1]&&a[1].workers)||[];
+      render();
+    }).catch(function(e){ document.getElementById('list').textContent='Ошибка загрузки: '+(e&&e.message||e); });
+  }
+  document.getElementById('addPos').onclick=function(){
+    var c=card(null,true); document.getElementById('list').appendChild(c); c.querySelector('.nm').focus();
+  };
+  window.__posReload=load;
+  load();
+})();
+</script>
+</body>
+</html>

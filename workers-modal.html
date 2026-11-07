@@ -61,6 +61,20 @@
     .chk.pm .pmh{color:var(--muted, #9fadbc);font-size:11px;white-space:normal}
     .preset{font-size:11.5px;color:#579dff;text-decoration:none;margin-top:3px;display:inline-block}
     .preset:hover{text-decoration:underline}
+    /* должности человека */
+    .posrow{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;border:1px solid #2e5c44;background:#18261f;border-radius:10px;padding:6px 8px;margin-bottom:6px;font-size:12.5px}
+    .posrow .pn{font-weight:700;color:#9ee6bd}
+    .posrow select{width:auto;padding:4px 6px;font-size:12.5px}
+    .posrow .sk{display:inline-flex;gap:4px;flex-wrap:wrap}
+    .posrow .sk label{display:inline-flex;align-items:center;gap:3px;margin:0;font-size:11.5px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:1px 7px;cursor:pointer}
+    .posrow .sk label.on{color:#4bce97;border-color:#2e5c44}
+    .posrow .sk input{display:none}
+    .posrow .grow{font-size:11.5px}
+    .posrow .x{margin-left:auto;background:transparent;border:0;color:#e9b3b3;cursor:pointer;font-size:14px}
+    .posadd{width:auto;padding:5px 8px;font-size:12.5px}
+    .chips.locked .chipcb{pointer-events:none;opacity:.75}
+    .chips.locked .chipcb.warn, .chips.locked .chipcb:has(.hidestats){pointer-events:auto;opacity:1}
+    .derived{font-size:10.5px;color:#9ee6bd;text-transform:none;letter-spacing:0;margin-left:6px}
   </style>
 </head>
 <body>
@@ -185,6 +199,72 @@
     var rowsEl = document.getElementById('rows');
     var msgEl = document.getElementById('msg');
     var BOARD_MEMBERS = [];
+    // ДОЛЖНОСТИ (11.2026): права, этапы и оклад — из должностей человека
+    var POSD = { positions:[], assign:{}, tenure:{}, today:'' };
+    function posById(id){ return POSD.positions.filter(function(p){ return p.id===id; })[0]; }
+    function monthsSince(d){ if(!d) return 0; var a=new Date(d), b=POSD.today?new Date(POSD.today):new Date(); if(isNaN(a)) return 0; return Math.max(0,(b.getFullYear()-a.getFullYear())*12+(b.getMonth()-a.getMonth())-(b.getDate()<a.getDate()?1:0)); }
+    function allSkills(p){ var o=[]; (p.grades||[]).forEach(function(g){ (g.skills||[]).forEach(function(k){ if(o.indexOf(k)<0) o.push(k); }); }); return o; }
+    // подсказка роста: следующий разряд, до которого человек дорос по стажу и навыкам
+    function growHint(p, a, months){
+      var gr=p.grades||[], cur=+a.grade||0, best=-1;
+      for(var k=cur+1;k<gr.length;k++){
+        var g=gr[k], miss=(g.skills||[]).filter(function(x){ return (a.skills||[]).indexOf(x)<0; });
+        if(months>=(+g.minMonths||0) && !miss.length) best=k;
+      }
+      if(best>cur) return '<span class="grow" style="color:#4bce97" title="Стаж '+months+' мес, нужные навыки отмечены">⬆ готов к «'+esc(gr[best].name)+'»'+(+gr[best].salary>0?' · '+fmt(gr[best].salary)+' ₸':'')+'</span>';
+      var nx=gr[cur+1]; if(!nx) return '';
+      var need=[]; if(months<(+nx.minMonths||0)) need.push('стаж ещё '+((+nx.minMonths||0)-months)+' мес');
+      var miss2=(nx.skills||[]).filter(function(x){ return (a.skills||[]).indexOf(x)<0; }); if(miss2.length) need.push('навыки: '+miss2.join(', '));
+      return '<span class="grow muted">до «'+esc(nx.name)+'»: '+esc(need.join('; '))+'</span>';
+    }
+    function renderPos(card){
+      var box=card.querySelector('.posbox'); if(!box) return;
+      var list=card.__pos||[], wid=card.getAttribute('data-id')||'', months=monthsSince(POSD.tenure[wid]);
+      var h='';
+      list.forEach(function(a,i){
+        var p=posById(a.positionId); if(!p) return;
+        var sk=allSkills(p);
+        h+='<div class="posrow" data-i="'+i+'"><span class="pn">'+esc(p.name)+'</span>'+(i===0&&list.length>1?'<span class="muted" title="Оклад берётся по основной должности">основная</span>':'')+
+          '<select class="pg" title="Разряд">'+(p.grades||[]).map(function(g,gi){ return '<option value="'+gi+'"'+(gi===(+a.grade||0)?' selected':'')+'>'+esc(g.name||('разряд '+(gi+1)))+(+g.salary>0?' — '+fmt(g.salary)+' ₸':'')+'</option>'; }).join('')+'</select>'+
+          (sk.length?'<span class="sk" title="Навыки / обучение — отмечайте освоенные">'+sk.map(function(k){ var on=(a.skills||[]).indexOf(k)>=0; return '<label class="'+(on?'on':'')+'"><input type="checkbox" value="'+esc(k)+'"'+(on?' checked':'')+'>'+(on?'✓ ':'')+esc(k)+'</label>'; }).join('')+'</span>':'')+
+          growHint(p,a,months)+
+          '<button class="x" type="button" title="Снять с должности">✕</button></div>';
+      });
+      var free=POSD.positions.filter(function(p){ return p.active!==false && !list.some(function(a){ return a.positionId===p.id; }); });
+      h+='<select class="posadd"><option value="">'+(POSD.positions.length?'+ назначить должность':'Должностей пока нет — создайте во вкладке «Должности»')+'</option>'+free.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'; }).join('')+'</select>'+
+        (POSD.tenure[wid]?'<span class="muted" style="font-size:11.5px;margin-left:8px">стаж '+months+' мес (с '+esc(POSD.tenure[wid])+')</span>':'');
+      box.innerHTML=h;
+      [].forEach.call(box.querySelectorAll('.posrow'),function(row){
+        var a=list[+row.getAttribute('data-i')];
+        row.querySelector('.pg').onchange=function(){ a.grade=+this.value; applyDerived(card); renderPos(card); };
+        [].forEach.call(row.querySelectorAll('.sk input'),function(cb){ cb.onchange=function(){
+          a.skills=[].map.call(row.querySelectorAll('.sk input:checked'),function(c){ return c.value; }); renderPos(card); }; });
+        row.querySelector('.x').onclick=function(){ list.splice(+row.getAttribute('data-i'),1); applyDerived(card); renderPos(card); };
+      });
+      box.querySelector('.posadd').onchange=function(){ if(!this.value) return;
+        // первая должность: прежний ручной оклад не превращаем в «личный» — оклад идёт по разряду
+        if(!list.length){ var sl=card.querySelector('.sal'); if(sl) sl.value=''; }
+        list.push({positionId:this.value,grade:0,skills:[],salaryOverride:null}); card.__pos=list; applyDerived(card); renderPos(card); };
+    }
+    // права/этапы/оклад по должностям — показываем сразу, до сохранения
+    function applyDerived(card){
+      var list=card.__pos||[], has=list.length>0;
+      var chipsBoxes=card.querySelectorAll('.chips.stgs, .chips.prms');
+      [].forEach.call(chipsBoxes,function(b){ b.classList.toggle('locked',has); });
+      [].forEach.call(card.querySelectorAll('.derived'),function(el){ el.style.display=has?'':'none'; });
+      var pr=card.querySelector('.preset'); if(pr) pr.style.display=has?'none':'';
+      var sal=card.querySelector('.sal');
+      if(!has){ card.__gradeSal=0; if(sal){ sal.placeholder='оклад ₸/мес'; sal.title='Оклад, ₸/мес'; } recalcWages(); return; }
+      var st={}, pm={};
+      list.forEach(function(a){ var p=posById(a.positionId); if(!p) return; (p.stages||[]).forEach(function(k){ st[k]=1; }); Object.keys(p.perms||{}).forEach(function(k){ if(p.perms[k]) pm[k]=1; }); });
+      [].forEach.call(card.querySelectorAll('.stgcb'),function(cb){ cb.checked=!!st[cb.value]; cb.parentNode.classList.toggle('on',cb.checked); });
+      PERMS.forEach(function(x){ if(x.fld==='hide_stats') return; var cb=card.querySelector('.'+x.cls); if(cb){ cb.checked=!!pm[x.fld]; cb.parentNode.classList.toggle('on',cb.checked); } });
+      var p0=posById(list[0].positionId), g0=p0&&(p0.grades||[])[+list[0].grade||0];
+      card.__gradeSal=(g0&&+g0.salary)||0;
+      if(sal){ sal.placeholder=card.__gradeSal?(fmt(card.__gradeSal)+' ₸'):'оклад ₸/мес';
+        sal.title='Пусто — оклад по разряду должности ('+fmt(card.__gradeSal)+' ₸). Впишите сумму, чтобы поставить человеку личный оклад.'; }
+      recalcWages();
+    }
 
     function memberOptionsHtml(selectedId){
       // привязка к Trello больше не обязательна: вход по личной ссылке (кнопка 🔗),
@@ -221,7 +301,7 @@
     function recalcWages(){
       var wd=currentWorkdays();
       [].forEach.call(rowsEl.querySelectorAll('.wcard'), function(c){
-        var sal=parseFloat(c.querySelector('.sal').value)||0;
+        var sal=parseFloat(c.querySelector('.sal').value)||c.__gradeSal||0;
         c.querySelector('.wage').textContent = fmt(sal/wd)+' ₸/дн';
       });
     }
@@ -415,12 +495,13 @@
                      :'<button class="btn del" type="button">Удалить</button>')+
           '</span>'+
         '</div>';
-      h+='<div class="wrowlbl">Этапы (что делает)</div><div class="chips">'+
+      h+='<div class="wrowlbl">Должности</div><div class="posbox"></div>';
+      h+='<div class="wrowlbl">Этапы (что делает)<span class="derived" style="display:none">— из должностей</span></div><div class="chips stgs">'+
         STAGE_GROUPS.map(function(g){
           var on = stagesSel.indexOf(g.key)>=0;
           return '<label class="chipcb'+(on?' on':'')+'"><input type="checkbox" class="stgcb" value="'+g.key+'"'+(on?' checked':'')+'>'+g.label+'</label>';
         }).join('')+'</div>';
-      h+='<div class="wrowlbl">Права доступа <a href="#" class="preset" style="margin-left:8px;text-transform:none;letter-spacing:0">профиль: начальник цеха</a></div><div class="chips">'+
+      h+='<div class="wrowlbl">Права доступа <a href="#" class="preset" style="margin-left:8px;text-transform:none;letter-spacing:0">профиль: начальник цеха</a><span class="derived" style="display:none">— из должностей (кроме «Скрыт из аналитики»)</span></div><div class="chips prms">'+
         PERMS.map(function(p){
           var on = (w[p.fld]==1||w[p.fld]===true);
           return chipCb(p.cls, p.label, p.hint, on, p.warn?' warn':'');
@@ -478,6 +559,10 @@
         cb.addEventListener('change', function(){ this.parentNode.classList.toggle('on', this.checked); });
       });
       card.querySelector('.sal').addEventListener('input', recalcWages);
+      card.__pos = JSON.parse(JSON.stringify(POSD.assign[w.id]||[])); card.__hadPos = card.__pos.length>0;
+      if (card.__pos[0] && card.__pos[0].salaryOverride>0) card.querySelector('.sal').value = card.__pos[0].salaryOverride;
+      else if (card.__pos.length) card.querySelector('.sal').value = '';
+      renderPos(card); applyDerived(card);
       card.querySelector('.save').addEventListener('click', function(){ saveRow(card); });
       var pr=card.querySelector('.preset');
       if(pr) pr.addEventListener('click', function(ev){
@@ -565,6 +650,8 @@
 
         }).catch(function(){});
       }).then(function(){
+        return fetch(WORKER+'/positions-list?cb='+Date.now()).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok) POSD=j; }).catch(function(){});
+      }).then(function(){
       return fetch(WORKER+'/workers-list?'+(showDel?'all=1&':'')+'cb='+Date.now())
         .then(function(r){ return r.json(); })
         .then(function(d){
@@ -585,7 +672,8 @@
 
     function saveRow(tr){
       var name=tr.querySelector('.nm').value.trim();
-      var salary=parseFloat(tr.querySelector('.sal').value)||0;
+      var salaryOv=parseFloat(tr.querySelector('.sal').value)||0;
+      var salary=salaryOv||tr.__gradeSal||0;
       var memberId=tr.querySelector('.mem').value||'';
       var stages=[].map.call(tr.querySelectorAll('.stgcb:checked'), function(c){ return c.value; });
       var canInvoice=tr.querySelector('.caninv')?tr.querySelector('.caninv').checked:false;
@@ -619,6 +707,15 @@
           worksBasis:(function(){ var el=tr.querySelector('.wrkBasis'); return el ? el.value : undefined; })(),
           worksNoCap:(function(){ var el=tr.querySelector('.wrkNoCap'); return el ? !!el.checked : undefined; })() })
       }).then(function(r){ return r.json(); })
+        .then(function(d){
+          // должности человека — следом за карточкой (сервер пересчитает права и оклад)
+          var pl=tr.__pos||[];
+          if(!(d&&d.ok) || !(pl.length||tr.__hadPos)) return d;
+          var items=pl.map(function(a,i){ return { positionId:a.positionId, grade:+a.grade||0, skills:a.skills||[], salaryOverride:(i===0&&salaryOv>0)?salaryOv:null }; });
+          return fetch(WORKER+'/worker-positions-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workerId:d.id,items:items})})
+            .then(function(r){ return r.json(); })
+            .then(function(j){ if(!j||!j.ok) return { ok:false, error:'должности: '+((j&&j.error)||'не сохранились') }; tr.__hadPos=pl.length>0; return d; });
+        })
         .then(function(d){
           if(d&&d.ok){
             tr.setAttribute('data-id', d.id);
