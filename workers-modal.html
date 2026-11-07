@@ -72,7 +72,8 @@
     <h2>Зарплата и работники</h2>
     <div class="sub" id="meta">v5 · загрузка…</div>
 
-    <div class="sec">
+    <!-- «Рабочие дни месяца» убраны (11.2026): норма дней одна — в Табеле (производственный календарь РК, можно поправить там). Здесь берём её же только для подписи «₸/дн». -->
+    <div class="sec" style="display:none">
       <h3>Рабочие дни месяца</h3>
       <div class="daysrow">
         <div class="group">
@@ -680,6 +681,10 @@
       mEl.addEventListener('change', applyAuto);
       document.getElementById('workdays').addEventListener('input', recalcWages);
       applyAuto();
+      // норма из Табеля (с праздниками РК и правкой начальника) — та же, что в начислении окладов
+      fetch(WORKER+'/att-month?ym='+mEl.value).then(function(r){return r.json();}).then(function(j){
+        var n=j&&j.norm&&+j.norm.effective; if(n>0){ document.getElementById('workdays').value=n; recalcWages(); }
+      }).catch(function(){});
     })();
 
     document.getElementById('showDeleted').addEventListener('change', function(){ loadWorkers(); });
