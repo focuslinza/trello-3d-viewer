@@ -89,7 +89,10 @@
       <div class="hint" style="margin-top:8px">Дневная ставка = оклад ÷ рабочие дни. По умолчанию берутся будни месяца (пн–пт); можно поправить вручную.</div>
     </div>
 
-    <div class="sec">
+    <!-- «Доли от стоимости этапа» и мотивация скрыты (решение Асхата, 11.2026): зарплата по окладу.
+         Поля остаются на странице невидимыми, чтобы сохранённые значения (в т.ч. «только оклад с месяца»)
+         не затирались при «Сохранить всё». -->
+    <div class="sec" style="display:none">
       <h3>Доли работников от стоимости этапа</h3>
       <div class="hint" style="margin-bottom:8px">Какой процент от стоимости работы (из расчёта заказа) получает исполнитель. Пример: доля «Цех» 33% и резка на 10 000 ₸ → работнику 3 300 ₸. К инженеру НЕ применяется — у него своя схема (% от работ + доля от «Степени изобретения», настраивается в его карточке ниже). Сохраняется кнопкой «Сохранить всё».</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
@@ -467,7 +470,8 @@
           '<input class="wrkPct" type="number" min="0" max="100" step="0.1" style="width:70px" value="'+w.works_percent+'">'+
         '</label>';
       }
-      if (mot) h+='<div class="wrowlbl">Мотивация</div><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px">'+mot+'</div>';
+      // мотивация скрыта (зарплата по окладу), поля остаются невидимыми — значения не теряются
+      if (mot) h+='<div style="display:none"><div class="wrowlbl">Мотивация</div><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px">'+mot+'</div></div>';
       card.innerHTML=h;
       // чип переключается визуально вместе с чекбоксом
       [].forEach.call(card.querySelectorAll('.chipcb input'), function(cb){
