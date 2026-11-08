@@ -1260,6 +1260,8 @@
     var db=document.getElementById('discBtn'); if(db) db.style.display='none';
     var bb=document.getElementById('boardBtn'); if(bb){ bb.style.display='none'; bb.__msDenied=1; }
     var gb=document.getElementById('goalsBtn'); if(gb) gb.style.display='none';
+    // «Настройки» (своя доска, здоровье, копии) — только учредителю (решение Асхата, 08.11.2026)
+    var stb=document.getElementById('settingsBtn'); if(stb){ stb.style.display='none'; stb.__msDenied=1; }
     t.member('id').then(function(me){
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
         .then(function(r){return r.json();});
