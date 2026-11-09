@@ -97,6 +97,17 @@
             });
           }
         };
+        var linesBtn = {
+          icon: { dark: ICON_BASE + 'ic-t-lines-w.png?v=1', light: ICON_BASE + 'ic-t-lines-b.png?v=1' },
+          text: 'Лин',
+          callback: function (t) {
+            return t.modal({
+              url: './lines-modal.html?t=' + Date.now(),
+              title: 'Линия жизни заказов', accentColor: '#1f6ce8',
+              fullscreen: true,
+            });
+          }
+        };
         var repairBtn = {
           icon: { dark: ICON_BASE + 'ic-t-repair-w.png?v=2', light: ICON_BASE + 'ic-t-repair-b.png?v=2' },
           text: 'Рем',
@@ -184,7 +195,7 @@
             callback: function (t) {
               return t.popup({
                 title: 'Управление', // заголовок попап-меню — не шапка модала
-                items: items.map(function(b){ var FULL={'Рук':'Панель руководителя','CRM':'CRM / Клиенты','Бух':'Бухгалтерия','Снб':'Снабжение','Прд':'Продажи','Рем':'Ремонт','Таб':'Табель','ЗП':'Мой заработок'}; return { text: FULL[b.text]||b.text, callback: b.callback }; })
+                items: items.map(function(b){ var FULL={'Рук':'Панель руководителя','CRM':'CRM / Клиенты','Бух':'Бухгалтерия','Снб':'Снабжение','Прд':'Продажи','Рем':'Ремонт','Лин':'Линия жизни','Таб':'Табель','ЗП':'Мой заработок'}; return { text: FULL[b.text]||b.text, callback: b.callback }; })
               });
             }
           };
@@ -192,9 +203,9 @@
         // админство и права спрашиваем ОДНОВРЕМЕННО — общий ответ укладывается в ~2 с
         return Promise.all([isAdmin(), perms()]).then(function(r){
           var admin = r[0];
-          if (admin) return [earnBtn, repairBtn, supBtn, buhBtn, salesBtn, dashBtn]; // Табель — внутри «Упр», Клиенты — внутри «Прд»
+          if (admin) return [earnBtn, linesBtn, repairBtn, supBtn, buhBtn, salesBtn, dashBtn]; // Табель — внутри «Упр», Клиенты — внутри «Прд»
           return Promise.resolve(r[1]).then(function(p){
-            var out = [earnBtn, repairBtn, supBtn]; // ремонт и снабжение (канбан заявок) — любой работник;
+            var out = p.canDashboard ? [earnBtn, linesBtn, repairBtn, supBtn] : [earnBtn, repairBtn, supBtn];   // «Лин» — руководитель и учредитель // ремонт и снабжение (канбан заявок) — любой работник;
             // внутри «Снабжения» инструмент/наличные/цены видят только снабженец и руководство
             // табель: начальник цеха (заполняет) и бухгалтер (смотрит); у кого есть «Упр» — табель внутри неё
             if ((p.canTimesheet || p.canInvoice) && !p.canDashboard) out.push(tabelBtn);
