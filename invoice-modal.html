@@ -144,7 +144,7 @@
     });
   }
   function gateAccess(t){
-    return t.member('id').then(function(m){
+    return step('аккаунт Trello', t.member('id'), 8000).then(function(m){
       MY_MEMBER_ID = (m && m.id) || '';
       GATE.member = MY_MEMBER_ID;
       return Promise.all([
@@ -282,6 +282,12 @@
   }
 
   function boot(msg){ var b=document.getElementById('boot'); if(b) b.textContent=msg; }
+  // ЗАЩИТА ОТ ВЕЧНОЙ «ЗАГРУЗКИ» (урок 09.11.2026): каждый шаг ждём ограниченное время,
+  // а на экране видно, на каком шаге окно — вместо безликого «Загрузка…»
+  function step(label, p, ms){
+    boot('Загрузка: '+label+'…');
+    return Promise.race([ Promise.resolve(p), new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('шаг «'+label+'» не ответил за '+Math.round((ms||20000)/1000)+' с — закройте окно и откройте снова')); }, ms||20000); }) ]);
+  }
 
   function loadContext(){
     ctx.cardId = t.arg('cardId') || null;
@@ -300,8 +306,8 @@
     ctx.boardId = t.arg('boardId') || '';
     return Promise.resolve().then(function(){
       if(ctx.cardId && ctx.boardId) return;
-      return t.card('id').then(function(c){ if(c&&c.id) ctx.cardId=ctx.cardId||c.id; }).catch(function(){})
-        .then(function(){ return t.board('id').then(function(b){ ctx.boardId=ctx.boardId||(b&&b.id)||''; }).catch(function(){}); });
+      return step('карточка', t.card('id'), 8000).then(function(c){ if(c&&c.id) ctx.cardId=ctx.cardId||c.id; }).catch(function(){})
+        .then(function(){ return step('доска', t.board('id'), 8000).then(function(b){ ctx.boardId=ctx.boardId||(b&&b.id)||''; }).catch(function(){}); });
     });
   }
 
@@ -1230,7 +1236,7 @@
         throw new Error('no-access');
       });
     })
-    .then(loadDirectory).then(loadAllOrders).then(loadCardNumbers).then(loadNumber)
+    .then(function(){ return step('клиенты', loadDirectory()); }).then(function(){ return step('заказы', loadAllOrders()); }).then(function(){ return step('номера карточек', loadCardNumbers()); }).then(function(){ return step('номер счёта', loadNumber()); })
     .then(function(){
       validIds = {}; ctx.allCompanies.forEach(function(c){ validIds[c.id]=true; });
       // pre-check the current card's order if it belongs to the selected client
