@@ -218,7 +218,7 @@
         '<div style="flex:1;overflow:auto;background:var(--bg,#1d2125);padding:18px 22px">'+
         '<h3 style="margin:0 0 4px">'+esc(r.name)+'</h3>'+
         '<div class="muted" style="margin-bottom:12px">'+esc(r.client||'без компании')+person+' · '+esc(r.date||'')+' · <b style="color:var(--txt)">'+money(r.total)+' ₸</b></div>'+
-        '<div style="margin-bottom:14px">'+stat('счёт выслан',r.invoiceSent)+' '+stat('оплачен',r.paid)+' '+stat('сдали',r.delivered)+' '+stat('акт',r.actSigned)+'</div>'+
+        '<div style="margin-bottom:14px">'+stat('счёт выслан',r.invoiceSent)+' '+stat('оплачен',r.paid)+' '+stat('сдали',r.delivered)+' '+(r.noAct?'<span style="text-decoration:line-through;opacity:.55" title="Наличный расчёт — акт не нужен">акт</span>':stat('акт',r.actSigned))+'</div>'+
         '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Счета по этому заказу</div>'+
         '<div id="ordInvs" class="muted" style="margin-bottom:16px">Загрузка…</div>'+
         '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Состав заказа</div>'+
@@ -461,6 +461,7 @@
     }
 
     function chip(r, field, label){
+      if(field==='actSigned' && r.noAct) return '<span class="chip na" title="Наличный расчёт: оплачено 100% и сдали — акт не нужен" style="text-decoration:line-through;opacity:.55;cursor:default">акт</span>';
       var on=r[field];
       // оплата: частично — жёлтая с остатком; без внесённой суммы (старые отметки) — «оплачен» как раньше
       if(field==='paid' && on && r.partial)
@@ -489,7 +490,7 @@
       if(COLF.paid==='yes' && (!r.paid || part)) return false;
       if(COLF.delivered==='no' && r.delivered) return false;
       if(COLF.delivered==='yes' && !r.delivered) return false;
-      if(COLF.actSigned==='no' && r.actSigned) return false;
+      if(COLF.actSigned==='no' && (r.actSigned||r.noAct)) return false;
       if(COLF.actSigned==='yes' && !r.actSigned) return false;
       return true;
     }
@@ -509,7 +510,7 @@
     function visibleRows(){
       var f=FILTER.toLowerCase();
       return ROWS.filter(function(r){
-        if(ONLY_OPEN && r.invoiceSent && r.paid && r.delivered && r.actSigned) return false;
+        if(ONLY_OPEN && r.invoiceSent && r.paid && r.delivered && (r.actSigned||r.noAct)) return false;
         if(!colfPass(r)) return false;
         if(!f) return true;
         return (r.number+' '+r.name+' '+r.client).toLowerCase().indexOf(f)>=0;
@@ -639,7 +640,7 @@
         h+='<table class="otab"><thead><tr><th class="w-n">№</th><th>Заказ</th>'+th('client','Клиент')+'<th class="num w-sum">Сумма</th>'+th('invoiceSent','Счёт')+th('paid','Оплата')+th('delivered','Сдали')+th('actSigned','Акт')+'<th class="w-dt">Дата</th><th class="w-x"></th>'+'</tr></thead><tbody>';
         if(!rows.length) h+='<tr><td colspan="11" class="muted" style="padding:14px 8px">Нет заказов по этим фильтрам. Нажмите на заголовок ещё раз или <a href="#" class="cfreset" style="color:#579dff">сбросьте фильтры</a>.</td></tr>';
         rows.forEach(function(r){
-          var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
+          var closed=r.invoiceSent&&r.paid&&r.delivered&&(r.actSigned||r.noAct);
           h+='<tr'+(closed?' class="rowclosed"':'')+'><td style="white-space:nowrap"><a href="https://trello.com/c/'+esc(r.cardId)+'" target="_blank" rel="noopener" title="Открыть карточку Trello в новой вкладке" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a> '+
              '<a href="#" class="oinfo" data-card="'+esc(r.cardId)+'" title="Счета по заказу, состав, статусы" style="color:var(--muted);text-decoration:none;font-size:12px">ⓘ</a></td>'+
              '<td title="'+esc(r.name)+(PERSONS[r.cardId]?' ('+esc(PERSONS[r.cardId])+')':'')+'">'+esc(r.name)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span>'+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+
@@ -669,7 +670,7 @@
       [].forEach.call(document.querySelectorAll('.oinfo'), function(el){
         el.addEventListener('click', function(e){ e.preventDefault(); openOrderView(this.getAttribute('data-card')); });
       });
-      [].forEach.call(document.querySelectorAll('.chip'), function(c){
+      [].forEach.call(document.querySelectorAll('.chip:not(.na)'), function(c){
         c.onclick=function(){
           var cardId=this.getAttribute('data-card'), field=this.getAttribute('data-f');
           var r=ROWS.filter(function(x){return x.cardId===cardId;})[0]
@@ -721,7 +722,7 @@
             // пересчитать итоги локально
             var T={orders:0,revenue:0,paidRev:0,unpaidRev:0,closed:0};
             ROWS.forEach(function(x){ T.orders++; T.revenue+=x.total; var got=x.hasPayments?Math.min(x.total,x.paidSum||0):(x.paid?x.total:0); T.paidRev+=got; T.unpaidRev+=x.total-got;
-              if(x.invoiceSent&&x.paid&&x.delivered&&x.actSigned)T.closed++; });
+              if(x.invoiceSent&&x.paid&&x.delivered&&(x.actSigned||x.noAct))T.closed++; });
             TOTALS=T; render();
           }).catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); el.classList.remove('busy'); });
         };
@@ -891,14 +892,14 @@
          '<span class="muted">Выберите клиента и отметьте несколько заявок — они уйдут в один счёт. Заявки, уже включённые в счета, помечены предупреждением.</span></div>';
       var f=FILTER.toLowerCase();
       var rows=(REP_ROWS||[]).filter(function(r){
-        if(ONLY_OPEN && r.invoiceSent && r.paid && r.delivered && r.actSigned) return false;
+        if(ONLY_OPEN && r.invoiceSent && r.paid && r.delivered && (r.actSigned||r.noAct)) return false;
         if(!f) return true;
         return (r.number+' '+r.title+' '+(r.client||'')+' '+(r.category||'')).toLowerCase().indexOf(f)>=0;
       });
       if(!rows.length) return h+'<div class="empty">Нет заявок на ремонт по выбранным условиям.</div>';
       h+='<table><thead><tr><th>№</th><th>Заявка</th><th>Клиент</th><th class="num">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th></tr></thead><tbody>';
       rows.forEach(function(r){
-        var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
+        var closed=r.invoiceSent&&r.paid&&r.delivered&&(r.actSigned||r.noAct);
         var titleCell=esc(r.title)
           +(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')
           +(r.urgent?' <span title="срочная" style="font-size:11px">🔥</span>':'')
@@ -936,7 +937,7 @@
               if(field==='paid'){ r.paidAt=newVal?new Date().toISOString():null; }
               var T={orders:0,revenue:0,paidRev:0,unpaidRev:0,closed:0};
               REP_ROWS.forEach(function(x){ T.orders++; T.revenue+=x.total; if(x.paid)T.paidRev+=x.total; else T.unpaidRev+=x.total;
-                if(x.invoiceSent&&x.paid&&x.delivered&&x.actSigned)T.closed++; });
+                if(x.invoiceSent&&x.paid&&x.delivered&&(x.actSigned||x.noAct))T.closed++; });
               REP_TOTALS=T; render();
             }).catch(function(e){ alert('Не удалось сохранить: '+(e&&e.message||e)); el.classList.remove('busy'); });
         };
