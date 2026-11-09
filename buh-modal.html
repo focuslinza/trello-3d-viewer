@@ -31,6 +31,11 @@
                background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
     .mnav .lbl.on{border-color:var(--blue);background:#22304d}
     /* показатели — одной строкой под поиском (решение Асхата, 11.2026) */
+    th.cf{cursor:pointer;user-select:none;white-space:nowrap}
+    th.cf:hover{color:var(--txt)}
+    th.cf .cfi{opacity:.45;font-size:10px}
+    th.cf.on{color:#579dff}
+    th.cf .cfv{display:inline-block;margin-left:3px;padding:1px 7px;border-radius:9px;background:#1c2b41;border:1px solid #2b4b7a;color:#85b8ff;font-size:10.5px;text-transform:none;letter-spacing:0;font-weight:600}
     .kpis{display:flex;flex-wrap:nowrap;gap:8px;margin:10px 0 14px;overflow-x:auto}
     .kpi{flex:1 1 0;min-width:96px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
     .kpi .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -452,10 +457,48 @@
       return '<span class="chip'+(on?' on':'')+'" data-card="'+esc(r.cardId)+'" data-f="'+field+'">'+(on?'✓ ':'')+label+'</span>';
     }
 
+    // ФИЛЬТРЫ ПО ЗАГОЛОВКАМ (решение Асхата, 09.11.2026): клик по «Клиент / Счёт / Оплата /
+    // Сдали / Акт» перебирает варианты; повторный клик — следующий, последний — снова «все»
+    var COLF={ client:'', invoiceSent:'', paid:'', delivered:'', actSigned:'' };
+    var COLF_OPT={
+      client:[['',''],['none','без клиента'],['has','с клиентом']],
+      invoiceSent:[['',''],['no','не выслан'],['yes','выслан']],
+      paid:[['',''],['no','не оплачен'],['part','частично'],['yes','оплачен']],
+      delivered:[['',''],['no','не сданы'],['yes','сданы']],
+      actSigned:[['',''],['no','без акта'],['yes','с актом']]
+    };
+    function colfPass(r){
+      if(COLF.client==='none' && String(r.client||'').trim()) return false;
+      if(COLF.client==='has' && !String(r.client||'').trim()) return false;
+      if(COLF.invoiceSent==='no' && r.invoiceSent) return false;
+      if(COLF.invoiceSent==='yes' && !r.invoiceSent) return false;
+      var part=!!r.partial || (!r.paid && +r.paidSum>0);
+      if(COLF.paid==='no' && (r.paid || part)) return false;
+      if(COLF.paid==='part' && !part) return false;
+      if(COLF.paid==='yes' && (!r.paid || part)) return false;
+      if(COLF.delivered==='no' && r.delivered) return false;
+      if(COLF.delivered==='yes' && !r.delivered) return false;
+      if(COLF.actSigned==='no' && r.actSigned) return false;
+      if(COLF.actSigned==='yes' && !r.actSigned) return false;
+      return true;
+    }
+    function colfActive(){ return Object.keys(COLF).some(function(k){ return COLF[k]; }); }
+    function th(k,label,cls){
+      var v=COLF[k], lab=v?(COLF_OPT[k].filter(function(o){return o[0]===v;})[0]||['',''])[1]:'';
+      return '<th class="cf'+(v?' on':'')+(cls?' '+cls:'')+'" data-cf="'+k+'" title="Нажмите, чтобы отфильтровать: '+COLF_OPT[k].slice(1).map(function(o){return o[1];}).join(' → ')+' → все">'+label+(v?' <span class="cfv">'+lab+'</span>':' <span class="cfi">▾</span>')+'</th>';
+    }
+    if(!window.__colfBound){ window.__colfBound=1;
+      document.addEventListener('click',function(e){
+        var t=e.target.closest&&e.target.closest('th.cf'); 
+        if(t){ var k=t.getAttribute('data-cf'), o=COLF_OPT[k], i=o.map(function(x){return x[0];}).indexOf(COLF[k]); COLF[k]=o[(i+1)%o.length][0]; render(); return; }
+        if(e.target.closest&&e.target.closest('.cfreset')){ e.preventDefault(); Object.keys(COLF).forEach(function(k){ COLF[k]=''; }); render(); }
+      });
+    }
     function visibleRows(){
       var f=FILTER.toLowerCase();
       return ROWS.filter(function(r){
         if(ONLY_OPEN && r.invoiceSent && r.paid && r.delivered && r.actSigned) return false;
+        if(!colfPass(r)) return false;
         if(!f) return true;
         return (r.number+' '+r.name+' '+r.client).toLowerCase().indexOf(f)>=0;
       });
@@ -543,8 +586,8 @@
         h+='</tbody></table></div>';
       }
       var rows=visibleRows();
-      if(!rows.length){
-        h+='<div class="empty">Нет заказов по выбранным условиям'+(FILTER?' в этом периоде':'')+'.</div>';
+      if(!rows.length && !colfActive()){
+        h+='<div class="empty">Нет заказов по выбранным условиям'+(FILTER?' в этом периоде':'')+'.'+(colfActive()?' <a href="#" class="cfreset" style="color:#579dff">Сбросить фильтры по столбцам</a>':'')+'</div>';
         // если что-то искали и не нашли — ищем по ВСЕЙ базе, без ограничения по дате:
         // «Заказы» подгружаются по дате пересчёта калькулятора, а не по дате счёта/движения
         // карточки, так что заказ, который давно не трогали в калькуляторе, здесь не
@@ -579,7 +622,9 @@
         } else WIDE_RESULTS=null;
       }
       else{
-        h+='<table><thead><tr><th>№</th><th>Заказ</th><th>Клиент</th><th class="num">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
+        if(colfActive()) h+='<div class="muted" style="font-size:12.5px;margin:4px 0">Отфильтровано по столбцам: показано '+rows.length+' из '+ROWS.length+' · <a href="#" class="cfreset" style="color:#579dff">сбросить фильтры</a></div>';
+        h+='<table><thead><tr><th>№</th><th>Заказ</th>'+th('client','Клиент')+'<th class="num">Сумма</th>'+th('invoiceSent','Счёт')+th('paid','Оплата')+th('delivered','Сдали')+th('actSigned','Акт')+'<th>Дата</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
+        if(!rows.length) h+='<tr><td colspan="11" class="muted" style="padding:14px 8px">Нет заказов по этим фильтрам. Нажмите на заголовок ещё раз или <a href="#" class="cfreset" style="color:#579dff">сбросьте фильтры</a>.</td></tr>';
         rows.forEach(function(r){
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
           h+='<tr'+(closed?' class="rowclosed"':'')+'><td style="white-space:nowrap"><a href="https://trello.com/c/'+esc(r.cardId)+'" target="_blank" rel="noopener" title="Открыть карточку Trello в новой вкладке" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a> '+
