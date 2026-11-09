@@ -3388,11 +3388,11 @@ body[data-not-sent] > #vis-container ~ #not-sent {
 .wr{position:relative}
 .sc{height:430px;overflow-y:auto;overflow-x:hidden;border:0.5px solid var(--border);border-radius:var(--radius);position:relative;font-size:12px;background:#fff}
 .in{position:relative}
-.bands{position:absolute;top:0;bottom:0;left:176px;z-index:0;pointer-events:none}
+.bands{position:absolute;top:0;bottom:0;left:300px;z-index:0;pointer-events:none}
 .band{position:absolute;top:0;bottom:0;background:var(--surface-1)}
 .band.hol{background:var(--bg-warning)}
 .r{display:flex;border-bottom:0.5px solid var(--border);height:52px;position:relative;z-index:1}
-.L{position:sticky;left:0;z-index:3;width:176px;flex:none;background:var(--surface-2);border-right:0.5px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 8px;box-sizing:border-box;color:var(--text-primary)}
+.L{position:sticky;left:0;z-index:3;width:300px;flex:none;background:var(--surface-2);border-right:0.5px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 8px;box-sizing:border-box;color:var(--text-primary)}
 .num{color:var(--text-accent);width:34px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-decoration-color:rgba(24,95,165,.35)}
 .num:hover{text-decoration-color:var(--text-accent)}
 .H{position:sticky;top:0;z-index:5;height:28px;background:var(--surface-2)}
@@ -3445,6 +3445,17 @@ body{background:#141619 !important}
 .r.o.pp .L{background:#33270f}
 .r.o.pn .L{background:#3a1e1e}
 .lg{display:inline-block;width:14px;height:10px;border-radius:2px;vertical-align:middle;margin-right:5px}
+/* ЦЕЛЬНАЯ СТРАНИЦА (не окошко) */
+html,body{margin:0!important;padding:0!important;height:100%;overflow:hidden}
+#vis-container{height:100vh;max-width:none!important;margin:0!important;padding:0!important}
+.day{height:100vh;box-sizing:border-box;padding:10px 14px 8px!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#141619!important;display:flex;flex-direction:column;max-width:none!important}
+.wr{flex:1;min-height:0}
+.day .sc{height:100%!important;border-radius:6px}
+.nm{min-width:0;flex:1;cursor:pointer}
+.nm .t1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
+.nm .t2{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm:hover .t1{color:var(--text-accent)}
+.num{width:auto!important;min-width:34px}
 </style>
 <div class="day">
 <div class="bar0">
@@ -3454,8 +3465,9 @@ body{background:#141619 !important}
 <span id="info" style="margin-left:auto"></span>
 </div>
 <div class="wr"><div class="sc" id="sc"></div><div class="cur" id="cur"></div><div class="tip" id="tip"></div><div class="ov" id="ov"><div class="card" id="card"></div></div></div>
-<div style="display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap"><span><i class="lg" style="background:#1f2b17;border:0.5px solid #639922"></i>оплачен полностью</span><span><i class="lg" style="background:#33270f;border:0.5px solid #EF9F27"></i>оплачен частично</span><span><i class="lg" style="background:#3a1e1e;border:0.5px solid #E24B4A"></i>не оплачен</span><span>₸ — день платежа</span><span><i style="display:inline-block;width:14px;height:10px;background:var(--surface-1);border:0.5px solid var(--border);vertical-align:middle;margin-right:5px"></i>выходной</span><span><i style="display:inline-block;width:14px;height:10px;background:var(--bg-warning);vertical-align:middle;margin-right:5px"></i>праздник</span><span>р.д. — рабочие дни</span><span>номер заказа — открыть карточку</span></div>
+<div style="display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap"><span><i class="lg" style="background:#1f2b17;border:0.5px solid #639922"></i>оплачен полностью</span><span><i class="lg" style="background:#33270f;border:0.5px solid #EF9F27"></i>оплачен частично</span><span><i class="lg" style="background:#3a1e1e;border:0.5px solid #E24B4A"></i>не оплачен</span><span>₸ — день платежа</span><span><i style="display:inline-block;width:14px;height:10px;background:var(--surface-1);border:0.5px solid var(--border);vertical-align:middle;margin-right:5px"></i>выходной</span><span><i style="display:inline-block;width:14px;height:10px;background:var(--bg-warning);vertical-align:middle;margin-right:5px"></i>праздник</span><span>р.д. — рабочие дни</span><span>номер — открыть карточку Trello · название — подробности</span></div>
 </div>
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
 <script src="./config.js"></script>
 <script>
 const MON=['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
@@ -3500,8 +3512,10 @@ function load(days){
   info.textContent='';
  });
 }
+var TP=null;try{TP=window.TrelloPowerUp&&window.TrelloPowerUp.iframe()}catch(e){}
+function showTrello(id){if(TP&&TP.showCard){TP.showCard(id).catch(()=>window.open('https://trello.com/c/'+id,'_blank'))}else window.open('https://trello.com/c/'+id,'_blank')}
 function main(){
-const BYN={};orders.forEach(o=>BYN[o.n]=o);
+const BYN={};orders.forEach(o=>BYN[o.id]=o);
 const past=o=>o.closed&&NOW-o.end>=FADE;
 const P=orders.filter(past).sort((a,b)=>a.end-b.end),A=orders.filter(o=>!past(o)).sort((a,b)=>(b.closed-a.closed)||(a.closed?a.end-b.end:a.start-b.start));/* законченные — выше незаконченных, даже если начались позже */
 const sc=document.getElementById('sc'),info=document.getElementById('info'),cur=document.getElementById('cur'),tip=document.getElementById('tip'),ov=document.getElementById('ov'),card=document.getElementById('card');
@@ -3509,11 +3523,11 @@ let rowsAll=[],firstA,anchors=[],target=0,anim=false,CUM=[],WD=[];
 function scale(){CUM=[0];WD=[];for(let d=0;d<DAYS+20;d++){WD[d]=CMP&&OFF[d]?6:PX;CUM[d+1]=CUM[d]+WD[d]}}
 const X=d=>{const i=Math.max(0,Math.floor(d));return CUM[i]+(d-i)*WD[i]};
 const inv=x=>{let i=0;while(i<DAYS&&CUM[i+1]<=x)i++;return i+(x-CUM[i])/WD[i]};
-const vis=()=>sc.clientWidth-176,homeLeft=()=>Math.max(0,X(NOW)-vis()*0.6);
+const vis=()=>sc.clientWidth-300,homeLeft=()=>Math.max(0,X(NOW)-vis()*0.6);
 function render(){
  scale();const W=CUM[DAYS];
  let bands='';for(let d=0;d<DAYS;d++)if(OFF[d])bands+=`<div class="band${OFF[d]===2?' hol':''}" style="left:${X(d)}px;width:${WD[d]}px"></div>`;
- let h=`<div class="in"><div class="bands" style="width:${W}px">${bands}</div><div class="r H" style="width:${176+W}px"><div class="L" style="color:var(--text-secondary)">№ · заказ</div><div class="T" style="width:${W}px">`;
+ let h=`<div class="in"><div class="bands" style="width:${W}px">${bands}</div><div class="r H" style="width:${300+W}px"><div class="L" style="color:var(--text-secondary)">№ · заказ</div><div class="T" style="width:${W}px">`;
  for(let d=0;d<DAYS;d++){
   const x=dt(d),dn=x.getDate(),off=OFF[d];
   if(off)h+=`<div class="hb" style="left:${X(d)}px;width:${WD[d]}px;${off===2?'background:var(--bg-warning)':''}"></div>`;
@@ -3530,7 +3544,7 @@ function render(){
   let op=1,sub=`с ${fd(o.start)} · ${rd(wd)}`;
   if(o.closed){const ago=NOW-o.end;if(a){op=0.7;sub=`${fd(o.start)} – ${fd(o.end)} · ${rd(wd)}`}else{op=Math.max(0.3,1-ago/FADE);sub=`закрыт ${fd(o.end)} · уйдёт через ${Math.ceil(FADE-ago)} дн.`}}
   const paidSum=o.payments.reduce((x,p)=>x+p[1],0),pc=o.sum<=0&&!paidSum?'':paidSum>=o.sum-0.5?'pg':paidSum>0?'pp':'pn';
-  let r=`<div class="r o ${pc}" data-a="${a}" data-s="${o.start}" data-e="${o.end}" style="width:${176+W}px"><div class="L"><span class="num" data-n="${o.n}" role="button" tabindex="0">${o.n}</span><div style="opacity:${op}">${o.t}<div style="font-size:11px;color:var(--text-muted)">${sub}</div></div></div><div class="T" style="width:${W}px;opacity:${op}"><span class="cut">← начат ${fd(o.start)}</span>`;
+  let r=`<div class="r o ${pc}" data-a="${a}" data-s="${o.start}" data-e="${o.end}" style="width:${300+W}px"><div class="L"><span class="num" data-id="${o.id}" role="button" tabindex="0" title="Открыть карточку Trello">${o.n}</span><div class="nm" data-id="${o.id}" title="${o.t} — подробности" style="opacity:${op}"><div class="t1">${o.t}</div><div class="t2">${sub}</div></div></div><div class="T" style="width:${W}px;opacity:${op}"><span class="cut">← начат ${fd(o.start)}</span>`;
   o.seg.forEach(([st,a1,b])=>{const w=X(b)-X(a1),dd=rd(work(a1,b));r+=`<div class="seg" data-i="${st}|${a1}|${b}|${b>=NOW-0.001&&!o.closed?1:0}" style="left:${X(a1)+1}px;width:${Math.max(2,w-2)}px;background:${C[st]}"></div><div class="lb" data-sh="${dd}" style="left:${X(a1)}px;width:${w}px">${st} ${dd}</div>`});
   o.payments.forEach(p=>{r+=`<span class="mk" title="${ft(p[0])} · ${money(p[1])} · ${p[2]}" style="left:${X(p[0])}px;pointer-events:auto;cursor:default">₸</span>`});
   if(o.closed){if(o.act)r+=`<span class="mk" style="left:${X(o.end)}px">✓ акт</span>`}
@@ -3569,8 +3583,8 @@ function openCard(n){
 }
 ov.addEventListener('click',e=>{if(e.target===ov)ov.style.display='none'});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')ov.style.display='none'});
-sc.addEventListener('click',e=>{const n=e.target.closest('.num');if(n)openCard(+n.dataset.n)});
-sc.addEventListener('keydown',e=>{const n=e.target.closest('.num');if(n&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openCard(+n.dataset.n)}});
+sc.addEventListener('click',e=>{const n=e.target.closest('.num');if(n){showTrello(n.dataset.id);return}const m=e.target.closest('.nm');if(m)openCard(m.dataset.id)});
+sc.addEventListener('keydown',e=>{const n=e.target.closest('.num');if(n&&(e.key==='Enter'||e.key===' ')){e.preventDefault();showTrello(n.dataset.id)}});
 function cuts(){const L=sc.scrollLeft;rowsAll.forEach(e=>{const c=e.querySelector('.cut');if(X(+e.dataset.s)<L-4&&X(+e.dataset.e)>L){c.style.display='block';c.style.left=(L+4)+'px'}else c.style.display='none'})}
 function step(){const d=target-sc.scrollLeft;if(Math.abs(d)<0.5){sc.scrollLeft=target;anim=false;cuts();return}sc.scrollLeft+=d*0.25;cuts();requestAnimationFrame(step)}
 function update(){
@@ -3584,8 +3598,8 @@ sc.addEventListener('scroll',()=>{update();tip.style.display=cur.style.display='
 sc.addEventListener('wheel',e=>{if(Math.abs(e.deltaX)>Math.abs(e.deltaY))e.preventDefault()},{passive:false});
 sc.addEventListener('mousemove',e=>{
  const rb=sc.getBoundingClientRect(),xv=e.clientX-rb.left;
- if(xv<176){tip.style.display=cur.style.display='none';return}
- const d=inv(xv-176+sc.scrollLeft);
+ if(xv<300){tip.style.display=cur.style.display='none';return}
+ const d=inv(xv-300+sc.scrollLeft);
  cur.style.display='block';cur.style.left=xv+'px';
  let t=`<b style="font-weight:500">${ft(d)}</b>${OFF[Math.floor(d)]?' · '+(OFF[Math.floor(d)]===2?'праздник':'выходной'):''}`;
  const sg=e.target.closest('.seg');
