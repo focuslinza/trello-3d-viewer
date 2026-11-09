@@ -109,7 +109,7 @@
       executor:'Жанбосинов А.Ж.', seal:'ttms' }, // печать ТОО «TTMS» ставится автоматически на счёт
     // СЧЁТ ПРИ НАЛИЧНЫХ (решение Асхата, 09.11.2026): документ-подтверждение для клиента —
     // без банковских реквизитов и налога, со способом оплаты (купюры / Kaspi)
-    cash:{ key:'cash', label:'Наличные', cash:true,
+    cash:{ key:'cash', label:'Наличные (без налога)', cash:true,
       name:'MetalShop · TTMS', bin:'', addr:'г. Астана, ул. Карталы, 1/1', executor:'Жанбосинов А.Ж.' },
     firdaus:{ key:'firdaus', label:'ИП «FIRDAUS»',
       name:'Индивидуальный предприниматель "FIRDAUS"', bin:'590502401351',
@@ -494,7 +494,6 @@
 
     // supplier
     html+='<div class="sec"><h3>Поставщик (наша компания) — определяет налог счёта</h3><div class="row">';
-    html+='<label class="opt"><input type="radio" name="sup" value="cash"'+(supplierKey==='cash'?' checked':'')+'> Наличные (счёт без реквизитов, налог 0%)</label>';
     Object.keys(SUPPLIERS).forEach(function(k){
       var tx = Math.round((SUP_TAX[k]||1)*100-100);
       html+='<label class="opt"><input type="radio" name="sup" value="'+k+'"'+(k===supplierKey?' checked':'')+'> '+esc(SUPPLIERS[k].label)+(tx?(' (+'+tx+'%)'):'')+'</label>';
