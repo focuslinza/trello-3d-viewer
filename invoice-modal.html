@@ -1236,7 +1236,7 @@
         throw new Error('no-access');
       });
     })
-    .then(function(){ return step('клиенты', loadDirectory()); }).then(function(){ return step('заказы', loadAllOrders()); }).then(function(){ return step('номера карточек', loadCardNumbers()); }).then(function(){ return step('номер счёта', loadNumber()); })
+    .then(function(){ return step('клиенты', loadDirectory(), 45000); }).then(function(){ return step('заказы', loadAllOrders(), 45000).catch(function(){ LOADED_FOR = {}; return step('заказы (повтор)', loadAllOrders(), 60000); }); }).then(function(){ return step('номера карточек', loadCardNumbers(), 30000).catch(function(){}); }).then(function(){ return step('номер счёта', loadNumber(), 20000); })
     .then(function(){
       validIds = {}; ctx.allCompanies.forEach(function(c){ validIds[c.id]=true; });
       // pre-check the current card's order if it belongs to the selected client

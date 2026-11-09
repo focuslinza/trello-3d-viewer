@@ -3480,7 +3480,8 @@ const orders=[];
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function load(days){
  const info=document.getElementById('info');info.textContent='Загружаю историю доски…';
- return fetch(window.WORKER_URL+'/lifeline?days='+days).then(r=>r.json()).then(j=>{
+ let AGE=null;
+ return fetch(window.WORKER_URL+'/lifeline?days='+days).then(r=>{AGE=r.headers.get('X-MS-Cache-Age');return r.json()}).then(j=>{
   if(!j||!j.ok)throw new Error((j&&j.error)||'сервер не ответил');
   const s=new Date(j.from);D0=new Date(s.getFullYear(),s.getMonth(),s.getDate());
   const T=t=>(t-D0.getTime())/864e5;
@@ -3498,7 +3499,7 @@ function load(days){
   });
   DAYS=Math.ceil(Math.max(NOW,maxDue))+3;
   for(let d=0;d<DAYS+20;d++){const w=dt(d).getDay();OFF[d]=HOL[fd(d)]?2:(w===0||w===6?1:0)}
-  info.textContent='';
+  info.textContent=AGE!=null&&+AGE>60?('данные '+Math.round(AGE/60)+' мин назад · обновятся при следующем открытии'):'';
  });
 }
 var TP=null;try{if(window.parent!==window&&window.TrelloPowerUp)TP=window.TrelloPowerUp.iframe()}catch(e){}
