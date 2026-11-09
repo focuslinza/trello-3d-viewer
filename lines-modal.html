@@ -3423,10 +3423,10 @@ body[data-not-sent] > #vis-container ~ #not-sent {
 .hist i{width:10px;height:5px;border-radius:2px;display:block}
 /* СВЕТОФОР ОПЛАТЫ: фон всего ряда — зелёный (оплачен полностью), оранжевый (частично), красный (не оплачен) */
 .r.o.pg{background:rgba(99,153,34,.16)}
-.r.o.pp{background:rgba(239,159,39,.20)}
+.r.o.pp{background:rgba(250,214,0,.24)}
 .r.o.pn{background:rgba(226,75,74,.14)}
 .r.o.pg .L{background:#EAF3DE;box-shadow:inset 3px 0 0 #639922}
-.r.o.pp .L{background:#FAEEDA;box-shadow:inset 3px 0 0 #EF9F27}
+.r.o.pp .L{background:#FFF6C2;box-shadow:inset 3px 0 0 #E6C200}
 .r.o.pn .L{background:#FCEBEB;box-shadow:inset 3px 0 0 #E24B4A}
 .lg{display:inline-block;width:14px;height:10px;border-radius:2px;vertical-align:middle;margin-right:5px}
 /* без раскраски выходных и без кнопок масштаба (решение Асхата, 09.11.2026); рабочие дни считаются как раньше */
@@ -3454,7 +3454,7 @@ html,body{margin:0!important;padding:0!important;height:100%;overflow:hidden;bac
 <span id="info" style="margin-left:auto"></span>
 </div>
 <div class="wr"><div class="sc" id="sc"></div><div class="cur" id="cur"></div><div class="tip" id="tip"></div><div class="ov" id="ov"><div class="card" id="card"></div></div></div>
-<div style="display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap"><span><i class="lg" style="background:#EAF3DE;border:0.5px solid #639922"></i>оплачен полностью</span><span><i class="lg" style="background:#FAEEDA;border:0.5px solid #EF9F27"></i>оплачен частично</span><span><i class="lg" style="background:#FCEBEB;border:0.5px solid #E24B4A"></i>не оплачен</span><span>₸ — день платежа</span><span>р.д. — рабочие дни</span><span>номер — открыть карточку Trello · название — подробности</span></div>
+<div style="display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap"><span><i class="lg" style="background:#EAF3DE;border:0.5px solid #639922"></i>оплачен полностью</span><span><i class="lg" style="background:#FFF6C2;border:0.5px solid #E6C200"></i>оплачен частично</span><span><i class="lg" style="background:#FCEBEB;border:0.5px solid #E24B4A"></i>не оплачен</span><span>₸ — день платежа</span><span>р.д. — рабочие дни</span><span>номер — открыть карточку Trello · название — подробности</span></div>
 </div>
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 <script src="./config.js"></script>
@@ -3553,7 +3553,7 @@ function render(){
 function openCard(n){
  const o=BYN[n],last=o.seg[o.seg.length-1][0];
  const paid=o.payments.reduce((a,p)=>a+p[1],0);
- const moneySt=paid>=o.sum?['оплачен','#EAF3DE','#27500A']:paid>0?[`предоплата ${Math.round(paid/o.sum*100)}%`,'#FAEEDA','#633806']:['не оплачен','#FCEBEB','#791F1F'];
+ const moneySt=paid>=o.sum?['оплачен','#EAF3DE','#27500A']:paid>0?[`предоплата ${Math.round(paid/o.sum*100)}%`,'#FFF6C2','#6B5A00']:['не оплачен','#FCEBEB','#791F1F'];
  const stage=o.closed?'закрыт':last;
  const docs=(o.inv?'счёт №'+o.inv:'счёта нет')+(o.act?' · акт подписан':(o.delivered?' · акт ждём':''));
  let dl='';if(o.due==null){dl='не указан'}else if(!o.closed){dl=o.due<NOW?`<span style="color:#A32D2D">${fd(o.due)} · просрочен ${rd(work(o.due,NOW))}</span>`:`${fd(o.due)} · осталось ${rd(work(NOW,o.due))}`}else dl=`${fd(o.due)} · сдан ${fd(o.end)}`;
