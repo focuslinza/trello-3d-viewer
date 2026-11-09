@@ -100,13 +100,9 @@
         var linesBtn = {
           icon: { dark: ICON_BASE + 'ic-t-lines-w.png?v=1', light: ICON_BASE + 'ic-t-lines-b.png?v=1' },
           text: 'Лин',
-          callback: function (t) {
-            return t.modal({
-              url: './lines-modal.html?t=' + Date.now(),
-              title: 'Линия жизни заказов', accentColor: '#1f6ce8',
-              fullscreen: true,
-            });
-          }
+          // отдельной вкладкой браузера — на весь экран, до краёв (окно Trello оставляет поля)
+          url: ICON_BASE + 'lines-modal.html',
+          target: 'Линия жизни заказов'
         };
         var repairBtn = {
           icon: { dark: ICON_BASE + 'ic-t-repair-w.png?v=2', light: ICON_BASE + 'ic-t-repair-b.png?v=2' },

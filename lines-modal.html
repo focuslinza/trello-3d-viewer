@@ -3501,7 +3501,7 @@ function load(days){
   info.textContent='';
  });
 }
-var TP=null;try{TP=window.TrelloPowerUp&&window.TrelloPowerUp.iframe()}catch(e){}
+var TP=null;try{if(window.parent!==window&&window.TrelloPowerUp)TP=window.TrelloPowerUp.iframe()}catch(e){}
 function showTrello(id){if(TP&&TP.showCard){TP.showCard(id).catch(()=>window.open('https://trello.com/c/'+id,'_blank'))}else window.open('https://trello.com/c/'+id,'_blank')}
 function main(){
 const BYN={};orders.forEach(o=>BYN[o.id]=o);
