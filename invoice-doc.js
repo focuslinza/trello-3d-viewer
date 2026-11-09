@@ -25,17 +25,23 @@
     var body=[];
     // warning
     body.push({ text:'Внимание! Оплата данного счета означает согласие с условиями поставки товара. Уведомление об оплате обязательно, в противном случае не гарантируется наличие товара на складе. Товар отпускается по факту прихода денег на р/с Поставщика, самовывозом, при наличии доверенности и документов удостоверяющих личность.', fontSize:7.2, color:'#333', margin:[0,0,0,6] });
+    // НАЛИЧНЫЙ РАСЧЁТ: вместо банковских реквизитов — способ оплаты
+    if (sup.cash) {
+      var ci=d.cashInfo||{}, how=ci.kind==='kaspi'?'перевод на Kaspi':(ci.kind==='cash'?'наличными (купюры)':'наличными');
+      body.push({ table:{ widths:['*'], body:[[ {text:[{text:'Оплата: ',bold:true},{text:how+(ci.note?' — '+ci.note:'')}],fontSize:9.5,margin:[4,4,4,4]} ]] },
+        layout:{ hLineColor:function(){return gray;}, vLineColor:function(){return gray;}, hLineWidth:function(){return 0.5;}, vLineWidth:function(){return 0.5;} }, margin:[0,0,0,10] });
+    } else
     // payment order sample
     body.push({ table:{ widths:[70,'*',26,110,26,24], body:[
       [ {text:'Бенефициар:',fontSize:8.5}, {text:sup.name+'\nИИН: '+sup.bin,fontSize:8.5}, {text:'ИИК',fontSize:8.5,alignment:'center'}, {text:sup.iban,fontSize:8.5,alignment:'center'}, {text:'Кбе',fontSize:8.5,alignment:'center'}, {text:sup.kbe,fontSize:8.5,alignment:'center'} ],
       [ {text:'Банк бенефициара:',fontSize:8.5}, {text:sup.bank,fontSize:8.5}, {text:'БИК',fontSize:8.5,alignment:'center'}, {text:sup.bik,fontSize:8.5,alignment:'center'}, {text:'Код назн. плат.',fontSize:7,alignment:'center'}, {text:sup.paycode,fontSize:8.5,alignment:'center'} ]
     ]}, layout:{ hLineColor:function(){return gray;}, vLineColor:function(){return gray;}, hLineWidth:function(){return 0.5;}, vLineWidth:function(){return 0.5;} }, margin:[0,0,0,10] });
     // title
-    body.push({ text:'Счет на оплату № '+d.number+' от '+d.date, font:'DejaVu', bold:true, fontSize:13, margin:[0,0,0,3] });
+    body.push({ text:'Счет на оплату № '+d.number+' от '+d.date+(sup.cash?' (наличный расчёт)':''), font:'DejaVu', bold:true, fontSize:13, margin:[0,0,0,3] });
     body.push({ canvas:[{type:'line',x1:0,y1:0,x2:523,y2:0,lineWidth:2}], margin:[0,0,0,8] });
     // parties
     function party(lbl,txt){ return { columns:[ {width:78,text:lbl,bold:true,fontSize:9.5}, {width:'*',text:txt,fontSize:9.5} ], margin:[0,0,0,3] }; }
-    body.push(party('Поставщик:', 'БИН / ИИН '+sup.bin+', '+sup.name+', '+sup.addr));
+    body.push(party('Поставщик:', (sup.bin?'БИН / ИИН '+sup.bin+', ':'')+sup.name+', '+sup.addr));
     var isPerson = buy.kind==='person';
     var bt=(isPerson?'ИИН ':'БИН / ИИН ')+(buy.bin||'')+', '+buy.name+(buy.addr?', '+buy.addr:''); if(buy.phone)bt+=', тел. '+buy.phone;
     body.push(party('Покупатель:', bt));

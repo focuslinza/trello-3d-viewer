@@ -7,7 +7,7 @@
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
-  <script src="./invoice-doc.js"></script>
+  <script src="./invoice-doc.js?v=2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
@@ -334,7 +334,7 @@
       pdfMake.fonts = { DejaVu:{ normal:'DejaVuSans.ttf', bold:'DejaVuSans-Bold.ttf', italics:'DejaVuSans.ttf', bolditalics:'DejaVuSans-Bold.ttf' } };
       return window.INVOICE.buildInvoiceDoc({ number:r.number, date:r.date_text||'', contract:r.contract||'',
         supplier:parse(r.supplier_json,null), buyer:parse(r.buyer_json,null),
-        items:parse(r.items_json,[]), total:+r.total||0 });
+        items:parse(r.items_json,[]), total:+r.total||0, cashInfo:{ kind:r.cash_kind||r.cashKind||'', note:r.cash_note||r.cashNote||'' } });
     }
     document.getElementById('xls1c').onclick=function(){
       if(!CUR){ return; }

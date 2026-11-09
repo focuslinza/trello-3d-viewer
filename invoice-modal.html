@@ -9,7 +9,7 @@
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
-  <script src="./invoice-doc.js"></script>
+  <script src="./invoice-doc.js?v=2"></script>
   <script src="./calc-engine.js?v=23"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc;
@@ -107,6 +107,10 @@
       addr:'Республика Казахстан, г. Астана, ул. Конаева 14',
       bank:'АО "Банк ЦентрКредит"', iban:'KZ318562203133118240', bik:'KCJBKZKX', kbe:'17', paycode:'859',
       executor:'Жанбосинов А.Ж.', seal:'ttms' }, // печать ТОО «TTMS» ставится автоматически на счёт
+    // СЧЁТ ПРИ НАЛИЧНЫХ (решение Асхата, 09.11.2026): документ-подтверждение для клиента —
+    // без банковских реквизитов и налога, со способом оплаты (купюры / Kaspi)
+    cash:{ key:'cash', label:'Наличные', cash:true,
+      name:'MetalShop · TTMS', bin:'', addr:'г. Астана, ул. Карталы, 1/1', executor:'Жанбосинов А.Ж.' },
     firdaus:{ key:'firdaus', label:'ИП «FIRDAUS»',
       name:'Индивидуальный предприниматель "FIRDAUS"', bin:'590502401351',
       addr:'Республика Казахстан, г. Астана, улица Ахмет Байтұрсынұлы, дом 23/2, кв/офис 145',
@@ -490,13 +494,13 @@
 
     // supplier
     html+='<div class="sec"><h3>Поставщик (наша компания) — определяет налог счёта</h3><div class="row">';
-    html+='<label class="opt"><input type="radio" name="sup" value="cash"'+(supplierKey==='cash'?' checked':'')+'> Наличные (без счёта, налог 0%)</label>';
+    html+='<label class="opt"><input type="radio" name="sup" value="cash"'+(supplierKey==='cash'?' checked':'')+'> Наличные (счёт без реквизитов, налог 0%)</label>';
     Object.keys(SUPPLIERS).forEach(function(k){
       var tx = Math.round((SUP_TAX[k]||1)*100-100);
       html+='<label class="opt"><input type="radio" name="sup" value="'+k+'"'+(k===supplierKey?' checked':'')+'> '+esc(SUPPLIERS[k].label)+(tx?(' (+'+tx+'%)'):'')+'</label>';
     });
     if (!supplierKey) html+='</div><div class="small" style="margin-top:8px;color:#e8c07d">⚠ Выберите компанию — от неё зависит налог, реквизиты и печать. Пока не выбрано, счёт не создаётся.</div>';
-    else if (supplierKey==='cash') html+='</div><div class="small muted" style="margin-top:8px">Оплата наличными: счёт не формируется, налог не добавляется. Суммы ниже — как в расчётах. Отметить оплату можно кнопкой «оплачен» у заказа.</div></div>';
+    else if (supplierKey==='cash') html+='</div><div class="small muted" style="margin-top:8px">Оплата наличными: формируется счёт без банковских реквизитов — как подтверждение для клиента; налог не добавляется, суммы — как в расчётах. Способ (купюры или Kaspi) спросим при создании.</div></div>';
     else html+='</div><div class="small muted" style="margin-top:8px">'+esc(sup.bank)+' · IBAN '+esc(sup.iban)+' · Кбе '+esc(sup.kbe)+' · Исполнитель: '+esc(sup.executor)+' · '+(function(){ var pc=Math.round(((SUP_TAX[supplierKey]||1)-1)*1000)/10; return supplierKey==='too'?('НДС '+pc+'% включён в цены строк (плательщик НДС)'):(supplierKey==='ip'?('ОУР без НДС — к ценам добавляется '+pc+'% (налоговая нагрузка); НДС в счёте не выделяется'):('налог +'+pc+'% добавляется к ценам строк')); })()+'</div>';
 
     // buyer — selectable from the directory (default = card's company)
@@ -667,7 +671,7 @@
     (function(){ var g0=document.getElementById('gen');
       if(g0 && !supplierKey){ g0.disabled=true; g0.title='Сначала выберите компанию-поставщика вверху окна'; }
     })();
-    (function(){ var g=document.getElementById('gen'); if(g && supplierKey==='cash'){ g.disabled=true; g.title='Наличные — счёт не формируется; отметьте оплату кнопкой «оплачен»'; } })();
+    (function(){ var g=document.getElementById('gen'); if(false && g && supplierKey==='cash'){ g.disabled=true; g.title='Наличные — счёт не формируется; отметьте оплату кнопкой «оплачен»'; } })();
     var bs=document.getElementById('buyerSel');
     if(bs) bs.addEventListener('change', function(){ selectedCompanyId=this.value; setBuyerFromSelected(); render();
       loadOrdersForCompany(selectedCompanyId).then(function(added){ if(added) render(); return loadPersonNames(); }).then(render); });
@@ -1019,6 +1023,7 @@
     mzSave.catch(function(e){ alert('Монтаж не сохранился: '+(e&&e.message||e)+'\nСчёт не выпущен.'); gen.disabled=false; gen.textContent='🧾 Создать счёт'; throw e; })
     .then(function(){ return fetch(WORKER+'/invoice-commit'); }).then(function(r){return r.json();}).then(function(j){
       var data=buildData();
+      if(CASH_INFO) data.cashInfo=CASH_INFO;
       if(j&&j.ok && (!document.getElementById('inum').value || +document.getElementById('inum').value===invNumber)){
         data.number=String(j.number); // use committed number unless user typed a custom one
       }

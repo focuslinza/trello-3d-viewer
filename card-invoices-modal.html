@@ -8,7 +8,7 @@
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
-  <script src="./invoice-doc.js"></script>
+  <script src="./invoice-doc.js?v=2"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; }
     *{box-sizing:border-box}
@@ -105,7 +105,7 @@
     if(!row.supplier || !row.buyer){ alert('В этом счёте не сохранены реквизиты (старый формат) — открыть нельзя.'); return null; }
     var data={ supplier:row.supplier, buyer:row.buyer, number:String(row.number||''),
                date:row.dateText||ruDateFromIso(row.dateIso), contract:row.contract||'Без договора',
-               items:row.items||[], nds:null };
+               items:row.items||[], nds:null, cashInfo:{ kind:row.cashKind||row.cash_kind||'', note:row.cashNote||row.cash_note||'' } };
     return { dd:window.INVOICE.buildInvoiceDoc(data),
              fname:'Счет_'+data.number+'_'+(row.buyer&&row.buyer.name?String(row.buyer.name).replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30):'клиент')+'.pdf' };
   }
