@@ -589,7 +589,7 @@
           '<td>'+chip(o,'invoiceSent','выслан',true,'Счёт отправлен клиенту — отмечает тот, кто отправил')+'</td>'+
           '<td>'+chip(o,'paid','оплачен',cashOk,cashOk?'Клиент заплатил наличными':'Оплату по безналу отмечает бухгалтер')+'</td>'+
           '<td>'+chip(o,'delivered','сдали',!o.isRepair,o.isRepair?'Для ремонта = заявка выполнена':'Заказ сдан клиенту — отмечает начальник цеха')+'</td>'+
-          '<td>'+(o.noAct?'<span class="chip na" title="Наличный расчёт: оплачено 100% и сдали — акт не нужен" style="text-decoration:line-through;opacity:.55;cursor:default">акт</span>':chip(o,'actSigned','акт',false,'Акт подписан — отмечает бухгалтер'))+'</td>'+
+          '<td>'+(o.noAct?'<span class="chip on na" title="Наличный расчёт: оплачено 100% и сдали — акт не нужен" style="cursor:default;text-decoration:line-through;text-decoration-color:#4bce97;text-decoration-thickness:2px">акт</span>':chip(o,'actSigned','акт',false,'Акт подписан — отмечает бухгалтер'))+'</td>'+
           '<td class="small muted">'+esc((function(d){ d=String(d||'').slice(0,10).split('-'); return d.length===3?(d[2]+'.'+d[1]+'.'+d[0].slice(2)):''; })(o.paid_at||o.dateAt))+'</td>'+
           '<td>'+hist+'</td>'+
           '<td>'+(!o.paid&&!o.delivered&&!o.isRepair?'<button class="btn ghost cancelbtn act" data-id="'+esc(o.cardId)+'" data-num="'+esc(o.number||'')+'" type="button" style="color:#f28b82" title="Отказ клиента: уйдёт из счетов, бухгалтерии, аналитики и с доски (обратимо)">отказ</button> <button class="btn ghost hidebtn act" data-id="'+esc(o.cardId)+'" type="button" title="Убрать заказ из списка (тест/дубль, не оплата)">убрать</button>':'')+'</td>'+

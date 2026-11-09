@@ -461,7 +461,7 @@
     }
 
     function chip(r, field, label){
-      if(field==='actSigned' && r.noAct) return '<span class="chip na" title="Наличный расчёт: оплачено 100% и сдали — акт не нужен" style="text-decoration:line-through;opacity:.55;cursor:default">акт</span>';
+      if(field==='actSigned' && r.noAct) return '<span class="chip on na" title="Наличный расчёт: оплачено 100% и сдали — акт не нужен" style="cursor:default;text-decoration:line-through;text-decoration-color:#4bce97;text-decoration-thickness:2px">акт</span>';
       var on=r[field];
       // оплата: частично — жёлтая с остатком; без внесённой суммы (старые отметки) — «оплачен» как раньше
       if(field==='paid' && on && r.partial)
@@ -641,7 +641,7 @@
         if(!rows.length) h+='<tr><td colspan="11" class="muted" style="padding:14px 8px">Нет заказов по этим фильтрам. Нажмите на заголовок ещё раз или <a href="#" class="cfreset" style="color:#579dff">сбросьте фильтры</a>.</td></tr>';
         rows.forEach(function(r){
           var closed=r.invoiceSent&&r.paid&&r.delivered&&(r.actSigned||r.noAct);
-          h+='<tr'+(closed?' class="rowclosed"':'')+'><td style="white-space:nowrap"><a href="https://trello.com/c/'+esc(r.cardId)+'" target="_blank" rel="noopener" title="Открыть карточку Trello в новой вкладке" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a> '+
+          h+='<tr'+(closed&&!r.noAct?' class="rowclosed"':'')+'><td style="white-space:nowrap"><a href="https://trello.com/c/'+esc(r.cardId)+'" target="_blank" rel="noopener" title="Открыть карточку Trello в новой вкладке" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a> '+
              '<a href="#" class="oinfo" data-card="'+esc(r.cardId)+'" title="Счета по заказу, состав, статусы" style="color:var(--muted);text-decoration:none;font-size:12px">ⓘ</a></td>'+
              '<td title="'+esc(r.name)+(PERSONS[r.cardId]?' ('+esc(PERSONS[r.cardId])+')':'')+'">'+esc(r.name)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span>'+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+
                ((r.mismatch&&r.mismatch.length)?' <span class="mism" data-card="'+esc(r.cardId)+'" title="'+esc(r.mismatch.join('; '))+' — нажмите, чтобы разобраться" style="display:inline-block;padding:1px 7px;border-radius:9px;background:#3a2226;color:#f3b3b3;font-size:11px;cursor:pointer">⚠ доска ≠ статус</span>':'')+'</td>'+
