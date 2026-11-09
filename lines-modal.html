@@ -3429,6 +3429,11 @@ body[data-not-sent] > #vis-container ~ #not-sent {
 .r.o.pp .L{background:#FAEEDA;box-shadow:inset 3px 0 0 #EF9F27}
 .r.o.pn .L{background:#FCEBEB;box-shadow:inset 3px 0 0 #E24B4A}
 .lg{display:inline-block;width:14px;height:10px;border-radius:2px;vertical-align:middle;margin-right:5px}
+/* без раскраски выходных и без кнопок масштаба (решение Асхата, 09.11.2026); рабочие дни считаются как раньше */
+.band,.hb{display:none!important}
+.bar0 button{display:none!important}
+.bar0{margin:0 0 4px!important;min-height:0}
+#info:empty{display:none}
 /* ЦЕЛЬНАЯ СТРАНИЦА (не окошко) */
 html,body{margin:0!important;padding:0!important;height:100%;overflow:hidden;background:#f6f5f1!important}
 #vis-container{height:100vh;max-width:none!important;margin:0!important;padding:0!important}
@@ -3449,7 +3454,7 @@ html,body{margin:0!important;padding:0!important;height:100%;overflow:hidden;bac
 <span id="info" style="margin-left:auto"></span>
 </div>
 <div class="wr"><div class="sc" id="sc"></div><div class="cur" id="cur"></div><div class="tip" id="tip"></div><div class="ov" id="ov"><div class="card" id="card"></div></div></div>
-<div style="display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap"><span><i class="lg" style="background:#EAF3DE;border:0.5px solid #639922"></i>оплачен полностью</span><span><i class="lg" style="background:#FAEEDA;border:0.5px solid #EF9F27"></i>оплачен частично</span><span><i class="lg" style="background:#FCEBEB;border:0.5px solid #E24B4A"></i>не оплачен</span><span>₸ — день платежа</span><span><i style="display:inline-block;width:14px;height:10px;background:var(--surface-1);border:0.5px solid var(--border);vertical-align:middle;margin-right:5px"></i>выходной</span><span><i style="display:inline-block;width:14px;height:10px;background:var(--bg-warning);vertical-align:middle;margin-right:5px"></i>праздник</span><span>р.д. — рабочие дни</span><span>номер — открыть карточку Trello · название — подробности</span></div>
+<div style="display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap"><span><i class="lg" style="background:#EAF3DE;border:0.5px solid #639922"></i>оплачен полностью</span><span><i class="lg" style="background:#FAEEDA;border:0.5px solid #EF9F27"></i>оплачен частично</span><span><i class="lg" style="background:#FCEBEB;border:0.5px solid #E24B4A"></i>не оплачен</span><span>₸ — день платежа</span><span>р.д. — рабочие дни</span><span>номер — открыть карточку Trello · название — подробности</span></div>
 </div>
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 <script src="./config.js"></script>
