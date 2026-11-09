@@ -1024,7 +1024,8 @@
       }
       var dd=window.INVOICE.buildInvoiceDoc(data);
       var fname='Счет_'+data.number+'_'+(ctx.buyer&&ctx.buyer.name?ctx.buyer.name.replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30):'клиент')+'.pdf';
-      pdfMake.createPdf(dd).download(fname);
+      // ОДИН ЗАКАЗ — ОДИН СЧЁТ (решение Асхата, 09.11.2026): сначала сохраняем счёт —
+      // сервер откажет, если заказ уже в другом счёте; PDF скачиваем только после успеха
       // 1) журнал (дожидаемся — отметка «выслан» ищет счёт по номеру)
       var dEl2=document.getElementById('idate');
       gen.textContent='Сохраняю…';
@@ -1043,9 +1044,16 @@
             return ids; })(),
           repairIds:selectedOrders().filter(function(o){ return o.isRepair; }).map(function(o){ return o.repairId; }),
           cashKind:(CASH_INFO&&CASH_INFO.kind)||null, cashNote:(CASH_INFO&&CASH_INFO.note)||'',
-          prepayPct:data.prepayPct||0, fullTotal:data.fullTotal||0
+          prepayPct:data.prepayPct||0, fullTotal:data.fullTotal||0,
+          // счёт «только монтаж» к уже выставленному заказу — законное исключение
+          mzCardId:(function(){ var ids=selectedOrders().filter(function(o){ return !o.isRepair; }).map(function(o){ return o.cardId; });
+            return (mzValid() && ids.indexOf(MZ.cardId)<0) ? MZ.cardId : ''; })()
         })
       }).then(function(r){return r.json();}).catch(function(){return {};})
+      .then(function(sv){
+        if(sv && sv.error){ gen.textContent='🧾 Создать счёт'; gen.disabled=false; alert(sv.error); throw '__stop'; }
+        pdfMake.createPdf(dd).download(fname);
+      })
       // 2) перенос карточек в «Ждем оплату» — БЕЗ статуса «выслан» (moveOnly):
       //    счёт отправляют сотрудники сами, из своего WhatsApp
       .then(function(){
@@ -1064,6 +1072,7 @@
         askMarkSent(data.number, parts.filter(Boolean), SENT_CAND);
       });
     }).catch(function(e){
+      if(e==='__stop') return;
       gen.textContent='🧾 Создать счёт'; gen.disabled=false;
       alert('Ошибка: '+(e&&e.message||e));
     });
