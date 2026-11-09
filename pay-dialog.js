@@ -81,6 +81,12 @@
     var ov = document.createElement('div'); ov.className = 'pdl-ov';
     ov.innerHTML = '<div class="pdl"><div class="sub">Загрузка оплат…</div></div>';
     document.body.appendChild(ov);
+    function toast(msg, warn) {
+      var t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100000;padding:10px 18px;border-radius:8px;font:600 14px system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);background:' + (warn ? '#533f04;color:#f5cd47' : '#1c3329;color:#4bce97') + ';border:1px solid ' + (warn ? '#7f5f01' : '#2e5c44');
+      document.body.appendChild(t); setTimeout(function () { t.remove(); }, warn ? 6000 : 3000);
+    }
     function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') close(); }
     document.addEventListener('keydown', onKey);
@@ -180,6 +186,12 @@
           if (!j || !j.ok) throw new Error((j && j.error) || 'сервер не подтвердил');
           S = j; method = '';
           if (opts.onDone) try { opts.onDone(j); } catch (x) {}
+          if (path.indexOf('void') < 0 && path.indexOf('confirm') < 0) {
+            // внесли оплату — окно закрываем само, итог показываем коротким сообщением
+            var warn = j.pendingConfirm || j.belowGate;
+            close(); toast(j.pendingConfirm ? 'Оплата внесена — ждёт подтверждения учредителя' : j.belowGate ? 'Оплата внесена, но меньше 50% — в работу нельзя' : '✓ Оплата внесена', warn);
+            return;
+          }
           draw();
           var e2 = ov.querySelector('#pdE'); if (e2) { e2.style.color = '#4bce97'; e2.textContent = path.indexOf('void') >= 0 ? 'Оплата отменена' : path.indexOf('confirm') >= 0 ? ('✓ Оплата подтверждена' + (j.gate && j.gate.checked && !j.gate.ok ? ', но подтверждено меньше 50% — в работу нельзя' : '')) : (j.pendingConfirm ? 'Оплата внесена — ждёт подтверждения учредителя' : j.belowGate ? 'Оплата внесена, но меньше 50% — в работу нельзя' : '✓ Оплата внесена'); if (j.belowGate || j.pendingConfirm || (j.gate && j.gate.checked && !j.gate.ok)) e2.style.color = '#e8c07d'; }
         }).catch(function (x) { busy = false; if (ok) ok.disabled = false; if (e) { e.style.color = ''; e.textContent = 'Ошибка: ' + (x && x.message || x); } });
