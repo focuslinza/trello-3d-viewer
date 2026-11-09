@@ -24,6 +24,7 @@
     .chipcb{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:14px;padding:4px 10px;font-size:12px;cursor:pointer;user-select:none;background:var(--bg);color:var(--muted)}
     .chipcb input{display:none}
     .chipcb.on{border-color:#2e5c44;background:#1c3329;color:#4bce97}
+    .chipcb.cl{border-color:#2b4b7a;background:#1c2b41;color:#85b8ff;cursor:default}
     table.gr{width:100%;border-collapse:collapse}
     table.gr th{font-size:11px;color:var(--muted);font-weight:500;text-align:left;padding:2px 4px}
     table.gr td{padding:3px 4px;vertical-align:top}
@@ -70,11 +71,20 @@
     {fld:'is_sales_manager',label:'Менеджер продаж',hint:'ему засчитываются заказы с сайта и из воронки продаж (процент — в его карточке)'},
     {fld:'no_timesheet',label:'Не в табеле',hint:'внештатный: агент, подрядчик — не попадает в табель, платим за результат'}
   ];
+  // КЛАССЫ ПРОПУСКА (решение Асхата, 09.11.2026): класс — готовый набор прав;
+  // сверх класса у должности можно отметить доп. пропуска
+  var CLASSES=[
+    {n:1,label:'1 — Цех',hint:'только свои этапы и «Мой заработок» в телефоне',perms:[]},
+    {n:2,label:'2 — Мастер',hint:'табель, снабжение, видит стоимость',perms:['can_timesheet','can_supply','can_see_cost']},
+    {n:3,label:'3 — Офис',hint:'бухгалтерия, счета, CRM, снабжение, стоимость',perms:['can_invoice','can_issue_invoice','can_crm','can_supply','can_see_cost','can_see_repair_cost','can_issue_repair_invoice']},
+    {n:4,label:'4 — Руководство',hint:'панель руководителя, табель, HR, бухгалтерия, счета, CRM, снабжение, стоимость',perms:['can_dashboard','can_timesheet','can_hr','can_invoice','can_issue_invoice','can_crm','can_supply','can_see_cost','can_see_repair_cost','can_issue_repair_invoice']}
+  ];
+  function classOf(n){ return CLASSES.filter(function(c){return c.n===+n;})[0]; }
   var POS=[], ASSIGN={}, WORKERS=[];
   function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function fmt(n){ return Math.round(+n||0).toLocaleString('ru-RU'); }
   function msg(s){ document.getElementById('msg').textContent=s||''; }
-  function chip(cls,val,label,hint,on){ return '<label class="chipcb'+(on?' on':'')+'"'+(hint?' title="'+esc(hint)+'"':'')+'><input type="checkbox" class="'+cls+'" value="'+val+'"'+(on?' checked':'')+'>'+esc(label)+'</label>'; }
+  function chip(cls,val,label,hint,on){ if(/ incl/.test(cls)) return '<label class="chipcb cl"'+(hint?' title="'+esc(hint)+'"':'')+'><input type="checkbox" class="'+cls+'" value="'+val+'" checked disabled>🔒 '+esc(label)+'</label>'; return '<label class="chipcb'+(on?' on':'')+'"'+(hint?' title="'+esc(hint)+'"':'')+'><input type="checkbox" class="'+cls+'" value="'+val+'"'+(on?' checked':'')+'>'+esc(label)+'</label>'; }
   function gradeRow(g){
     g=g||{name:'',salary:'',minMonths:'',skills:[]};
     return '<tr><td><input class="gn" placeholder="напр. Стажёр" value="'+esc(g.name)+'"></td>'+
@@ -109,7 +119,11 @@
     }
     h+='<div class="lbl">Обязанности</div><textarea class="du" rows="2" placeholder="Что делает, за что отвечает">'+esc(p.duties)+'</textarea>';
     h+='<div class="lbl">Этапы работ</div><div class="chips">'+STAGES.map(function(s){ return chip('st',s.key,s.label,'',(p.stages||[]).indexOf(s.key)>=0); }).join('')+'</div>';
-    h+='<div class="lbl">Права доступа</div><div class="chips">'+PERMS.map(function(x){ return chip('pm',x.fld,x.label,x.hint,!!(p.perms||{})[x.fld]); }).join('')+'</div>';
+    var pc=+((p.perms||{})._class)||0, cl=classOf(pc);
+    h+='<div class="lbl">Класс пропуска</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select class="pcls"><option value="0">— без класса —</option>'+
+      CLASSES.map(function(c){ return '<option value="'+c.n+'"'+(c.n===pc?' selected':'')+' title="'+esc(c.hint)+'">'+esc(c.label)+'</option>'; }).join('')+'</select>'+
+      '<span class="muted pclh" style="font-size:12px">'+(cl?esc(cl.hint):'выберите класс — права отметятся сами')+'</span></div>';
+    h+='<div class="lbl">Пропуска (права доступа) <span style="text-transform:none;letter-spacing:0">— <span style="color:#579dff">синие</span> даёт класс, <span style="color:#4bce97">зелёные</span> — доп. пропуска</span></div><div class="chips">'+PERMS.map(function(x){ var inCl=!!(cl&&cl.perms.indexOf(x.fld)>=0); return chip('pm'+(inCl?' incl':''),x.fld,x.label,x.hint+(inCl?' · даёт класс':''),inCl||!!(p.perms||{})[x.fld]); }).join('')+'</div>';
     h+='<div class="lbl">Сетка окладов — разряды по росту</div>'+
       '<table class="gr"><thead><tr><th>Разряд</th><th>Оклад</th><th>Стаж от, мес</th><th class="hm">Нужные навыки</th><th></th></tr></thead><tbody>'+
       (p.grades||[]).map(gradeRow).join('')+'</tbody></table>'+
@@ -122,6 +136,12 @@
   }
   function wire(el){
     [].forEach.call(el.querySelectorAll('.chipcb input'),function(cb){ cb.onchange=function(){ this.parentNode.classList.toggle('on',this.checked); }; });
+    var sel=el.querySelector('.pcls');
+    if(sel) sel.onchange=function(){
+      var cur=collect(el); cur.perms._class=+sel.value||0;
+      var cl=classOf(sel.value); if(cl) cl.perms.forEach(function(k){ delete cur.perms[k]; });
+      var n=card(cur, el.classList.contains('new')); n.setAttribute('data-id', el.getAttribute('data-id')||''); el.parentNode.replaceChild(n, el);
+    };
     el.querySelector('.gadd').onclick=function(){ var tb=el.querySelector('tbody'); tb.insertAdjacentHTML('beforeend',gradeRow()); wireGr(el); };
     wireGr(el);
     el.querySelector('.save').onclick=function(){ save(el); };
@@ -143,7 +163,7 @@
     return { id: el.getAttribute('data-id')||undefined,
       name: el.querySelector('.nm').value.trim(), duties: el.querySelector('.du').value,
       stages: [].map.call(el.querySelectorAll('.st:checked'),function(c){return c.value;}),
-      perms: [].reduce.call(el.querySelectorAll('.pm:checked'),function(o,c){ o[c.value]=1; return o; },{}),
+      perms: (function(){ var o=[].reduce.call(el.querySelectorAll('.pm:checked'),function(o,c){ o[c.value]=1; return o; },{}); var sv=el.querySelector('.pcls'); if(sv&&+sv.value) o._class=+sv.value; return o; })(),
       grades: [].map.call(el.querySelectorAll('tbody tr'),function(tr){
         return { name: tr.querySelector('.gn').value.trim(), salary: +tr.querySelector('.gs').value||0,
           minMonths: +tr.querySelector('.gm').value||0, skills: tr.querySelector('.gk').value.split(',').map(function(s){return s.trim();}).filter(Boolean) };
