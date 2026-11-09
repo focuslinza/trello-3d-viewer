@@ -36,8 +36,15 @@
     th.cf .cfi{opacity:.45;font-size:10px}
     th.cf.on{color:#579dff}
     .cfline{font-size:12.5px;height:18px;margin:2px 0 4px}
-    table.otab{table-layout:fixed;width:100%}
-    table.otab td{overflow-wrap:anywhere}
+    /* ОДИН ЗАКАЗ — ОДНА СТРОКА: длинные названия обрезаются «…», полностью — при наведении */
+    /* ширины столбцов заданы заранее — от выбранного фильтра не зависят; «Заказ» — всё остальное */
+    table.otab{width:100%;table-layout:fixed}
+    table.otab td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    table.otab th{white-space:nowrap;overflow:hidden}
+    table.otab th,table.otab td{box-sizing:border-box;padding-left:6px;padding-right:6px}
+    table.otab .w-n{width:5.5%} table.otab .w-cl{width:13%} table.otab .w-sum{width:8%}
+    table.otab .w-inv{width:8%} table.otab .w-pay{width:9.5%} table.otab .w-del{width:8%}
+    table.otab .w-act{width:6.5%} table.otab .w-dt{width:7.5%} table.otab .w-x{width:7%}
     th.cf.on{text-transform:none;letter-spacing:0}
     th.cf .cfv{display:inline-block;margin-left:3px;padding:1px 7px;border-radius:9px;background:#1c2b41;border:1px solid #2b4b7a;color:#85b8ff;font-size:10.5px;text-transform:none;letter-spacing:0;font-weight:600}
     .kpis{display:flex;flex-wrap:nowrap;gap:8px;margin:10px 0 14px;overflow-x:auto}
@@ -490,7 +497,7 @@
     function th(k,label,cls){
       var v=COLF[k], lab=v?(COLF_OPT[k].filter(function(o){return o[0]===v;})[0]||['',''])[1]:'';
       // заголовок сам превращается в выбранный вариант («Счёт» → «не выслан»)
-      return '<th class="cf'+(v?' on':'')+(cls?' '+cls:'')+'" data-cf="'+k+'" title="'+label+': нажмите — '+COLF_OPT[k].slice(1).map(function(o){return o[1];}).join(' → ')+' → все">'+(v?lab:label)+' <span class="cfi">▾</span></th>';
+      return '<th class="cf'+(v?' on':'')+(cls?' '+cls:'')+' '+({client:'w-cl',invoiceSent:'w-inv',paid:'w-pay',delivered:'w-del',actSigned:'w-act'})[k]+'" data-cf="'+k+'" title="'+label+': нажмите — '+COLF_OPT[k].slice(1).map(function(o){return o[1];}).join(' → ')+' → все">'+(v?lab:label)+' <span class="cfi">▾</span></th>';
     }
     if(!window.__colfBound){ window.__colfBound=1;
       document.addEventListener('click',function(e){
@@ -629,15 +636,15 @@
       else{
         // строка-состояние всегда на месте (пустая, если фильтров нет) — таблица не прыгает
         h+='<div class="muted cfline">'+(colfActive()?('Показано '+rows.length+' из '+ROWS.length+' · <a href="#" class="cfreset" style="color:#579dff">сбросить фильтры</a>'):'&nbsp;')+'</div>';
-        h+='<table class="otab"><colgroup><col style="width:78px"><col><col style="width:16%"><col style="width:110px"><col style="width:112px"><col style="width:122px"><col style="width:106px"><col style="width:86px"><col style="width:92px">'+(IS_ADMIN?'<col style="width:120px">':'<col style="width:90px">')+'</colgroup><thead><tr><th>№</th><th>Заказ</th>'+th('client','Клиент')+'<th class="num">Сумма</th>'+th('invoiceSent','Счёт')+th('paid','Оплата')+th('delivered','Сдали')+th('actSigned','Акт')+'<th>Дата</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
+        h+='<table class="otab"><thead><tr><th class="w-n">№</th><th>Заказ</th>'+th('client','Клиент')+'<th class="num w-sum">Сумма</th>'+th('invoiceSent','Счёт')+th('paid','Оплата')+th('delivered','Сдали')+th('actSigned','Акт')+'<th class="w-dt">Дата</th><th class="w-x"></th>'+'</tr></thead><tbody>';
         if(!rows.length) h+='<tr><td colspan="11" class="muted" style="padding:14px 8px">Нет заказов по этим фильтрам. Нажмите на заголовок ещё раз или <a href="#" class="cfreset" style="color:#579dff">сбросьте фильтры</a>.</td></tr>';
         rows.forEach(function(r){
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
           h+='<tr'+(closed?' class="rowclosed"':'')+'><td style="white-space:nowrap"><a href="https://trello.com/c/'+esc(r.cardId)+'" target="_blank" rel="noopener" title="Открыть карточку Trello в новой вкладке" style="color:#579dff;text-decoration:none">'+esc(r.number)+'</a> '+
              '<a href="#" class="oinfo" data-card="'+esc(r.cardId)+'" title="Счета по заказу, состав, статусы" style="color:var(--muted);text-decoration:none;font-size:12px">ⓘ</a></td>'+
-             '<td>'+esc(r.name)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span>'+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+
+             '<td title="'+esc(r.name)+(PERSONS[r.cardId]?' ('+esc(PERSONS[r.cardId])+')':'')+'">'+esc(r.name)+' <span class="prsn" data-cid="'+esc(r.cardId)+'" style="color:var(--muted)">'+(PERSONS[r.cardId]?'('+esc(PERSONS[r.cardId])+')':'')+'</span>'+(r.hasInvoicePdf?' <span class="pdfmark" title="PDF-счёт сформирован в системе">· PDF</span>':'')+
                ((r.mismatch&&r.mismatch.length)?' <span class="mism" data-card="'+esc(r.cardId)+'" title="'+esc(r.mismatch.join('; '))+' — нажмите, чтобы разобраться" style="display:inline-block;padding:1px 7px;border-radius:9px;background:#3a2226;color:#f3b3b3;font-size:11px;cursor:pointer">⚠ доска ≠ статус</span>':'')+'</td>'+
-             '<td>'+esc(r.client)+'</td><td class="num">'+money(r.total)+' ₸</td>'+
+             '<td title="'+esc(r.client)+'">'+esc(r.client)+'</td><td class="num">'+money(r.total)+' ₸</td>'+
              '<td>'+chip(r,'invoiceSent','выслан')+'</td>'+
              '<td style="white-space:nowrap">'+chip(r,'paid','оплачен')+
                (r.payVia==='cash'?' <span class="ncash" data-card="'+esc(r.cardId)+'" title="Наличные: '+(r.cashKind==='kaspi'?'перевод на Kaspi':(r.cashKind==='cash'?'купюры — '+esc(r.cashNote||'кому не указано'):'форма не указана'))+'" style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;background:#3a2f14;color:#e8c07d;font-size:11px;font-weight:800;cursor:pointer;vertical-align:middle">Н</span>':'')+
