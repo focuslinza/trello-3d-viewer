@@ -35,6 +35,10 @@
     th.cf:hover{color:var(--txt)}
     th.cf .cfi{opacity:.45;font-size:10px}
     th.cf.on{color:#579dff}
+    .cfline{font-size:12.5px;height:18px;margin:2px 0 4px}
+    table.otab{table-layout:fixed;width:100%}
+    table.otab td{overflow-wrap:anywhere}
+    th.cf.on{text-transform:none;letter-spacing:0}
     th.cf .cfv{display:inline-block;margin-left:3px;padding:1px 7px;border-radius:9px;background:#1c2b41;border:1px solid #2b4b7a;color:#85b8ff;font-size:10.5px;text-transform:none;letter-spacing:0;font-weight:600}
     .kpis{display:flex;flex-wrap:nowrap;gap:8px;margin:10px 0 14px;overflow-x:auto}
     .kpi{flex:1 1 0;min-width:96px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
@@ -485,7 +489,8 @@
     function colfActive(){ return Object.keys(COLF).some(function(k){ return COLF[k]; }); }
     function th(k,label,cls){
       var v=COLF[k], lab=v?(COLF_OPT[k].filter(function(o){return o[0]===v;})[0]||['',''])[1]:'';
-      return '<th class="cf'+(v?' on':'')+(cls?' '+cls:'')+'" data-cf="'+k+'" title="Нажмите, чтобы отфильтровать: '+COLF_OPT[k].slice(1).map(function(o){return o[1];}).join(' → ')+' → все">'+label+(v?' <span class="cfv">'+lab+'</span>':' <span class="cfi">▾</span>')+'</th>';
+      // заголовок сам превращается в выбранный вариант («Счёт» → «не выслан»)
+      return '<th class="cf'+(v?' on':'')+(cls?' '+cls:'')+'" data-cf="'+k+'" title="'+label+': нажмите — '+COLF_OPT[k].slice(1).map(function(o){return o[1];}).join(' → ')+' → все">'+(v?lab:label)+' <span class="cfi">▾</span></th>';
     }
     if(!window.__colfBound){ window.__colfBound=1;
       document.addEventListener('click',function(e){
@@ -622,8 +627,9 @@
         } else WIDE_RESULTS=null;
       }
       else{
-        if(colfActive()) h+='<div class="muted" style="font-size:12.5px;margin:4px 0">Отфильтровано по столбцам: показано '+rows.length+' из '+ROWS.length+' · <a href="#" class="cfreset" style="color:#579dff">сбросить фильтры</a></div>';
-        h+='<table><thead><tr><th>№</th><th>Заказ</th>'+th('client','Клиент')+'<th class="num">Сумма</th>'+th('invoiceSent','Счёт')+th('paid','Оплата')+th('delivered','Сдали')+th('actSigned','Акт')+'<th>Дата</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
+        // строка-состояние всегда на месте (пустая, если фильтров нет) — таблица не прыгает
+        h+='<div class="muted cfline">'+(colfActive()?('Показано '+rows.length+' из '+ROWS.length+' · <a href="#" class="cfreset" style="color:#579dff">сбросить фильтры</a>'):'&nbsp;')+'</div>';
+        h+='<table class="otab"><colgroup><col style="width:78px"><col><col style="width:16%"><col style="width:110px"><col style="width:112px"><col style="width:122px"><col style="width:106px"><col style="width:86px"><col style="width:92px">'+(IS_ADMIN?'<col style="width:120px">':'<col style="width:90px">')+'</colgroup><thead><tr><th>№</th><th>Заказ</th>'+th('client','Клиент')+'<th class="num">Сумма</th>'+th('invoiceSent','Счёт')+th('paid','Оплата')+th('delivered','Сдали')+th('actSigned','Акт')+'<th>Дата</th>'+(IS_ADMIN?'<th></th>':'')+'</tr></thead><tbody>';
         if(!rows.length) h+='<tr><td colspan="11" class="muted" style="padding:14px 8px">Нет заказов по этим фильтрам. Нажмите на заголовок ещё раз или <a href="#" class="cfreset" style="color:#579dff">сбросьте фильтры</a>.</td></tr>';
         rows.forEach(function(r){
           var closed=r.invoiceSent&&r.paid&&r.delivered&&r.actSigned;
