@@ -11,7 +11,30 @@
     // Adds a "Калькулятор стоимости" section to the card back with a button
     // that opens the full calculator modal. Stores results on the card and
     // logs every order to the central D1 database via the Worker.
+    // ЗНАЧКИ ОПЛАТЫ (решение Асхата, 11.11.2026): ✓✓ зелёный — 100%, ✓ жёлтый — частично,
+    // ✕ красный — не оплачено / нет расчёта. Карточки после «Ждём оплату». Одна карта
+    // статусов на всю доску, обновляется раз в минуту — не запрос на каждую карточку.
+    var PB = { at: 0, p: null };
+    function payMap(){
+      if (PB.p && Date.now() - PB.at < 60000) return PB.p;
+      var W = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+      PB.at = Date.now();
+      PB.p = fetch(W + '/pay-badges').then(function(r){ return r.json(); }).then(function(j){ return (j && j.map) || {}; }).catch(function(){ PB.at = 0; return {}; });
+      return PB.p;
+    }
+    function payBadge(t){
+      return t.card('id').then(function(c){
+        return payMap().then(function(m){
+          var v = m[c && c.id]; if (!v) return { text: '', refresh: 60 };
+          var B = { g: { text: '✓✓', color: 'green' }, y: { text: '✓', color: 'yellow' }, r: { text: '✕', color: 'red' } }[v[0]] || {};
+          return { text: B.text, color: B.color, title: 'Оплата: ' + v[1], refresh: 60 };
+        });
+      }).catch(function(){ return { text: '', refresh: 60 }; });
+    }
     window.TrelloPowerUp.initialize({
+      'card-badges': function (t, options) {
+        return [{ dynamic: function(){ return payBadge(t); } }];
+      },
       'card-detail-badges': function (t, options) {
         // фишка «QR-этикетка» в одном ряду и стиле с «Метки» и «Card Number»
         return [{
