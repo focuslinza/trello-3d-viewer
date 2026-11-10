@@ -9,6 +9,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
   <script src="./invoice-doc.js?v=2"></script>
+  <script src="./pay-dialog.js?v=4"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; }
     *{box-sizing:border-box}
@@ -154,7 +155,8 @@
             '<button class="btn vw" data-i="'+i+'" type="button" title="Открыть в новом окне без скачивания">Просмотр</button> '+
             '<button class="btn green dl" data-i="'+i+'" type="button">Скачать PDF</button> '+
             '<button class="btn ghost ml" data-i="'+i+'" type="button" title="Письмо в Zoho всем, кто у компании получает счета на почту; PDF приложите сами (кнопка «Скачать PDF»)">✉ Письмо</button> '+
-            '<button class="btn ed" data-i="'+i+'" type="button" title="Исправить строки, разделить, выставить остаток или аннулировать — номер счёта не меняется">✎ Изменить</button>'+
+            '<button class="btn ed" data-i="'+i+'" type="button" title="Исправить строки, разделить, выставить остаток или аннулировать — номер счёта не меняется">✎ Изменить</button> '+
+            '<button class="btn green pay" data-i="'+i+'" type="button" title="Отметить оплату заказа: сумма, дата, способ и куда">₸ Оплата</button>'+
             (IS_DIRECTOR?' <button class="btn red del" data-i="'+i+'" type="button" title="Удалить из журнала">✕</button>':'')+
           '</td>'+
         '</tr>';
@@ -175,6 +177,13 @@
     [].forEach.call(document.querySelectorAll('.del'), function(b){ b.onclick=function(){ delInvoice(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.ml'), function(b){ b.onclick=function(){ mailInvoice(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.ed'), function(b){ b.onclick=function(){ openEdit(ROWS[+this.getAttribute('data-i')]); }; });
+    // ОПЛАТА ПРЯМО ИЗ «СЧЕТОВ ПО ЗАКАЗУ» (решение Асхата, 10.11.2026): то же окно оплаты, что в
+    // бухгалтерии и счёте — сумма, дата, способ и куда; подтверждает учредитель
+    [].forEach.call(document.querySelectorAll('.pay'), function(b){ b.onclick=function(){
+      var row=ROWS[+this.getAttribute('data-i')];
+      if(!window.openPayDialog){ alert('Окно оплаты не загрузилось — закройте и откройте снова.'); return; }
+      window.openPayDialog({ cardId: cardId, title: 'по счёту № '+row.number+((row.buyer&&row.buyer.name)?(' · '+row.buyer.name):''), onDone: function(){ load(); } });
+    }; });
   }
   // ПРАВКА СЧЁТА ПРЯМО ИЗ КАРТОЧКИ (решение Асхата, 05.11.2026): то же окно счёта, что
   // в бухгалтерии (исправить строки без смены номера, разделить, остаток, аннулировать),
