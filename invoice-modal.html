@@ -569,7 +569,7 @@
       html+='<table class="otbl"><thead><tr><th>'+(co.length?'<input type="checkbox" id="ckAll" title="Выбрать все / снять все"'+(allOn?' checked':'')+'>':'')+'</th><th>№</th><th>Заказ</th><th class="num">Кол-во</th>'+(ONLY_REPAIR?'':'<th>Степень</th>')+'<th class="num" title="'+(supplierKey!=='cash'?'С налогом выбранной компании':'Без налога')+'">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th><th>История</th><th></th></tr></thead><tbody>';
       function chip(o, field, label, active, title){
         var on=!!o[field];
-        if(field==='paid' && o.partial) return '<span class="chip part'+(active?'':' ro')+'" data-id="'+esc(o.cardId)+'" data-f="paid" title="Оплачено '+money(o.paidSum)+' ₸ из '+money(o.total)+' ₸ — остаток '+money(o.rest)+' ₸" style="background:#3d3410;color:#f5cd47;border-color:#7f6a11">частично · ост. '+money(o.rest)+'</span>';
+        if(field==='paid' && o.partial) return '<span class="chip part'+(active?'':' ro')+'" data-id="'+esc(o.cardId)+'" data-f="paid" title="Оплачено '+money(o.paidSum)+' ₸ из '+money(o.total)+' ₸ — остаток '+money(o.rest)+' ₸" style="background:#3d3410;color:#f5cd47;border-color:#7f6a11">'+Math.round(o.rest).toLocaleString('ru-RU')+' ₸</span>';
         return '<span class="chip'+(on?' on':'')+(active?'':' ro')+'" data-id="'+esc(o.cardId)+'" data-f="'+field+'" title="'+esc(title||'')+'">'+(on?'✓ ':'')+label+'</span>';
       }
       allRows.forEach(function(o){

@@ -465,7 +465,7 @@
       var on=r[field];
       // оплата: частично — жёлтая с остатком; без внесённой суммы (старые отметки) — «оплачен» как раньше
       if(field==='paid' && on && r.partial)
-        return '<span class="chip on part" data-card="'+esc(r.cardId)+'" data-f="paid" title="Оплачено '+money(r.paidSum)+' ₸ из '+money(r.total)+' ₸">частично · ост. '+money(r.rest)+'</span>';
+        return '<span class="chip on part" data-card="'+esc(r.cardId)+'" data-f="paid" title="Оплачено '+money(r.paidSum)+' ₸ из '+money(r.total)+' ₸ — остаток '+money(r.rest)+' ₸">'+Math.round(r.rest).toLocaleString('ru-RU')+' ₸</span>';
       return '<span class="chip'+(on?' on':'')+'" data-card="'+esc(r.cardId)+'" data-f="'+field+'">'+(on?'✓ ':'')+label+'</span>';
     }
 
