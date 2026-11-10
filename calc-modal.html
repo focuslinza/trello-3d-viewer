@@ -64,7 +64,7 @@
     .totals .big span { font-size:13px; font-weight:600; color:var(--muted); }
     .actions { display:flex; gap:8px; }
     /* cost hidden for workers without permission */
-    body.nocost .lt, body.nocost #brkSec, body.nocost #taxFld, body.nocost #totalBig { display:none !important; }
+    body.nocost .lt, body.nocost #brkSec, body.nocost #taxFld, body.nocost #totalBig, body.nocost #totalTax { display:none !important; }
     .nocost input.sp{display:none}
     .nocostNote { color:var(--muted) !important; font-weight:600; }
     .actions button { height:36px; border-radius:4px; font-size:13px; font-weight:600; cursor:pointer; padding:0 16px; border:none; }
@@ -111,7 +111,7 @@
     <div class="sec" id="fitSec" style="display:none">
       <h3>Подогнать под договорную сумму</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <label class="hint">Сумма клиенту «как договорились», ₸ <input type="number" id="fitTarget" min="0" step="1000" style="width:150px" placeholder="например 450000"></label>
+        <label class="hint">Сумма клиенту <b>как в счёте, с налогом</b>, ₸ <input type="number" id="fitTarget" min="0" step="1000" style="width:150px" placeholder="например 450000"></label>
         <label class="hint" title="Через какую компанию пойдёт оплата — её процент уже входит в введённую сумму">через
           <select id="fitSup" style="margin-left:4px">
             <option value="" selected>— выберите компанию —</option>
@@ -125,7 +125,7 @@
         <span class="hint" id="fitMsg"></span>
       </div>
       <div class="hint" id="fitRates" style="margin-top:6px"></div>
-      <div class="hint" style="margin-top:6px">Вводите <b>конечную сумму</b>, о которой договорились с клиентом — процент компании уже в ней. Меняются только цены работ (материалы идут по факту закупки), сдельная считается от изменённых цен. Если цена ниже тарифной — разница сохраняется как уступка: в счёте пойдёт строкой «Скидка» и попадёт в отчёт «% Уступки». Если выше — ничего дополнительно не пишется.</div>
+      <div class="hint" style="margin-top:6px">Вводите <b>конечную сумму, как она будет в счёте</b> (с налогом выбранной компании): например, договорились на 650 000 ₸ через ТОО — так и пишите 650 000 и выбирайте «ТОО «TTMS»», налог вычтется сам. Меняются только цены работ (материалы идут по факту закупки). Если цена ниже тарифной — разница учитывается как уступка в отчёте «% Уступки»; клиенту в счёте скидка не показывается. Внизу под «итого» всегда видно, сколько выйдет в счёте через каждую компанию.</div>
     </div>
 
     <div class="sec">
@@ -202,6 +202,7 @@
     <div class="inner">
       <div class="totals">
         <div class="big" id="totalBig">0 <span>₸</span></div>
+        <div class="hint" id="totalTax" style="margin-top:2px"></div>
         <div class="big nocostNote" id="nocostNote" style="display:none">Стоимость скрыта</div>
         <div class="msg" id="msg"></div>
       </div>
@@ -525,6 +526,13 @@
       r('Подытог', res.subtotal);
       r('Налог '+Math.round(res.taxRate*100)+'%', res.taxAmount);
       document.getElementById('totalBig').innerHTML = fmt(res.total)+' <span>₸ итого</span>';
+      // СУММА В СЧЁТЕ С НАЛОГОМ (решение Асхата, 10.11.2026): сразу видно, сколько выйдет в счёте
+      // через каждую компанию — не нужно заглядывать в «Счёт на оплату» и считать вручную
+      (function(){ var el=document.getElementById('totalTax'); if(!el) return;
+        var sel=(document.getElementById('fitSup')||{}).value||'';
+        var V=[['1.16','ТОО «TTMS» +16%'],['1.10','ИП «MetalShop» +10%'],['1.03','ИП «FIRDAUS» +3%']];
+        el.innerHTML='в счёте: '+V.map(function(v){ var on=(sel===v[0]); return '<span style="white-space:nowrap'+(on?';color:#e8c07d;font-weight:700':'')+'">'+v[1]+' — '+fmt(Math.ceil(res.total*(+v[0])))+' ₸</span>'; }).join(' · ')+(sel==='1'?' · <span style="color:#e8c07d;font-weight:700">наличные — '+fmt(res.total)+' ₸</span>':'');
+      })();
     }
     function paintLineTotals(res){
       // recompute each row independently for its own line total display
@@ -978,6 +986,9 @@
     // ---- save ----
     (function(){
       var sec=document.getElementById('fitSec'); if(sec) sec.style.display='';
+      var fs=document.getElementById('fitSup');
+      try { var rem=localStorage.getItem('ms_fit_sup'); if(rem!=null && fs.querySelector('option[value="'+rem+'"]')) fs.value=rem; } catch(e){}
+      fs.addEventListener('change', function(){ try { localStorage.setItem('ms_fit_sup', fs.value); } catch(e){} recompute(); });
       var msg=document.getElementById('fitMsg');
       document.getElementById('fitGo').onclick=function(){
         var target=+document.getElementById('fitTarget').value||0;
