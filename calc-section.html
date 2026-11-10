@@ -64,8 +64,28 @@
       }).catch(function(){ return false; });
     }
 
+    // МЕТКА «Оплата есть» → ОКНО ОПЛАТЫ (решение Асхата, 11.11.2026): когда на открытой карточке
+    // ставят метку «Оплата есть», сразу открывается окно ввода оплаты (сумма, дата, способ, куда).
+    // Срабатывает только на появление метки, не при каждом открытии старой карточки; если заказ
+    // уже оплачен полностью — окно не открывается.
+    var LBL_PAY_RE = /оплат\S*\s+(есть|получен|пришл)/i, lblPrev = null, lblBusy = false;
+    function watchPayLabel(){
+      return t.card('id','labels').then(function(c){
+        var has = !!((c && c.labels) || []).filter(function(l){ return LBL_PAY_RE.test(String(l && l.name || '')); }).length;
+        var was = lblPrev; lblPrev = has;
+        if (!(has && was === false) || lblBusy || !c || !c.id) return;
+        lblBusy = true;
+        return fetch(WORKER+'/order-payments?cardId='+encodeURIComponent(c.id)).then(function(r){ return r.json(); }).then(function(j){
+          var paid = j && j.ok ? (+j.paidSum || 0) + (+j.pendingSum || 0) : 0, total = j && +j.total || 0;
+          if (total > 0 && paid >= total - 0.5) return;            // уже оплачен полностью
+          return t.modal({ url: './pay-modal.html?t=' + Date.now(), title: 'Оплата заказа', accentColor: '#1f6ce8', height: 640,
+            args: { cardId: c.id, title: String(CARD.name || '').slice(0, 60) } });
+        }).catch(function(){}).then(function(){ lblBusy = false; });
+      }).catch(function(){});
+    }
     var renderGen = 0;
     t.render(function(){
+      try { watchPayLabel(); } catch(e){}
       var myGen = ++renderGen;
       // capture card id/name with the minimal field set (matches the working DXF section)
       return t.card('id','name').then(function(card){

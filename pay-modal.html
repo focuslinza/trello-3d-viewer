@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Оплата заказа</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <script src="./pay-dialog.js?v=5"></script>
+  <style>html,body{margin:0;background:#1d2125;color:#dbe4ec;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;min-height:100vh}</style>
+</head>
+<body>
+<script>
+// ОКНО ОПЛАТЫ ПО МЕТКЕ «Оплата есть» (решение Асхата, 11.11.2026): метку поставили —
+// сразу спрашиваем сумму, дату, способ и куда. Закрыли окно — модалка Trello закрывается.
+(function(){
+  var t = window.TrelloPowerUp.iframe();
+  var cardId = t.arg('cardId'), title = t.arg('title') || '';
+  var closed = false;
+  function done(){ if (closed) return; closed = true; setTimeout(function(){ t.closeModal(); }, 1300); }
+  if (!window.openPayDialog || !cardId) { document.body.innerHTML = '<div style="padding:30px">Окно оплаты не загрузилось — закройте и откройте снова.</div>'; return; }
+  window.openPayDialog({ cardId: cardId, title: title, onClose: done });
+})();
+</script>
+</body>
+</html>

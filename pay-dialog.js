@@ -87,7 +87,7 @@
       t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100000;padding:10px 18px;border-radius:8px;font:600 14px system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);background:' + (warn ? '#533f04;color:#f5cd47' : '#1c3329;color:#4bce97') + ';border:1px solid ' + (warn ? '#7f5f01' : '#2e5c44');
       document.body.appendChild(t); setTimeout(function () { t.remove(); }, warn ? 6000 : 3000);
     }
-    function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+    function close() { ov.remove(); document.removeEventListener('keydown', onKey); if (opts.onClose) try { opts.onClose(); } catch (x) {} }
     function onKey(e) { if (e.key === 'Escape') close(); }
     document.addEventListener('keydown', onKey);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
