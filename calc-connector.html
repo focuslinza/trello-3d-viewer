@@ -224,9 +224,9 @@
         // админство и права спрашиваем ОДНОВРЕМЕННО — общий ответ укладывается в ~2 с
         return Promise.all([isAdmin(), perms()]).then(function(r){
           var admin = r[0];
-          if (admin) return [earnBtn, linesBtn, repairBtn, supBtn, buhBtn, salesBtn, dashBtn]; // Табель — внутри «Упр», Клиенты — внутри «Прд»
+          if (admin) return [earnBtn, repairBtn, supBtn, buhBtn, salesBtn, dashBtn]; // Табель — внутри «Упр», Клиенты — внутри «Прд»
           return Promise.resolve(r[1]).then(function(p){
-            var out = p.canDashboard ? [earnBtn, linesBtn, repairBtn, supBtn] : [earnBtn, repairBtn, supBtn];   // «Лин» — руководитель и учредитель // ремонт и снабжение (канбан заявок) — любой работник;
+            var out = [earnBtn, repairBtn, supBtn];   // «Лин» убрана (решение Асхата 11.11.2026), страница lines-modal.html оставлена // ремонт и снабжение (канбан заявок) — любой работник;
             // внутри «Снабжения» инструмент/наличные/цены видят только снабженец и руководство
             // табель: начальник цеха (заполняет) и бухгалтер (смотрит); у кого есть «Упр» — табель внутри неё
             if ((p.canTimesheet || p.canInvoice) && !p.canDashboard) out.push(tabelBtn);
