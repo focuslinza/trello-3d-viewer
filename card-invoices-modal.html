@@ -39,7 +39,7 @@
   var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
   var cardId = t.arg('cardId') || null;
   var ROWS = [], SENDS = [];
-  var IS_DIRECTOR = false;
+  var IS_DIRECTOR = false, CAN_DEL = false, ME_ID = '';
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function money(v){ return (window.INVOICE&&window.INVOICE.money)?window.INVOICE.money(v):(Math.round(+v||0)).toLocaleString('ru-RU'); }
@@ -55,12 +55,15 @@
   // доступ: директор ИЛИ работник с правом «может выставлять счёт» (тот же лёгкий endpoint, без зарплатных данных)
   function checkAccess(){
     return isDirector().then(function(admin){
-      IS_DIRECTOR = admin;
-      if (admin) return true;
+      IS_DIRECTOR = admin; CAN_DEL = admin;
       return t.member('id').then(function(me){
-        return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
+        ME_ID = (me&&me.id)||'';
+        return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(ME_ID))
           .then(function(r){return r.json();})
-          .then(function(j){ return !!(j&&(j.canIssueInvoice||j.canInvoice)); })
+          .then(function(j){
+            // удалять лишние счета: руководство, бухгалтер, менеджер по продажам (решение 11.11.2026)
+            if (j && (j.canDashboard || j.canInvoice || j.isSalesManager)) CAN_DEL = true;
+            return admin || !!(j&&(j.canIssueInvoice||j.canInvoice||j.isSalesManager)); })
           .catch(function(){ return false; });
       });
     });
@@ -128,9 +131,9 @@
     });
   }
   function delInvoice(row){
-    if(!IS_DIRECTOR) return;
-    if(!confirm('Удалить счёт № '+row.number+' из журнала? PDF-файлы, скачанные ранее, останутся у вас.')) return;
-    fetch(WORKER+'/invoice-delete',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:row.id }) })
+    if(!CAN_DEL) return;
+    if(!confirm('Удалить счёт № '+row.number+' на '+money(row.total)+' ₸?\n\nОн удалится из журнала везде — и здесь, и в бухгалтерии. Оплаты по заказу не трогаются. PDF, скачанные ранее, останутся у вас.')) return;
+    fetch(WORKER+'/invoice-delete',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:row.id, memberId:ME_ID, boardAdmin:IS_DIRECTOR?1:0 }) })
       .then(function(r){return r.json();}).then(function(j){
         if(j&&j.ok){ ROWS=ROWS.filter(function(x){return x.id!==row.id;}); render(); }
         else alert('Не удалось удалить: '+((j&&j.error)||'?'));
@@ -157,7 +160,7 @@
             '<button class="btn ghost ml" data-i="'+i+'" type="button" title="Письмо в Zoho всем, кто у компании получает счета на почту; PDF приложите сами (кнопка «Скачать PDF»)">✉ Письмо</button> '+
             '<button class="btn ed" data-i="'+i+'" type="button" title="Исправить строки, разделить, выставить остаток или аннулировать — номер счёта не меняется">✎ Изменить</button> '+
             '<button class="btn green pay" data-i="'+i+'" type="button" title="Отметить оплату заказа: сумма, дата, способ и куда">₸ Оплата</button>'+
-            (IS_DIRECTOR?' <button class="btn red del" data-i="'+i+'" type="button" title="Удалить из журнала">✕</button>':'')+
+            (CAN_DEL?' <button class="btn red del" data-i="'+i+'" type="button" title="Удалить из журнала">✕</button>':'')+
           '</td>'+
         '</tr>';
       });
