@@ -106,9 +106,10 @@
       var list=[].slice.call(fileList||[]).filter(function(f){ return /\.(dxf|zzx)$/i.test(f.name); });
       var skipped=(fileList||[]).length-list.length;
       if(!list.length){ setMsg('Можно загружать только .dxf и .zzx'); return Promise.resolve(); }
-      var i=0, ok=0, errs=[];
+      var i=0, ok=0, errs=[]; UPLOADING++;
       function next(){
         if(i>=list.length){
+          UPLOADING=Math.max(0,UPLOADING-1);
           setMsg('Загружено '+ok+' из '+list.length+(skipped?(' · пропущено не-DXF: '+skipped):'')+(errs.length?(' · ошибки: '+errs.join('; ')):''));
           return autoPlace().then(draw);
         }
@@ -248,7 +249,8 @@
         var it={ id:'i'+Date.now().toString(36), name:nm, qty:1, files:[] };
         // первое изделие: все DXF без изделия сразу кладём в него (обычный случай — одно изделие)
         if (!ITEMS.length) it.files = files.map(function(a){ return a.id; });
-        ITEMS.push(it); saveItems().then(draw);
+        // новое изделие — СВЕРХУ, сразу под кнопкой, с курсором в названии (решение Асхата, 11.11.2026)
+        ITEMS.unshift(it); FOCUS_ITEM=it.id; saveItems().then(draw);
       });
       tools.appendChild(addB);
       if (!ITEMS.length){
@@ -285,6 +287,7 @@
           var box=document.createElement('div'); box.className='item';
           var h=document.createElement('div'); h.className='ihd';
           var nm=document.createElement('input'); nm.className='nm'; nm.value=it.name; nm.title='Название изделия';
+          if (FOCUS_ITEM===it.id) { FOCUS_ITEM=null; setTimeout(function(){ try{ nm.focus(); nm.select(); nm.scrollIntoView({block:'nearest'}); }catch(e){} }, 30); }
           nm.addEventListener('change', function(){ it.name=(nm.value||'').trim()||('Изделие '+(idx+1)); saveItems().then(draw); });
           var x=document.createElement('span'); x.textContent='×';
           var q=document.createElement('input'); q.className='q'; q.type='number'; q.min='1'; q.step='1'; q.value=it.qty; q.title='Сколько таких изделий в заказе';
@@ -364,9 +367,11 @@
       return saveItems().then(function(){ setMsg('Файлы разложены по изделиям автоматически'); });
     }
 
-    var rendering=false;
+    var rendering=false, FOCUS_ITEM=null, UPLOADING=0;
     function render(){
-      if (rendering || editing()) return Promise.resolve();
+      // пока идёт загрузка, Trello уже видит новый файл, а изделие на сервере ещё не обновлено —
+      // не перерисовываем, иначе файл на мгновение окажется «без изделия» (и может туда записаться)
+      if (rendering || editing() || UPLOADING) return Promise.resolve();
       rendering=true;
       return t.card('id','attachments','name').then(function(card){
         CARD_ID=card.id; FILES=(card.attachments||[]); CARD_NAME=card.name||'';
