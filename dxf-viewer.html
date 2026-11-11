@@ -64,7 +64,7 @@
       <div id="metrics"></div>
 
       <div class="group">
-        <label for="quantity">Количество, шт</label>
+        <label for="quantity" id="qtyLbl">Количество, шт</label>
         <input type="number" id="quantity" min="1" step="1" value="1" placeholder="например, 5" />
       </div>
 
@@ -88,6 +88,7 @@
         </select>
       </div>
 
+      <div class="group" id="queueInfo" style="display:none;font-size:12px;color:#5e6c84"></div>
       <button class="save" id="saveBtn">Сохранить расчёт</button>
       <div class="saved-msg" id="savedMsg"></div>
 
@@ -100,6 +101,24 @@
   <script>
     var t = window.TrelloPowerUp.iframe();
     var cardId = t.arg('cardId'), attachmentId = t.arg('attachmentId'), fileName = t.arg('fileName');
+    // очередь (11.2026): «Рассчитать по очереди» — файлы открываются один за другим
+    // в этом же окне; itemName — файл входит в изделие, тогда количество =
+    // штук на ОДНО изделие (умножение на число изделий — в калькуляторе)
+    var itemName = t.arg('itemName') || '';
+    var QUEUE = []; try { QUEUE = (t.arg('queue') || []).slice(); } catch(e){ QUEUE = []; }
+    var QTOTAL = QUEUE.length + 1, QDONE = 0;
+    function lastKey(){ return 'ms_dxf_last_' + cardId; }
+    function rememberLast(){ try { localStorage.setItem(lastKey(), JSON.stringify({ th: document.getElementById('thickness').value, mat: document.getElementById('material').value })); } catch(e){} }
+    function applyLast(){ try { var l = JSON.parse(localStorage.getItem(lastKey()) || 'null'); if (!l) return;
+      if (l.mat && !document.getElementById('material').value) document.getElementById('material').value = l.mat;
+      if (l.th && !document.getElementById('thickness').value) document.getElementById('thickness').value = l.th; } catch(e){} }
+    function updateHead(){
+      document.getElementById('fileName').textContent = fileName || '';
+      document.getElementById('qtyLbl').textContent = itemName ? ('Штук на 1 изделие «' + itemName + '»') : 'Количество, шт';
+      var qi = document.getElementById('queueInfo');
+      if (QTOTAL > 1) { qi.style.display = ''; qi.textContent = 'Очередь: файл ' + (QDONE + 1) + ' из ' + QTOTAL + (QUEUE.length ? ' · после сохранения откроется следующий' : ' · последний'); }
+      document.getElementById('saveBtn').textContent = QUEUE.length ? 'Сохранить и дальше →' : 'Сохранить расчёт';
+    }
 
     // ---- sheet material catalog (identical to the calculator) ----
     function parseThicknessFromLabel(lbl){
@@ -188,7 +207,7 @@
     function showOverlayError(msg){ overlay.classList.remove('hidden'); ovText.textContent=msg; overlay.querySelector('.spinner').style.display='none'; }
     function hideOverlay(){ overlay.classList.add('hidden'); }
 
-    document.getElementById('fileName').textContent = fileName || '';
+    updateHead();
 
     function fmt(n, dp){ return (Math.round(n*Math.pow(10,dp))/Math.pow(10,dp)).toLocaleString('ru-RU'); }
 
@@ -273,16 +292,19 @@
         .then(function(j){ return applyRec(j && j.ok && j.metrics && j.metrics[attachmentId]); })
         .catch(function(){ return false; })
         .then(function(found){
-          if (found) return;
+          if (found) return true;
           return t.get('card','shared','dxfMetrics', {}).then(function(all){
-            applyRec(all && all[attachmentId]);
-          }).catch(function(){});
+            return applyRec(all && all[attachmentId]);
+          }).catch(function(){ return false; });
         });
     }
 
     // ---------- run ----------
+    function runFile(){
+    window.__computed = null; polylines = []; bbox = null;
+    document.getElementById('metrics').innerHTML = '';
     showOverlay('Скачивание DXF из Trello…');
-    fetch(downloadUrl())
+    return fetch(downloadUrl())
       .then(function(r){ if(!r.ok) return r.text().then(function(tx){ throw new Error('Не удалось скачать ('+r.status+'). '+tx); }); return r.arrayBuffer(); })
       .then(function(buf){
         showOverlay('Разбор чертежа…');
@@ -314,10 +336,23 @@
         // store computed metrics for saving
         window.__computed = m;
 
-        return loadSaved();
+        return loadSaved().then(function(found){ applyLast(); return found; });
       })
       .then(function(){ hideOverlay(); fitView(); })
       .catch(function(err){ showOverlayError((err&&err.message)||String(err)); });
+    }
+    runFile();
+    function nextInQueue(){
+      var nx = QUEUE.shift(); if (!nx) return false;
+      QDONE++;
+      attachmentId = nx.id; fileName = nx.fileName || nx.name || ''; itemName = nx.itemName || '';
+      document.getElementById('quantity').value = 1;
+      document.getElementById('bendInput').value = '';
+      document.getElementById('savedMsg').textContent = '';
+      updateHead();
+      runFile();
+      return true;
+    }
 
     // ---------- save ----------
     document.getElementById('saveBtn').addEventListener('click', function(){
@@ -344,8 +379,9 @@
         body: JSON.stringify({ cardId: cardId, attachmentId: attachmentId, rec: rec })
       }).then(function(r){ return r.json(); }).then(function(j){
         if(!j || !j.ok) throw new Error((j&&j.error)||'сервер не подтвердил сохранение');
-        msg.textContent = 'Сохранено ✓ Данные готовы для калькулятора.';
-        setTimeout(function(){ t.closeModal(); }, 900);
+        rememberLast();
+        if (QUEUE.length) { msg.textContent = 'Сохранено ✓ Открываю следующий…'; setTimeout(nextInQueue, 400); }
+        else { msg.textContent = 'Сохранено ✓ Данные готовы для калькулятора.'; setTimeout(function(){ t.closeModal(); }, 900); }
         // одноразовый перенос: старые записи с карточки — в базу, затем освобождаем место на карточке
         return t.get('card','shared','dxfMetrics', {}).then(function(all){
           if (!all || !Object.keys(all).length) return;

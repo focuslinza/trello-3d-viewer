@@ -454,13 +454,14 @@
       var out=[];
       Object.keys(dxfMetrics||{}).forEach(function(k){
         var m=dxfMetrics[k]||{}; var q=Math.max(1,Math.round(+m.quantity||1)); var th=+m.thicknessMm||0;
+        var cp=Math.max(1,Math.round(+m.copies||q));   // в изделии: копия = одно изделие
         var ops=[];
         if(m.cutLenM>0){
           if(m.tube){ var thb=nearestTh(th)||th||1.5; ops.push({kind:'cutTube',thickness:thb,qty:m.cutLenM*q}); }
           else if(th>0){ ops.push({kind:'cut',thickness:nearestTh(th),qty:m.cutLenM*q}); }
         }
         if(m.bendCount>0 && th>0){ ops.push({kind:(m.tube?'bendTube':'bend'),thickness:nearestTh(th),qty:m.bendCount*q}); }
-        if(ops.length) out.push({name:(m.fileName||k), copies:q, ops:ops});
+        if(ops.length) out.push({name:(m.fileName||k), copies:cp, ops:ops});
       });
       return out;
     }
@@ -468,7 +469,7 @@
       var keys=Object.keys(dxfMetrics||{}); if(!keys.length) return 1;
       function g2(a,b){ while(b){ var t=a%b; a=b; b=t; } return a; }
       var acc=0;
-      keys.forEach(function(k){ acc = g2(acc, Math.max(1, Math.round(+(dxfMetrics[k]||{}).quantity||1))); });
+      keys.forEach(function(k){ var mm=dxfMetrics[k]||{}; acc = g2(acc, Math.max(1, Math.round(+(mm.copies||mm.quantity)||1))); });
       return Math.max(1, acc);
     }
     // подбор общего множителя цен, чтобы итог совпал с договорной суммой:
@@ -575,6 +576,30 @@
     // ---- context (card / company / object / dxf) ----
     var ctx={ cardId:null, cardName:'', cardNumber:'', boardId:'', status:'', companyId:null, companyName:'', objectName:'' };
     var dxfMetrics={};
+    // ИЗДЕЛИЯ (11.2026): одна карточка = объект, внутри изделия со своим количеством.
+    // В DXF-расчёте файла quantity = штук НА ОДНО изделие; здесь умножаем на число изделий.
+    // Файлы вне изделий считаются как раньше (quantity = на весь заказ).
+    var DXF_ITEMS=[];
+    function applyItems(raw, items){
+      DXF_ITEMS = Array.isArray(items) ? items : [];
+      raw = raw || {};
+      if(!DXF_ITEMS.length) return raw;
+      var of={}; DXF_ITEMS.forEach(function(it){ (it.files||[]).forEach(function(f){ of[f]=it; }); });
+      var out={};
+      Object.keys(raw).forEach(function(k){
+        var m=raw[k]||{}, it=of[k];
+        if(!it){ out[k]=m; return; }
+        var per=Math.max(1,Math.round(+m.quantity||1)), n=Math.max(1,Math.round(+it.qty||1));
+        var c=Object.assign({},m); c.perItem=per; c.copies=n; c.quantity=per*n; c.itemName=it.name;
+        c.fileName=it.name+' ×'+n+' · '+(m.fileName||k)+(per>1?(' ('+per+' шт/изд)'):'');
+        out[k]=c;
+      });
+      return out;
+    }
+    function itemsSummary(){
+      if(!DXF_ITEMS.length) return '';
+      return 'Изделия: '+DXF_ITEMS.map(function(it){ return it.name+' ×'+it.qty+' ('+(it.files||[]).length+' DXF)'; }).join(', ')+'. ';
+    }
     // режим «ремонт»: калькулятор открыт из канбана «Ремонт» — карточки Trello нет,
     // расчёт хранится в самой заявке (repairs.calc_json), сумма становится ценой клиенту
     var MODE_REPAIR = (t.arg('mode')==='repair');
@@ -687,7 +712,7 @@
           fetch(WORKER+'/dxf-get?prune=1&cardId='+encodeURIComponent(ctx.cardId))
             .then(function(r){return r.json();}).then(function(jd){
               if(!jd||!jd.ok) return;
-              dxfMetrics = jd.metrics || {};
+              dxfMetrics = applyItems(jd.metrics || {}, jd.items);
               window.__DXF_STALE = jd.staleCount||0;
               var hint=document.getElementById('dxfHint');
               if(hint && jd.staleCount){ hint.textContent='Пропущены расчёты '+jd.staleCount+' DXF, которых уже нет на карточке — они не попадут в расчёт. Кнопка «🧹 Забыть старые DXF» удалит их насовсем.'; }
@@ -899,7 +924,8 @@
       Object.keys(bendAgg).forEach(function(k){ var o=bendAgg[k]; o.qty=Math.round(o.qty); if(addOp(o)) added++; });
       Object.keys(matAgg).forEach(function(k){ var o=matAgg[k]; if(addMat(o.code, round3(o.qty))) added++; });
       var h=document.getElementById('dxfHint');
-      if(added){ h.textContent='Добавлено строк из DXF: '+added+' (тариф — по общему объёму; построчная сверка ниже) — проверьте толщину/материал.'+(missingTh?' В части расчётов не указана толщина — рез/гиб не добавлены.':''); }
+      var _its=itemsSummary();
+      if(added){ h.textContent=_its+'Добавлено строк из DXF: '+added+' (тариф — по общему объёму; построчная сверка ниже) — проверьте толщину/материал.'+(missingTh?' В части расчётов не указана толщина — рез/гиб не добавлены.':''); }
       else if(missingTh){ h.textContent='В DXF-расчёте не указана толщина — откройте «DXF / Раскрой», задайте толщину и нажмите «Сохранить расчёт».'; }
       else { h.textContent='В DXF-расчёте нет данных площади/реза для добавления.'; }
 
@@ -909,6 +935,18 @@
 
     document.getElementById('pullDxf').onclick=function(){
       document.getElementById('dxfHint').textContent='Читаю DXF-данные…';
+      // всегда свежие данные из базы вместе с изделиями (количество изделий могли поменять)
+      if(ctx.cardId){
+        fetch(WORKER+'/dxf-get?prune=1&cardId='+encodeURIComponent(ctx.cardId))
+          .then(function(r){return r.json();})
+          .then(function(jd){ if(jd&&jd.ok) dxfMetrics = applyItems(jd.metrics||{}, jd.items); })
+          .catch(function(){})
+          .then(function(){
+            if(Object.keys(dxfMetrics).length){ doPullFromMetrics(); return; }
+            fetchBridge().then(applyBridge).then(doPullFromMetrics);
+          });
+        return;
+      }
       if(Object.keys(dxfMetrics).length){ doPullFromMetrics(); return; }
       // empty: re-fetch the bridge (handles first-load race / stale cache)
       fetchBridge().then(applyBridge).then(doPullFromMetrics);
@@ -922,7 +960,7 @@
         .then(function(r){return r.json();}).then(function(jd){
           self.disabled=false;
           if(!jd||!jd.ok) throw new Error((jd&&jd.error)||'?');
-          dxfMetrics=jd.metrics||{}; self.style.display='none';
+          dxfMetrics=applyItems(jd.metrics||{}, jd.items); self.style.display='none';
           document.getElementById('dxfHint').textContent='Старые DXF забыты ('+(jd.staleCount||0)+'). Нажмите «Загрузить из DXF» — подтянется только то, что есть на карточке.';
           
         }).catch(function(e){ self.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
