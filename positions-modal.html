@@ -119,11 +119,8 @@
     }
     h+='<div class="lbl">Обязанности</div><textarea class="du" rows="2" placeholder="Что делает, за что отвечает">'+esc(p.duties)+'</textarea>';
     h+='<div class="lbl">Этапы работ</div><div class="chips">'+STAGES.map(function(s){ return chip('st',s.key,s.label,'',(p.stages||[]).indexOf(s.key)>=0); }).join('')+'</div>';
-    var pc=+((p.perms||{})._class)||0, cl=classOf(pc);
-    h+='<div class="lbl">Класс пропуска</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select class="pcls"><option value="0">— без класса —</option>'+
-      CLASSES.map(function(c){ return '<option value="'+c.n+'"'+(c.n===pc?' selected':'')+' title="'+esc(c.hint)+'">'+esc(c.label)+'</option>'; }).join('')+'</select>'+
-      '<span class="muted pclh" style="font-size:12px">'+(cl?esc(cl.hint):'выберите класс — права отметятся сами')+'</span></div>';
-    h+='<div class="lbl">Пропуска (права доступа) <span style="text-transform:none;letter-spacing:0">— <span style="color:#579dff">синие</span> даёт класс, <span style="color:#4bce97">зелёные</span> — доп. пропуска</span></div><div class="chips">'+PERMS.map(function(x){ var inCl=!!(cl&&cl.perms.indexOf(x.fld)>=0); return chip('pm'+(inCl?' incl':''),x.fld,x.label,x.hint+(inCl?' · даёт класс':''),inCl||!!(p.perms||{})[x.fld]); }).join('')+'</div>';
+    var cl=null;   // класс пропуска убран (решение Асхата, 11.11.2026): права отмечаются прямо галочками
+    h+='<div class="lbl">Пропуска (права доступа)</div><div class="chips">'+PERMS.map(function(x){ var inCl=!!(cl&&cl.perms.indexOf(x.fld)>=0); return chip('pm'+(inCl?' incl':''),x.fld,x.label,x.hint+(inCl?' · даёт класс':''),inCl||!!(p.perms||{})[x.fld]); }).join('')+'</div>';
     h+='<div class="lbl">Сетка окладов — разряды по росту</div>'+
       '<table class="gr"><thead><tr><th>Разряд</th><th>Оклад</th><th>Стаж от, мес</th><th class="hm">Нужные навыки</th><th></th></tr></thead><tbody>'+
       (p.grades||[]).map(gradeRow).join('')+'</tbody></table>'+
@@ -163,7 +160,7 @@
     return { id: el.getAttribute('data-id')||undefined,
       name: el.querySelector('.nm').value.trim(), duties: el.querySelector('.du').value,
       stages: [].map.call(el.querySelectorAll('.st:checked'),function(c){return c.value;}),
-      perms: (function(){ var o=[].reduce.call(el.querySelectorAll('.pm:checked'),function(o,c){ o[c.value]=1; return o; },{}); var sv=el.querySelector('.pcls'); if(sv&&+sv.value) o._class=+sv.value; return o; })(),
+      perms: (function(){ var o=[].reduce.call(el.querySelectorAll('.pm:checked'),function(o,c){ o[c.value]=1; return o; },{}); return o; })(),
       grades: [].map.call(el.querySelectorAll('tbody tr'),function(tr){
         return { name: tr.querySelector('.gn').value.trim(), salary: +tr.querySelector('.gs').value||0,
           minMonths: +tr.querySelector('.gm').value||0, skills: tr.querySelector('.gk').value.split(',').map(function(s){return s.trim();}).filter(Boolean) };
