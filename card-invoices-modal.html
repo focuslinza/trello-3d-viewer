@@ -9,7 +9,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
   <script src="./invoice-doc.js?v=2"></script>
-  <script src="./pay-dialog.js?v=7"></script>
+  <script src="./pay-dialog.js?v=8"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; }
     *{box-sizing:border-box}
@@ -57,7 +57,7 @@
     return isDirector().then(function(admin){
       IS_DIRECTOR = admin; CAN_DEL = admin;
       return t.member('id').then(function(me){
-        ME_ID = (me&&me.id)||'';
+        ME_ID = (me&&me.id)||''; window.__msMemberId = ME_ID;
         return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(ME_ID))
           .then(function(r){return r.json();})
           .then(function(j){

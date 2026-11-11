@@ -22,11 +22,14 @@
   // На своей доске он уже есть; в окнах Trello — один раз вставить свою личную ссылку.
   // ВХОД ЧЕРЕЗ TRELLO (решение Асхата, 11.11.2026): учредитель и бухгалтер один раз нажимают
   // «Разрешить» в окне Trello; дальше сервер сам проверяет у Trello, кто подтверждает оплату.
-  var TT = { started: false, api: null, tok: null, ready: Promise.resolve() };
+  var TT = { started: false, api: null, tok: null, mid: null, ready: Promise.resolve() };
   function ttInit() {
     if (TT.started) return; TT.started = true;
     try {
+      if (window.__msMemberId) TT.mid = window.__msMemberId;
       if (!(window.TrelloPowerUp && window.parent !== window)) return;
+      // аккаунт Trello, под которым открыто окно, — по нему сервер узнаёт учредителя и бухгалтера
+      try { window.TrelloPowerUp.iframe().member('id').then(function (m) { if (m && m.id) TT.mid = m.id; }).catch(function () {}); } catch (e) {}
       TT.ready = fetch(W() + '/trello-app-key').then(function (r) { return r.json(); }).then(function (j) {
         if (!j || !j.key) return;
         try {
@@ -41,7 +44,7 @@
     return TT.api.authorize({ scope: 'read', expiration: 'never' }).then(function () { return TT.api.getToken(); }).then(function (t) { TT.tok = t || null; return TT.tok; });
   }
   function TOK() { try { return localStorage.getItem('ms_board_token') || ''; } catch (e) { return ''; } }
-  function hdr() { var h = { 'Content-Type': 'application/json' }; var t = TOK(); if (t) h['X-MS-Token'] = t; if (TT.tok) h['X-Trello-Token'] = TT.tok; return h; }
+  function hdr() { var h = { 'Content-Type': 'application/json' }; var t = TOK(); if (t) h['X-MS-Token'] = t; if (TT.tok) h['X-Trello-Token'] = TT.tok; var mid = TT.mid || window.__msMemberId; if (mid) h['X-Trello-Member'] = mid; return h; }
   function askFounderLink() {
     var v = prompt('Подтверждать оплаты может только учредитель или бухгалтер.\n\nВставьте свою личную ссылку входа (из «Зарплата» → 📱, или ссылку своей доски). Это нужно сделать один раз на этом компьютере.');
     if (!v) return false;
@@ -127,7 +130,7 @@
       }
       var pays = S.payments || [];
       var hasPend = pays.some(function (p) { return !p.voided && !p.confirmed; });
-      if (hasPend && TT.api && !TT.tok) h += '<div style="margin:6px 0 8px;font-size:12.5px;color:var(--muted,#9fadbc)">Подтверждают учредитель и бухгалтер. <button class="b" id="pdTT" type="button" style="padding:3px 9px;font-size:12px">🔑 Войти через Trello</button> — один раз на этом компьютере.</div>';
+      if (false && hasPend && TT.api && !TT.tok) h += '<div style="margin:6px 0 8px;font-size:12.5px;color:var(--muted,#9fadbc)">Подтверждают учредитель и бухгалтер. <button class="b" id="pdTT" type="button" style="padding:3px 9px;font-size:12px">🔑 Войти через Trello</button> — один раз на этом компьютере.</div>';
       if (pays.length) {
         h += '<table>';
         pays.forEach(function (p) {
@@ -177,8 +180,7 @@
         b.onclick = function () {
           var p = (S.payments || []).filter(function (x) { return String(x.id) === b.getAttribute('data-conf'); })[0];
           if (!p || !confirm('Подтвердить, что деньги получены: ' + money(p.amount) + ' ₸ (' + p.methodLabel + (p.person ? ' — ' + p.person : '') + ')?')) return;
-          if (!TT.tok && TT.api) { var e0 = ov.querySelector('#pdE'); if (e0) { e0.style.color = '#e8c07d'; e0.textContent = 'Сначала нажмите «🔑 Войти через Trello» вверху — один раз.'; } return; }
-          if (!TT.tok && !TOK() && !askFounderLink()) return;
+          if (!(TT.mid || window.__msMemberId) && !TT.tok && !TOK() && !askFounderLink()) return;
           post('/order-payment-confirm', { id: p.id });
         };
       });
@@ -205,7 +207,7 @@
       fetch(W() + path, { method: 'POST', headers: hdr(), body: JSON.stringify(body) })
         .then(function (r) { return r.json(); }).then(function (j) {
           busy = false;
-          if (j && j.protected && path.indexOf('confirm') >= 0 && !TT.tok) {
+          if (j && j.protected && path.indexOf('confirm') >= 0 && !TT.tok && !(TT.mid || window.__msMemberId)) {
             // ключ не подошёл (или его нет) — спросить ссылку учредителя и повторить один раз
             try { localStorage.removeItem('ms_board_token'); } catch (x) {}
             if (!body.__retry && askFounderLink()) { body.__retry = 1; if (ok) ok.disabled = false; return post(path, body); }

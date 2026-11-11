@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Счёт на оплату</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script src="./pay-dialog.js?v=7"></script>
+  <script src="./pay-dialog.js?v=8"></script>
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
@@ -145,7 +145,7 @@
   }
   function gateAccess(t){
     return step('аккаунт Trello', t.member('id'), 8000).then(function(m){
-      MY_MEMBER_ID = (m && m.id) || '';
+      MY_MEMBER_ID = (m && m.id) || ''; window.__msMemberId = MY_MEMBER_ID;
       GATE.member = MY_MEMBER_ID;
       return Promise.all([
         permsWithRetry(MY_MEMBER_ID, 1).catch(function(e){ GATE.reason = 'net'; GATE.err = (e && e.message) || String(e); return null; }),
