@@ -110,9 +110,9 @@
       return st;
     }
     function moveSelect(att){
-      var sel=document.createElement('select'); sel.className='mv'; sel.title='В какое изделие входит этот файл';
+      var sel=document.createElement('select'); sel.className='mv'; sel.title='Перенести этот файл в другое изделие';
       var cur=itemOf(att.id);
-      sel.innerHTML='<option value="">— без изделия —</option>'+ITEMS.map(function(it){ return '<option value="'+esc(it.id)+'"'+(cur&&cur.id===it.id?' selected':'')+'>'+esc(it.name)+'</option>'; }).join('');
+      sel.innerHTML='<option value="">→ без изделия</option>'+ITEMS.map(function(it){ return '<option value="'+esc(it.id)+'"'+(cur&&cur.id===it.id?' selected':'')+'>'+(cur&&cur.id===it.id?'':'→ ')+esc(it.name)+'</option>'; }).join('');
       sel.addEventListener('change', function(){
         ITEMS.forEach(function(it){ it.files=(it.files||[]).filter(function(f){ return f!==att.id; }); });
         var to=ITEMS.filter(function(it){ return it.id===sel.value; })[0];
@@ -132,7 +132,8 @@
       if (isZ){ btn.style.background='#8a5a2b'; btn.textContent='Просмотр'; btn.addEventListener('click', function(){ openZzx(att, CARD_ID); }); }
       else { btn.textContent='Открыть / Расчёт'; btn.addEventListener('click', function(){ openViewer(att, CARD_ID); }); }
       row.appendChild(nm);
-      if (ITEMS.length && !isZ) row.appendChild(moveSelect(att));
+      // выбор нужен только когда есть куда перенести: 2+ изделия или файл пока без изделия
+      if (!isZ && (ITEMS.length > 1 || (ITEMS.length && !itemOf(att.id)))) row.appendChild(moveSelect(att));
       row.appendChild(btn); row.appendChild(statusCell(recFor(att), !!itemOf(att.id))); return row;
     }
 
