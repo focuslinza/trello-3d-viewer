@@ -23,7 +23,7 @@
   function TOK() { try { return localStorage.getItem('ms_board_token') || ''; } catch (e) { return ''; } }
   function hdr() { var h = { 'Content-Type': 'application/json' }; var t = TOK(); if (t) h['X-MS-Token'] = t; return h; }
   function askFounderLink() {
-    var v = prompt('Подтверждать оплаты может только учредитель.\n\nВставьте свою личную ссылку входа (из «Зарплата» → 📱, или ссылку своей доски). Это нужно сделать один раз на этом компьютере.');
+    var v = prompt('Подтверждать оплаты может только учредитель или бухгалтер.\n\nВставьте свою личную ссылку входа (из «Зарплата» → 📱, или ссылку своей доски). Это нужно сделать один раз на этом компьютере.');
     if (!v) return false;
     var m = String(v).match(/(?:#mt=|[?&]token=|[?&]bt=)([A-Za-z0-9]{16,})/) || String(v).trim().match(/^([A-Za-z0-9]{16,})$/);
     if (!m) { alert('Не нашёл в ссылке ключ входа. Скопируйте ссылку целиком.'); return false; }
@@ -62,7 +62,7 @@
       var rows = (j && j.rows) || [];
       if (!rows.length) { el.innerHTML = ''; return; }
       el.innerHTML = '<div style="margin:8px 0 12px;padding:10px 12px;border:1px solid #5a4a2a;background:#2b2516;border-radius:10px">' +
-        '<b style="color:#e8c07d">⏳ Оплаты ждут подтверждения учредителя: ' + rows.length + '</b>' +
+        '<b style="color:#e8c07d">⏳ Оплаты ждут подтверждения (учредитель или бухгалтер): ' + rows.length + '</b>' +
         '<div style="font-size:12px;color:var(--muted,#9fadbc);margin:2px 0 6px">Пока оплата не подтверждена, она не считается и заказ в работу не идёт.</div>' +
         rows.map(function (r) {
           return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #3a3322;font-size:13px">' +
@@ -189,11 +189,11 @@
           if (path.indexOf('void') < 0 && path.indexOf('confirm') < 0) {
             // внесли оплату — окно закрываем само, итог показываем коротким сообщением
             var warn = j.pendingConfirm || j.belowGate;
-            close(); toast(j.pendingConfirm ? 'Оплата внесена — ждёт подтверждения учредителя' : j.belowGate ? 'Оплата внесена, но меньше 50% — в работу нельзя' : '✓ Оплата внесена', warn);
+            close(); toast(j.pendingConfirm ? 'Оплата внесена — ждёт подтверждения учредителя или бухгалтера' : j.belowGate ? 'Оплата внесена, но меньше 50% — в работу нельзя' : '✓ Оплата внесена', warn);
             return;
           }
           draw();
-          var e2 = ov.querySelector('#pdE'); if (e2) { e2.style.color = '#4bce97'; e2.textContent = path.indexOf('void') >= 0 ? 'Оплата отменена' : path.indexOf('confirm') >= 0 ? ('✓ Оплата подтверждена' + (j.gate && j.gate.checked && !j.gate.ok ? ', но подтверждено меньше 50% — в работу нельзя' : '')) : (j.pendingConfirm ? 'Оплата внесена — ждёт подтверждения учредителя' : j.belowGate ? 'Оплата внесена, но меньше 50% — в работу нельзя' : '✓ Оплата внесена'); if (j.belowGate || j.pendingConfirm || (j.gate && j.gate.checked && !j.gate.ok)) e2.style.color = '#e8c07d'; }
+          var e2 = ov.querySelector('#pdE'); if (e2) { e2.style.color = '#4bce97'; e2.textContent = path.indexOf('void') >= 0 ? 'Оплата отменена' : path.indexOf('confirm') >= 0 ? ('✓ Оплата подтверждена' + (j.gate && j.gate.checked && !j.gate.ok ? ', но подтверждено меньше 50% — в работу нельзя' : '')) : (j.pendingConfirm ? 'Оплата внесена — ждёт подтверждения учредителя или бухгалтера' : j.belowGate ? 'Оплата внесена, но меньше 50% — в работу нельзя' : '✓ Оплата внесена'); if (j.belowGate || j.pendingConfirm || (j.gate && j.gate.checked && !j.gate.ok)) e2.style.color = '#e8c07d'; }
         }).catch(function (x) { busy = false; if (ok) ok.disabled = false; if (e) { e.style.color = ''; e.textContent = 'Ошибка: ' + (x && x.message || x); } });
     }
     fetch(W() + '/order-payments?cardId=' + encodeURIComponent(cardId)).then(function (r) {
