@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Счёт на оплату</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script src="./pay-dialog.js?v=8"></script>
+  <script src="./pay-dialog.js?v=9"></script>
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
@@ -373,7 +373,7 @@
       ((j&&j.rows)||[]).forEach(function(row){
         if(have[row.id]) return;
         ALL_ORDERS.push({ cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
-          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, noAct:!!row.noAct, cashOnly:!!row.cashOnly, partial:!!row.partial, paidSum:+row.paidSum||0, rest:+row.rest||0, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'', sampleOf:row.sample_card_id||'', mainOf:row.main_card_id||'' });
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, noAct:!!row.noAct, cashOnly:!!row.cashOnly, partial:!!row.partial, unconfirmed:!!row.unconfirmed, paidSum:+row.paidSum||0, rest:+row.rest||0, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'', sampleOf:row.sample_card_id||'', mainOf:row.main_card_id||'' });
         added++;
       });
       return added>0;
@@ -385,7 +385,7 @@
         // taxIncluded: старые заказы считались С НАЛОГОМ внутри суммы — к ним
         // множитель поставщика применять нельзя, иначе налог начислится дважды
         return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
-          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, noAct:!!row.noAct, cashOnly:!!row.cashOnly, partial:!!row.partial, paidSum:+row.paidSum||0, rest:+row.rest||0, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'', sampleOf:row.sample_card_id||'', mainOf:row.main_card_id||'' };
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, noAct:!!row.noAct, cashOnly:!!row.cashOnly, partial:!!row.partial, unconfirmed:!!row.unconfirmed, paidSum:+row.paidSum||0, rest:+row.rest||0, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'', sampleOf:row.sample_card_id||'', mainOf:row.main_card_id||'' };
       });
     }).catch(function(){ return []; });
     // viewerId обязателен — иначе сервер прячет цены и ремонты «исчезают» из счёта
@@ -569,6 +569,7 @@
       html+='<table class="otbl"><thead><tr><th>'+(co.length?'<input type="checkbox" id="ckAll" title="Выбрать все / снять все"'+(allOn?' checked':'')+'>':'')+'</th><th>№</th><th>Заказ</th><th class="num">Кол-во</th>'+(ONLY_REPAIR?'':'<th>Степень</th>')+'<th class="num" title="'+(supplierKey!=='cash'?'С налогом выбранной компании':'Без налога')+'">Сумма</th><th>Счёт</th><th>Оплата</th><th>Сдали</th><th>Акт</th><th>Дата</th><th>История</th><th></th></tr></thead><tbody>';
       function chip(o, field, label, active, title){
         var on=!!o[field];
+        if(field==='paid' && o.unconfirmed && o.paid) return '<span class="chip'+(active?'':' ro')+'" data-id="'+esc(o.cardId)+'" data-f="paid" title="Отмечен «оплачен» раньше, без суммы — не подтверждён учредителем или бухгалтером" style="background:#2c333a;color:#c7d1db;border-color:#5a6470">оплачен? не подтв.</span>';
         if(field==='paid' && o.partial) return '<span class="chip part'+(active?'':' ro')+'" data-id="'+esc(o.cardId)+'" data-f="paid" title="Оплачено '+money(o.paidSum)+' ₸ из '+money(o.total)+' ₸ — остаток '+money(o.rest)+' ₸" style="background:#3d3410;color:#f5cd47;border-color:#7f6a11">'+Math.round(o.rest).toLocaleString('ru-RU')+' ₸</span>';
         return '<span class="chip'+(on?' on':'')+(active?'':' ro')+'" data-id="'+esc(o.cardId)+'" data-f="'+field+'" title="'+esc(title||'')+'">'+(on?'✓ ':'')+label+'</span>';
       }

@@ -143,7 +143,8 @@
         });
         h += '</table>';
       } else if (S.paidFlag) {
-        h += '<div class="sub" style="color:#e8c07d">Заказ отмечен «оплачен» раньше, без суммы. Внесите оплату, чтобы были видны сумма и способ.</div>';
+        h += '<div class="sub" style="color:#e8c07d">Заказ отмечен «оплачен» раньше, без суммы — <b>не подтверждён</b>. Учредитель или бухгалтер: сверьте с банком и подтвердите, либо внесите оплату с суммой и способом.</div>' +
+          '<div style="margin:-4px 0 10px"><button class="b" id="pdLegacy" type="button" style="border-color:#2e5c44;color:#4bce97">✓ Подтвердить: оплачено полностью (' + money(S.total) + ' ₸)</button></div>';
       }
       h += '<div class="row2"><div><div class="lbl">Сумма, ₸ *</div><input type="number" id="pdA" min="0" step="any" value="' + ((S.rest - (S.pendingSum || 0)) > 0 ? Math.round((S.rest - (S.pendingSum || 0)) * 100) / 100 : '') + '"></div>' +
         '<div><div class="lbl">Дата оплаты</div><input type="date" id="pdD" value="' + today() + '"></div></div>' +
@@ -172,6 +173,11 @@
         };
       });
       ov.querySelector('#pdC').onclick = close;
+      var lgb = ov.querySelector('#pdLegacy');
+      if (lgb) lgb.onclick = function () {
+        if (!confirm('Подтвердить, что заказ оплачен полностью: ' + money(S.total) + ' ₸?')) return;
+        post('/order-payment-legacy-confirm', { cardId: cardId });
+      };
       var ttb = ov.querySelector('#pdTT');
       if (ttb) ttb.onclick = function () {
         ttLogin().then(function () { draw(); }).catch(function (x) { var e = ov.querySelector('#pdE'); if (e) e.textContent = 'Вход через Trello не выполнен: ' + (x && x.message || x || 'отменён'); });

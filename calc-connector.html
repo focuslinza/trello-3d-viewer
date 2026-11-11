@@ -27,7 +27,7 @@
         return payMap().then(function(m){
           var v = m[c && c.id]; if (!v) return { text: '', refresh: 60 };
           // яркие значки-картинки (цвета Trello на тёмной теме слишком тусклые)
-          var IC = { g: 'ic-pay-full.png', y: 'ic-pay-part.png', r: 'ic-pay-none.png' }[v[0]];
+          var IC = { g: 'ic-pay-full.png', y: 'ic-pay-part.png', r: 'ic-pay-none.png', u: 'ic-pay-unconf.png' }[v[0]];
           var base = window.location.href.replace(/[^/]*(\?.*)?$/, '');
           return { icon: base + IC + '?v=1', monochrome: false, text: v[2] || '', color: null, title: 'Оплата: ' + v[1], refresh: 60 };
         });

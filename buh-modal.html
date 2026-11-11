@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>Бухгалтерия</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
-  <script src="./pay-dialog.js?v=8"></script>
+  <script src="./pay-dialog.js?v=9"></script>
   <script src="./config.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
@@ -464,6 +464,8 @@
       if(field==='actSigned' && r.noAct) return '<span class="chip on na" title="Наличный расчёт: оплачено 100% и сдали — акт не нужен" style="cursor:default;text-decoration:line-through;text-decoration-color:#4bce97;text-decoration-thickness:2px">акт</span>';
       var on=r[field];
       // оплата: частично — жёлтая с остатком; без внесённой суммы (старые отметки) — «оплачен» как раньше
+      if(field==='paid' && on && r.unconfirmed)
+        return '<span class="chip on part" data-card="'+esc(r.cardId)+'" data-f="paid" title="Отмечен «оплачен» раньше, без суммы. Нажмите — откроется окно оплаты, там учредитель или бухгалтер подтверждает." style="background:#2c333a!important;border-color:#5a6470!important;color:#c7d1db!important">оплачен? не подтв.</span>';
       if(field==='paid' && on && r.partial)
         return '<span class="chip on part" data-card="'+esc(r.cardId)+'" data-f="paid" title="Оплачено '+money(r.paidSum)+' ₸ из '+money(r.total)+' ₸ — остаток '+money(r.rest)+' ₸">'+Math.round(r.rest).toLocaleString('ru-RU')+' ₸</span>';
       return '<span class="chip'+(on?' on':'')+'" data-card="'+esc(r.cardId)+'" data-f="'+field+'">'+(on?'✓ ':'')+label+'</span>';
@@ -475,7 +477,7 @@
     var COLF_OPT={
       client:[['',''],['none','без клиента'],['has','с клиентом']],
       invoiceSent:[['',''],['no','не выслан'],['yes','выслан']],
-      paid:[['',''],['no','не оплачен'],['part','частично'],['yes','оплачен']],
+      paid:[['',''],['no','не оплачен'],['part','частично'],['unconf','не подтверждён'],['yes','оплачен']],
       delivered:[['',''],['no','не сданы'],['yes','сданы']],
       actSigned:[['',''],['no','без акта'],['yes','с актом']]
     };
@@ -487,7 +489,8 @@
       var part=!!r.partial || (!r.paid && +r.paidSum>0);
       if(COLF.paid==='no' && (r.paid || part)) return false;
       if(COLF.paid==='part' && !part) return false;
-      if(COLF.paid==='yes' && (!r.paid || part)) return false;
+      if(COLF.paid==='yes' && (!r.paid || part || r.unconfirmed)) return false;
+      if(COLF.paid==='unconf' && !r.unconfirmed) return false;
       if(COLF.delivered==='no' && r.delivered) return false;
       if(COLF.delivered==='yes' && !r.delivered) return false;
       if(COLF.actSigned==='no' && (r.actSigned||r.noAct)) return false;
