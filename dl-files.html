@@ -28,7 +28,7 @@
     <div class="muted" id="sub"></div>
     <ul id="list"></ul>
     <button id="toFolder" type="button">📁 Скачать в папку</button>
-    <button id="oneByOne" class="alt" type="button">Скачать по одному</button>
+    <button id="chgRoot" class="alt" type="button" style="display:none">Сменить место</button>
     <div id="msg" class="muted"></div>
   </div></div>
   <script>
@@ -52,37 +52,55 @@
     document.getElementById('list').innerHTML = files.map(function(f, i){ return '<li><span>' + esc(saveName(f)) + '</span><span class="st" id="st' + i + '">—</span></li>'; }).join('');
     function st(i, t, cls){ var e = document.getElementById('st' + i); if (e) { e.textContent = t; e.className = 'st' + (cls ? ' ' + cls : ''); } }
     function msg(t){ document.getElementById('msg').textContent = t; }
+    // ОДНО НАЖАТИЕ (решение Асхата, 11.11.2026): «Скачать все» сразу создаёт папку изделия и
+    // кладёт туда файлы. Место для папок (например, Рабочий стол) оператор выбирает ОДИН раз —
+    // браузер запоминает его; дальше папки создаются там без вопросов. Только Chrome/Edge.
     var canFolder = !!window.showDirectoryPicker;
-    if (!canFolder) { document.getElementById('toFolder').style.display = 'none'; msg('Этот браузер не умеет сохранять в выбранную папку — нажмите «Скачать по одному» (файлы попадут в «Загрузки»). В Chrome или Edge можно сразу в папку.'); }
-    else msg('Нажмите «📁 Скачать в папку» и выберите, где создать папку «' + safe(item) + '» (например, Рабочий стол).');
-
-    document.getElementById('toFolder').onclick = function(){
-      var btn = this;
-      window.showDirectoryPicker({ mode: 'readwrite', id: 'ms-operator' }).then(function(root){
-        btn.disabled = true;
-        return root.getDirectoryHandle(safe(item), { create: true }).then(function(dir){
-          var i = 0, ok = 0;
-          function next(){
-            if (i >= files.length) { btn.disabled = false; msg('Готово: ' + ok + ' из ' + files.length + ' в папке «' + safe(item) + '».'); return; }
-            var k = i++, f = files[k]; st(k, 'скачиваю…');
-            return fetch(url(f)).then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
-              .then(function(b){ return dir.getFileHandle(saveName(f), { create: true }).then(function(h){ return h.createWritable().then(function(w){ return w.write(b).then(function(){ return w.close(); }); }); }); })
-              .then(function(){ ok++; st(k, '✓ сохранён', 'ok'); }, function(e){ st(k, 'ошибка: ' + (e && e.message || e), 'err'); })
-              .then(next);
-          }
-          return next();
+    var btnGo = document.getElementById('toFolder'), btnChg = document.getElementById('chgRoot');
+    function idb(){ return new Promise(function(res, rej){ var r = indexedDB.open('ms-dl', 1); r.onupgradeneeded = function(){ r.result.createObjectStore('kv'); }; r.onsuccess = function(){ res(r.result); }; r.onerror = function(){ rej(r.error); }; }); }
+    function getRoot(){ return idb().then(function(db){ return new Promise(function(res){ var q = db.transaction('kv').objectStore('kv').get('root'); q.onsuccess = function(){ res(q.result || null); }; q.onerror = function(){ res(null); }; }); }).catch(function(){ return null; }); }
+    function setRoot(h){ return idb().then(function(db){ return new Promise(function(res){ var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(h, 'root'); tx.oncomplete = function(){ res(); }; tx.onerror = function(){ res(); }; }); }).catch(function(){}); }
+    function saveInto(root){
+      btnGo.disabled = true; btnChg.style.display = 'none';
+      return root.getDirectoryHandle(safe(item), { create: true }).then(function(dir){
+        var i = 0, ok = 0;
+        function next(){
+          if (i >= files.length) { btnGo.disabled = false; btnGo.style.display = 'none'; btnChg.style.display = '';
+            msg('✓ Готово: ' + ok + ' из ' + files.length + ' — в папке «' + safe(item) + '» (внутри «' + root.name + '»). Окно можно закрыть.');
+            if (ok === files.length) setTimeout(function(){ try { window.close(); } catch (e) {} }, 2500);
+            return; }
+          var k = i++, f = files[k]; st(k, 'скачиваю…');
+          return fetch(url(f)).then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+            .then(function(b){ return dir.getFileHandle(saveName(f), { create: true }).then(function(h){ return h.createWritable().then(function(w){ return w.write(b).then(function(){ return w.close(); }); }); }); })
+            .then(function(){ ok++; st(k, '✓ сохранён', 'ok'); }, function(e){ st(k, 'ошибка: ' + (e && e.message || e), 'err'); })
+            .then(next);
+        }
+        msg('Создана папка «' + safe(item) + '» в «' + root.name + '», скачиваю…');
+        return next();
+      }).catch(function(e){ btnGo.disabled = false; msg('Не получилось: ' + (e && e.message || e)); });
+    }
+    function pickRoot(){
+      return window.showDirectoryPicker({ mode: 'readwrite', id: 'ms-operator' }).then(function(root){ return setRoot(root).then(function(){ return root; }); });
+    }
+    function start(fromClick){
+      return getRoot().then(function(root){
+        if (!root) {
+          if (!fromClick) { btnGo.textContent = '📁 Выбрать, где создавать папки (один раз)'; msg('Первый раз: выберите место (например, Рабочий стол) — там будет создана папка «' + safe(item) + '» с файлами. Потом выбирать не придётся.'); return; }
+          return pickRoot().then(saveInto);
+        }
+        return root.queryPermission({ mode: 'readwrite' }).then(function(p){
+          if (p === 'granted') return saveInto(root);
+          if (!fromClick) { btnGo.textContent = '📁 Скачать в «' + root.name + '/' + safe(item) + '»'; btnChg.style.display = ''; msg('Нажмите — браузер один раз спросит разрешение на папку «' + root.name + '» (выберите «Разрешить при каждом посещении», тогда спрашивать больше не будет).'); return; }
+          return root.requestPermission({ mode: 'readwrite' }).then(function(p2){ if (p2 === 'granted') return saveInto(root); return pickRoot().then(saveInto); });
         });
-      }).catch(function(e){ btn.disabled = false; if (e && e.name === 'AbortError') return; msg('Не получилось: ' + (e && e.message || e)); });
-    };
-    document.getElementById('oneByOne').onclick = function(){
-      var i = 0;
-      (function next(){
-        if (i >= files.length) { msg('Отправлено на скачивание: ' + files.length + '. Если браузер спросит «разрешить скачивание нескольких файлов» — нажмите «Разрешить».'); return; }
-        var k = i++, a = document.createElement('a');
-        a.href = url(files[k], true); a.download = saveName(files[k]); document.body.appendChild(a); a.click(); a.remove();
-        st(k, '✓ отправлен', 'ok'); setTimeout(next, 600);
-      })();
-    };
+      }).catch(function(e){ if (e && e.name === 'AbortError') { msg('Отменено.'); return; } msg('Не получилось: ' + (e && e.message || e)); });
+    }
+    if (!canFolder) { btnGo.style.display = 'none'; msg('Этот браузер не умеет создавать папки. Откройте Trello в Google Chrome или Microsoft Edge и нажмите «Скачать все» ещё раз.'); }
+    else {
+      btnGo.onclick = function(){ start(true); };
+      btnChg.onclick = function(){ pickRoot().then(saveInto).catch(function(e){ if (!(e && e.name === 'AbortError')) msg('Не получилось: ' + (e && e.message || e)); }); };
+      start(false);   // место уже выбрано и разрешено — сразу создаём папку и качаем
+    }
   </script>
 </body>
 </html>
