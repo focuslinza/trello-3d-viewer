@@ -7,7 +7,7 @@
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
-  <script src="./invoice-doc.js?v=2"></script>
+  <script src="./invoice-doc.js?v=3"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
@@ -247,7 +247,8 @@
       });
       h+='</tbody></table>';
       h+='<div class="tot">Итого: '+money(total)+'</div>';
-      h+='<div style="text-align:right;font-size:12px;margin-top:2px">В том числе НДС: -</div>';
+      var _nds=(window.INVOICE&&window.INVOICE.ndsFor)?window.INVOICE.ndsFor(sup,total):null;
+      h+='<div style="text-align:right;font-size:12px;margin-top:2px">В том числе НДС: '+(_nds?money(_nds):'-')+'</div>';
       h+='<div style="margin-top:8px;font-size:12.5px">Всего наименований '+items.length+', на сумму '+money(total)+' KZT</div>';
       h+='<div style="font-size:12.5px"><b>Всего к оплате: '+esc((window.INVOICE&&window.INVOICE.rubWords)?window.INVOICE.rubWords(total):'')+'</b></div>';
       h+='<hr style="border:none;border-top:1px solid #b9c2cf;margin:16px 0 6px">';
@@ -315,7 +316,7 @@
       });
       var L=row-1;
       S('AF'+(L+2),'Итого:'); N('AG'+(L+2),total,MONEYZ); M('AG'+(L+2)+':AL'+(L+2));
-      S('AF'+(L+3),'В том числе НДС:'); S('AG'+(L+3),'-'); M('AG'+(L+3)+':AL'+(L+3));
+      S('AF'+(L+3),'В том числе НДС:'); var _nds1=(window.INVOICE&&window.INVOICE.ndsFor)?window.INVOICE.ndsFor(sup,total):null; if(_nds1) N('AG'+(L+3),_nds1,MONEYZ); else S('AG'+(L+3),'-'); M('AG'+(L+3)+':AL'+(L+3));
       S('B'+(L+5),'Всего наименований '+items.length+', на сумму '+money(total)+' KZT'); M('B'+(L+5)+':AM'+(L+5));
       S('B'+(L+6),'Всего к оплате: '+((window.INVOICE&&window.INVOICE.rubWords)?window.INVOICE.rubWords(total):'')); M('B'+(L+6)+':AK'+(L+6));
       S('B'+(L+9),'Исполнитель'); S('G'+(L+9),''); M('G'+(L+9)+':V'+(L+9));
