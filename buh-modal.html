@@ -1073,11 +1073,19 @@
         if(!f||!t2) return; if(f>t2){ var tmp=f; f=t2; t2=tmp; }
         RANGE.from=f; RANGE.to=t2; RANGE.preset='custom'; load();
       };
+      // ПОИСК НЕ ТЕРЯЕТ КУРСОР (урок 11.11.2026): перерисовка таблицы пересоздаёт поле поиска —
+      // запоминаем, что человек печатает и где стоит курсор, и после перерисовки возвращаем всё как было
+      function renderKeepQ(){
+        var a=document.activeElement, was=(a&&a.id==='q'), st=was?a.selectionStart:null, en=was?a.selectionEnd:null;
+        render();
+        var el=document.getElementById('q');
+        if(el && was){ if(el.value!==FILTER) el.value=FILTER; el.focus(); try{ el.setSelectionRange(st==null?el.value.length:Math.min(st,el.value.length), en==null?el.value.length:Math.min(en,el.value.length)); }catch(e){} }
+      }
       var q=document.getElementById('q');
       if(q) q.oninput=function(){
         // перерисовка не на каждую букву, а через 0,2 с после последней
         FILTER=this.value; clearTimeout(window.__qT);
-        window.__qT=setTimeout(function(){ render(); var el=document.getElementById('q'); if(el){ el.focus(); var v=el.value; el.value=''; el.value=v; } }, 200);
+        window.__qT=setTimeout(renderKeepQ, 200);
         clearTimeout(WIDE_TIMER);
         var query=FILTER.trim();
         if(query.length<2){ WIDE_RESULTS=null; return; }
@@ -1086,7 +1094,7 @@
           fetch(WORKER+'/calc-search?q='+encodeURIComponent(query)).then(function(r){return r.json();}).then(function(j){
             if(WIDE_QUERY!==query) return;   // пока ждали ответ, ввод уже изменился
             WIDE_RESULTS=(j&&j.rows)||[];
-            render();
+            renderKeepQ();
           }).catch(function(){});
         },350);
       };
