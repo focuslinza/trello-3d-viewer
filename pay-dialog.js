@@ -126,7 +126,7 @@
     function draw() {
       var h = '<h3>Оплата заказа' + (opts.title ? ' · ' + esc(opts.title) : '') + '</h3>' +
         '<div class="sub">Укажите, сколько оплатили, когда, каким способом и куда.</div>' +
-        '<div class="kp"><div><span>Сумма заказа</span><b>' + money(S.total) + ' ₸</b></div>' +
+        '<div class="kp"><div><span>' + (S.byInvoice ? 'Сумма по счёту' : 'Сумма заказа') + '</span><b>' + money(S.total) + ' ₸</b>' + (S.byInvoice ? '<div style="font-size:11.5px;color:#9fadbc">с налогом · расчёт ' + money(S.calcTotal) + ' ₸</div>' : '') + '</div>' +
         '<div><span>Оплачено (подтв.)</span><b style="color:#4bce97">' + money(S.paidSum) + ' ₸</b>' + (S.pendingSum > 0 ? '<div style="font-size:11.5px;color:#e8c07d">+ ' + money(S.pendingSum) + ' ₸ ждёт подтв.</div>' : '') + '</div>' +
         '<div><span>Остаток</span><b style="color:' + (S.rest > 0 ? '#e8c07d' : '#4bce97') + '">' + money(S.rest) + ' ₸</b></div></div>';
       // В РАБОТУ — ТОЛЬКО ПРИ ОПЛАТЕ ОТ 50% (решение Асхата, 07.11.2026)
@@ -134,7 +134,7 @@
         var _min = 0.5, _paid = (S.payments || []).length ? S.paidSum : (S.paidFlag ? S.total : 0), _pct = Math.round(_paid / S.total * 100);
         var _need = Math.max(0, Math.ceil(S.total * _min - _paid));
         h += _need > 0
-          ? '<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#3a2226;color:#f3b3b3;font-size:13px">⛔ В работу нельзя: подтверждено ' + _pct + '%. Для запуска нужно не меньше 50% — ещё ' + money(_need) + ' ₸.' + (S.pendingSum > 0 ? ' Внесённые, но не подтверждённые оплаты не считаются — их подтверждает учредитель.' : '') + '</div>'
+          ? '<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#3a2226;color:#f3b3b3;font-size:13px">⛔ Пока в работу нельзя: подтверждено ' + _pct + '%. В работу — после подтверждённой оплаты от 50% суммы (от ' + money(Math.ceil(S.total * _min)) + ' ₸).' + (S.pendingSum > 0 ? ' Внесённые, но не подтверждённые оплаты не считаются — их подтверждает учредитель или бухгалтер.' : '') + '</div>'
           : '<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#1c3329;color:#4bce97;font-size:13px">✓ Оплачено ' + _pct + '% — заказ можно запускать в работу.</div>';
       }
       var pays = S.payments || [];
