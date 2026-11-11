@@ -71,6 +71,15 @@
           }
         }
       } catch (e) {}
+      // КТО ДЕЛАЕТ ДЕЙСТВИЕ (11.11.2026): аккаунт Trello открывшего окно — серверу, чтобы узнавать
+      // учредителя и бухгалтера без ссылок. Только для изменений (POST), чтения не трогаем.
+      try {
+        var _mid = MEMBER || window.__msMemberId || '';
+        if (ours && _mid && init && String(init.method || '').toUpperCase() === 'POST') {
+          var _h = init.headers || {};
+          if (!(_h['X-Trello-Member'])) init = Object.assign({}, init, { headers: Object.assign({}, _h, { 'X-Trello-Member': _mid }) });
+        }
+      } catch (e) {}
       // ОПЛАТУ РЕМОНТА ОТМЕЧАЕТ ТОЛЬКО УЧРЕДИТЕЛЬ (07.11.2026): сервер узнаёт его по личному
       // ключу. Ключ берём из памяти браузера; нет или не подошёл — один раз спросить ссылку.
       if (ours && init && FOUNDER_PATHS.indexOf(pth) >= 0) {
@@ -116,7 +125,7 @@
             return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('organization: нет ответа')); }, 1500); })]);
           };
         }
-        if (typeof t.member === 'function') t.member('id', 'fullName').then(function (m) { MEMBER = (m && m.id) || ''; MEMBER_NAME = (m && m.fullName) || ''; }).catch(function () {});
+        if (typeof t.member === 'function') t.member('id', 'fullName').then(function (m) { MEMBER = (m && m.id) || ''; MEMBER_NAME = (m && m.fullName) || ''; if (MEMBER && !window.__msMemberId) window.__msMemberId = MEMBER; }).catch(function () {});
       } catch (e) {}
       return t;
     };
