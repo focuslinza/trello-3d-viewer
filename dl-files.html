@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Скачать файлы изделия</title>
+  <script src="./config.js"></script>
+  <style>
+    :root { --bg:#f4f5f7; --card:#fff; --txt:#172b4d; --muted:#5e6c84; --line:#dfe1e6; --blue:#0c66e4; --ok:#1f845a; --err:#c9372c; }
+    html,body { margin:0; background:var(--bg); color:var(--txt); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; }
+    .wrap { max-width:640px; margin:24px auto; padding:0 16px; }
+    .box { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; }
+    h1 { font-size:18px; margin:0 0 4px; }
+    .muted { color:var(--muted); font-size:13px; }
+    ul { list-style:none; padding:0; margin:12px 0; }
+    li { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-top:1px solid var(--line); font-size:14px; }
+    li .st { font-size:12px; color:var(--muted); white-space:nowrap; }
+    li .st.ok { color:var(--ok); font-weight:600; } li .st.err { color:var(--err); }
+    button { background:var(--blue); color:#fff; border:none; border-radius:6px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer; margin:4px 6px 4px 0; }
+    button.alt { background:#fff; color:var(--blue); border:1px solid var(--blue); }
+    button:disabled { opacity:.5; cursor:default; }
+    #msg { margin-top:10px; font-size:13px; min-height:18px; }
+  </style>
+</head>
+<body>
+  <div class="wrap"><div class="box">
+    <h1 id="ttl">Файлы изделия</h1>
+    <div class="muted" id="sub"></div>
+    <ul id="list"></ul>
+    <button id="toFolder" type="button">📁 Скачать в папку</button>
+    <button id="oneByOne" class="alt" type="button">Скачать по одному</button>
+    <div id="msg" class="muted"></div>
+  </div></div>
+  <script>
+    // СКАЧАТЬ ФАЙЛЫ ИЗДЕЛИЯ (решение Асхата, 11.11.2026): оператор станка скачивает все файлы
+    // изделия разом, без zip — в папку с названием изделия. Браузер не может сам создать папку
+    // в «Загрузках», поэтому оператор один раз выбирает, КУДА (например, рабочий стол), а папку
+    // «название изделия» внутри создаём сами. Где выбор папки не поддерживается (не Chrome/Edge) —
+    // скачиваем по одному, к имени добавляем название изделия.
+    var W = (window.WORKER_URL || '').replace(/\/$/, '');
+    var Q = new URLSearchParams(location.search);
+    var cardId = Q.get('cardId') || '', item = Q.get('item') || 'Изделие';
+    var files = []; try { files = JSON.parse(decodeURIComponent(location.hash.slice(1)) || '[]') || []; } catch (e) { files = []; }
+    function safe(n){ return String(n || '').replace(/[\\\/:*?"<>|]+/g, '_').replace(/\s+$/, '').slice(0, 120) || 'Изделие'; }
+    function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); }
+    // f.fileName — имя файла в Trello (нужно для скачивания), f.name — как назвал инженер (так и сохраняем)
+    function extOf(n){ var m = /\.([a-z0-9]+)$/i.exec(String(n || '')); return m ? m[1].toLowerCase() : ''; }
+    function saveName(f){ var n = safe(f.name || f.fileName), e = extOf(f.fileName || f.name); if (e && extOf(n) !== e) n += '.' + e; return n; }
+    function url(f, save){ return W + '/download?' + new URLSearchParams({ cardId: cardId, attachmentId: f.id, fileName: f.fileName || f.name }).toString() + (save ? '&save=1&as=' + encodeURIComponent(saveName(f)) : ''); }
+    document.getElementById('ttl').textContent = 'Файлы изделия «' + item + '»';
+    document.getElementById('sub').textContent = files.length + ' файл(ов) · папка «' + safe(item) + '»';
+    document.getElementById('list').innerHTML = files.map(function(f, i){ return '<li><span>' + esc(saveName(f)) + '</span><span class="st" id="st' + i + '">—</span></li>'; }).join('');
+    function st(i, t, cls){ var e = document.getElementById('st' + i); if (e) { e.textContent = t; e.className = 'st' + (cls ? ' ' + cls : ''); } }
+    function msg(t){ document.getElementById('msg').textContent = t; }
+    var canFolder = !!window.showDirectoryPicker;
+    if (!canFolder) { document.getElementById('toFolder').style.display = 'none'; msg('Этот браузер не умеет сохранять в выбранную папку — нажмите «Скачать по одному» (файлы попадут в «Загрузки»). В Chrome или Edge можно сразу в папку.'); }
+    else msg('Нажмите «📁 Скачать в папку» и выберите, где создать папку «' + safe(item) + '» (например, Рабочий стол).');
+
+    document.getElementById('toFolder').onclick = function(){
+      var btn = this;
+      window.showDirectoryPicker({ mode: 'readwrite', id: 'ms-operator' }).then(function(root){
+        btn.disabled = true;
+        return root.getDirectoryHandle(safe(item), { create: true }).then(function(dir){
+          var i = 0, ok = 0;
+          function next(){
+            if (i >= files.length) { btn.disabled = false; msg('Готово: ' + ok + ' из ' + files.length + ' в папке «' + safe(item) + '».'); return; }
+            var k = i++, f = files[k]; st(k, 'скачиваю…');
+            return fetch(url(f)).then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+              .then(function(b){ return dir.getFileHandle(saveName(f), { create: true }).then(function(h){ return h.createWritable().then(function(w){ return w.write(b).then(function(){ return w.close(); }); }); }); })
+              .then(function(){ ok++; st(k, '✓ сохранён', 'ok'); }, function(e){ st(k, 'ошибка: ' + (e && e.message || e), 'err'); })
+              .then(next);
+          }
+          return next();
+        });
+      }).catch(function(e){ btn.disabled = false; if (e && e.name === 'AbortError') return; msg('Не получилось: ' + (e && e.message || e)); });
+    };
+    document.getElementById('oneByOne').onclick = function(){
+      var i = 0;
+      (function next(){
+        if (i >= files.length) { msg('Отправлено на скачивание: ' + files.length + '. Если браузер спросит «разрешить скачивание нескольких файлов» — нажмите «Разрешить».'); return; }
+        var k = i++, a = document.createElement('a');
+        a.href = url(files[k], true); a.download = saveName(files[k]); document.body.appendChild(a); a.click(); a.remove();
+        st(k, '✓ отправлен', 'ok'); setTimeout(next, 600);
+      })();
+    };
+  </script>
+</body>
+</html>

@@ -36,6 +36,9 @@
     .ihd .del { background:none; border:none; color:#c9372c; cursor:pointer; font-size:14px; padding:0 4px; }
     .ihd .ttl { flex:1; font-weight:600; }
     .up { background:#e9f2ff; color:#0c66e4; border:1px solid #85b8ff; border-radius:3px; padding:3px 9px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+    .dlb { flex:0 0 auto; display:inline-block; text-decoration:none; background:#e9f2ff; color:#0c66e4; border:1px solid #85b8ff; border-radius:3px; padding:4px 8px; font-size:12px; font-weight:700; }
+    .dlb:hover { background:#cce0ff; }
+    .up.dlall { background:#e3fcef; color:#1f845a; border-color:#7ee2b8; }
     .fdel { flex:0 0 auto; background:none; border:none; color:#8590a2; cursor:pointer; font-size:13px; padding:0 4px; }
     .fdel:hover, .fdel[data-sure="1"] { color:#c9372c; }
     select.mv { flex:0 0 auto; max-width:120px; font-size:11px; padding:2px; border:1px solid rgba(9,30,66,.2); border-radius:3px; color:#172b4d; background:#fff; }
@@ -198,6 +201,21 @@
       });
       return sel;
     }
+    // СКАЧИВАНИЕ ДЛЯ ОПЕРАТОРА СТАНКА (решение Асхата, 11.11.2026): файл — под именем, что дал
+    // инженер; «Скачать все» — все файлы изделия в папку с названием изделия (без zip)
+    function dlUrl(att){
+      var fn=att.fileName||att.name||'';
+      return WORKER+'/download?'+new URLSearchParams({ cardId:CARD_ID, attachmentId:att.id, fileName:fn }).toString()+'&save=1&as='+encodeURIComponent(att.name||fn);
+    }
+    function dlAll(it, list){
+      if(!list.length){ setMsg('В изделии «'+it.name+'» нет файлов'); return; }
+      var data=list.map(function(a){ return { id:a.id, name:a.name||a.fileName||'', fileName:a.fileName||a.name||'' }; });
+      var u=new URL('./dl-files.html', location.href);
+      u.search='?cardId='+encodeURIComponent(CARD_ID)+'&item='+encodeURIComponent(it.name);
+      u.hash=encodeURIComponent(JSON.stringify(data));
+      var w=window.open(u.toString(), '_blank');
+      if(!w) setMsg('Браузер заблокировал окно — разрешите всплывающие окна для trello.com');
+    }
     function fileRow(att, isZ){
       var fileName=att.fileName||att.name||'';
       var row=document.createElement('div'); row.className='row';
@@ -213,7 +231,8 @@
       if (ITEMS.length > 1 || (ITEMS.length && !itemOf(att.id))) row.appendChild(moveSelect(att));
       // галочка для массового переноса — у файлов без изделия
       if (ITEMS.length && !itemOf(att.id)) { var cb=document.createElement('input'); cb.type='checkbox'; cb.className='pick'; cb.setAttribute('data-id', att.id); cb.title='Отметить для переноса'; cb.style.marginRight='4px'; row.insertBefore(cb, row.firstChild); }
-      row.appendChild(btn); row.appendChild(statusCell(recFor(att), !!itemOf(att.id)));
+      var dl=document.createElement('a'); dl.className='dlb'; dl.href=dlUrl(att); dl.target='_blank'; dl.rel='noopener'; dl.textContent='⬇'; dl.title='Скачать файл «'+(att.name||fileName)+'»';
+      row.appendChild(btn); row.appendChild(dl); row.appendChild(statusCell(recFor(att), !!itemOf(att.id)));
       var fx=document.createElement('button'); fx.className='fdel'; fx.type='button'; fx.textContent='✕'; fx.title='Удалить файл с карточки (ошибочно загружен)';
       fx.addEventListener('click', function(){
         if (fx.getAttribute('data-sure')!=='1'){ fx.setAttribute('data-sure','1'); fx.textContent='удалить?'; setTimeout(function(){ if(fx.isConnected){ fx.removeAttribute('data-sure'); fx.textContent='✕'; } }, 3000); return; }
@@ -299,7 +318,9 @@
             ITEMS.splice(idx,1); saveItems().then(draw); });
           var up=document.createElement('button'); up.className='up'; up.type='button'; up.textContent='⬆ Файлы'; up.title='Загрузить DXF/ZZX-детали сразу в изделие «'+it.name+'» (можно выбрать несколько)';
           up.addEventListener('click', function(){ pickAndUpload(it.id); });
-          h.appendChild(nm); h.appendChild(x); h.appendChild(q); h.appendChild(sh); h.appendChild(up); h.appendChild(del);
+          var dla=document.createElement('button'); dla.className='up dlall'; dla.type='button'; dla.textContent='⬇ Скачать все'; dla.title='Скачать все файлы изделия «'+it.name+'» в папку с его названием';
+          dla.addEventListener('click', function(){ dlAll(it, files.filter(function(a){ return (it.files||[]).indexOf(a.id)>=0; })); });
+          h.appendChild(nm); h.appendChild(x); h.appendChild(q); h.appendChild(sh); h.appendChild(up); h.appendChild(dla); h.appendChild(del);
           // перетащить файлы мышкой прямо на изделие
           box.addEventListener('dragover', function(e){ e.preventDefault(); box.style.background='rgba(12,102,228,.06)'; });
           box.addEventListener('dragleave', function(){ box.style.background=''; });
