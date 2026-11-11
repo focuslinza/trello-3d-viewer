@@ -35,6 +35,9 @@
     .ihd input.q { width:58px; text-align:right; }
     .ihd .del { background:none; border:none; color:#c9372c; cursor:pointer; font-size:14px; padding:0 4px; }
     .ihd .ttl { flex:1; font-weight:600; }
+    .up { background:#e9f2ff; color:#0c66e4; border:1px solid #85b8ff; border-radius:3px; padding:3px 9px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+    .fdel { flex:0 0 auto; background:none; border:none; color:#8590a2; cursor:pointer; font-size:13px; padding:0 4px; }
+    .fdel:hover, .fdel[data-sure="1"] { color:#c9372c; }
     select.mv { flex:0 0 auto; max-width:120px; font-size:11px; padding:2px; border:1px solid rgba(9,30,66,.2); border-radius:3px; color:#172b4d; background:#fff; }
   </style>
 </head>
@@ -94,8 +97,81 @@
         .catch(function(e){ setMsg('Ошибка сохранения изделий: '+(e&&e.message||'')); });
     }
     var _msgT=null;
-    function setMsg(tx){ var m=document.getElementById('msg'); if(!m) return; m.textContent=tx||''; clearTimeout(_msgT); if(tx) _msgT=setTimeout(function(){ m.textContent=''; }, 4000); }
+    var LASTMSG='';
+    function setMsg(tx){ LASTMSG=tx||''; var m=document.getElementById('msg'); if(m) m.textContent=LASTMSG; clearTimeout(_msgT); if(tx) _msgT=setTimeout(function(){ LASTMSG=''; var m2=document.getElementById('msg'); if(m2) m2.textContent=''; }, 6000); }
     function editing(){ var a=document.activeElement; return !!(a && (a.tagName==='INPUT' || a.tagName==='SELECT')); }
+
+    // загрузка DXF сразу в изделие (по одному файлу, чтобы не зависало)
+    function uploadFiles(fileList, itemId){
+      var list=[].slice.call(fileList||[]).filter(function(f){ return /\.(dxf|zzx)$/i.test(f.name); });
+      var skipped=(fileList||[]).length-list.length;
+      if(!list.length){ setMsg('Можно загружать только .dxf и .zzx'); return Promise.resolve(); }
+      var i=0, ok=0, errs=[];
+      function next(){
+        if(i>=list.length){
+          setMsg('Загружено '+ok+' из '+list.length+(skipped?(' · пропущено не-DXF: '+skipped):'')+(errs.length?(' · ошибки: '+errs.join('; ')):''));
+          return draw();
+        }
+        var f=list[i++]; setMsg('Загружаю '+i+' из '+list.length+': '+f.name+'…');
+        var fd=new FormData(); fd.append('cardId', CARD_ID); if(itemId) fd.append('itemId', itemId); fd.append('file', f, f.name);
+        return fetch(WORKER+'/card-file-upload', { method:'POST', body: fd })
+          .then(function(r){ return r.json(); })
+          .then(function(j){
+            if(!j||!j.ok) throw new Error((j&&j.error)||'не загружено');
+            ok++; if(Array.isArray(j.items)) ITEMS=j.items;
+            if(!FILES.some(function(a){ return a.id===j.attachment.id; })) FILES.push(j.attachment);
+          })
+          .catch(function(e){ errs.push(f.name+': '+(e&&e.message||'')); })
+          .then(next);
+      }
+      return next();
+    }
+    function pickAndUpload(itemId){
+      var inp=document.createElement('input'); inp.type='file'; inp.multiple=true; inp.accept='.dxf,.zzx';
+      inp.style.display='none'; document.body.appendChild(inp);
+      inp.addEventListener('change', function(){ var fl=inp.files; uploadFiles(fl, itemId).then(function(){ inp.remove(); }); });
+      inp.click();
+    }
+    function deleteFile(att){
+      setMsg('Удаляю '+(att.name||'')+'…');
+      return fetch(WORKER+'/card-file-delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cardId: CARD_ID, attachmentId: att.id }) })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'не удалено');
+          if(Array.isArray(j.items)) ITEMS=j.items;
+          FILES=FILES.filter(function(a){ return a.id!==att.id; }); delete METRICS[att.id];
+          setMsg('Файл удалён'); return draw();
+        })
+        .catch(function(e){ setMsg('Ошибка удаления: '+(e&&e.message||'')); });
+    }
+
+    // РАЗЛОЖИТЬ ПО НАЗВАНИЮ: файл «Шкаф_стенка.dxf» → изделие «Шкаф».
+    // Сравниваем без регистра, пробелов, «_», «-»; при двух подходящих изделиях
+    // берём то, чьё название длиннее совпало; если неясно — файл не трогаем.
+    function norm(x){ return String(x||'').toLowerCase().replace(/ё/g,'е').replace(/\.[a-z0-9]+$/,'').replace(/[^a-zа-я0-9]+/g,''); }
+    function guessItem(att){
+      var fn=norm(att.name||att.fileName), best=null, bestLen=0, tie=false;
+      ITEMS.forEach(function(it){
+        var n=norm(it.name); if(n.length<2 || /^изделие\d*$/.test(n)) return;
+        if(fn.indexOf(n)>=0){ if(n.length>bestLen){ best=it; bestLen=n.length; tie=false; } else if(n.length===bestLen) tie=true; }
+      });
+      return tie?null:best;
+    }
+    // переносим, если по имени файл явно от другого изделия, а к текущему имя не подходит
+    function wantsMove(a){
+      var g=guessItem(a); if(!g) return null; var cur=itemOf(a.id);
+      if(cur===g) return null;
+      if(cur){ var cn=norm(cur.name); if(cn.length>=2 && !/^изделие\d*$/.test(cn) && norm(a.name||a.fileName).indexOf(cn)>=0) return null; }
+      return g;
+    }
+    function autoAssign(){
+      var dx=FILES.filter(isDxf), moved=0;
+      dx.forEach(function(a){ var it=wantsMove(a); if(!it) return;
+        ITEMS.forEach(function(x){ x.files=(x.files||[]).filter(function(f){ return f!==a.id; }); });
+        it.files.push(a.id); moved++; });
+      if(!moved){ setMsg('По названиям не нашёл, куда разложить: в имени файла должно быть название изделия'); return; }
+      saveItems().then(function(){ setMsg('Разложено по названию: '+moved+' файл(ов)'); return draw(); });
+    }
 
     function recFor(att){ return METRICS[att.id] || METRICS['zzx:'+(att.fileName||att.name||'')] || null; }
 
@@ -134,7 +210,14 @@
       row.appendChild(nm);
       // выбор нужен только когда есть куда перенести: 2+ изделия или файл пока без изделия
       if (!isZ && (ITEMS.length > 1 || (ITEMS.length && !itemOf(att.id)))) row.appendChild(moveSelect(att));
-      row.appendChild(btn); row.appendChild(statusCell(recFor(att), !!itemOf(att.id))); return row;
+      row.appendChild(btn); row.appendChild(statusCell(recFor(att), !!itemOf(att.id)));
+      var fx=document.createElement('button'); fx.className='fdel'; fx.type='button'; fx.textContent='✕'; fx.title='Удалить файл с карточки (ошибочно загружен)';
+      fx.addEventListener('click', function(){
+        if (fx.getAttribute('data-sure')!=='1'){ fx.setAttribute('data-sure','1'); fx.textContent='удалить?'; setTimeout(function(){ if(fx.isConnected){ fx.removeAttribute('data-sure'); fx.textContent='✕'; } }, 3000); return; }
+        fx.disabled=true; deleteFile(att);
+      });
+      row.appendChild(fx);
+      return row;
     }
 
     function draw(){
@@ -166,6 +249,18 @@
         ITEMS.push(it); saveItems().then(draw);
       });
       tools.appendChild(addB);
+      if (!ITEMS.length){
+        var upB=document.createElement('button'); upB.className='up'; upB.type='button'; upB.textContent='⬆ Загрузить DXF';
+        upB.addEventListener('click', function(){ pickAndUpload(''); });
+        tools.appendChild(upB);
+      }
+      var freeGuess=ITEMS.length>0 ? dxfs.filter(function(a){ return !!wantsMove(a); }).length : 0;
+      if (freeGuess){
+        var agB=document.createElement('button'); agB.className='tbtn'; agB.type='button'; agB.textContent='Разложить по названию ('+freeGuess+')';
+        agB.title='Файл, в имени которого есть название изделия (например «Шкаф_стенка.dxf»), попадёт в это изделие';
+        agB.addEventListener('click', autoAssign);
+        tools.appendChild(agB);
+      }
       var todo=dxfs.filter(function(a){ return !recFor(a); });
       if (todo.length){
         var qB=document.createElement('button'); qB.className='tbtn go'; qB.type='button';
@@ -177,7 +272,7 @@
         });
         tools.appendChild(qB);
       }
-      var msg=document.createElement('span'); msg.id='msg'; msg.style.cssText='font-size:12px;color:var(--muted);align-self:center';
+      var msg=document.createElement('span'); msg.id='msg'; msg.textContent=LASTMSG; msg.style.cssText='font-size:12px;color:var(--muted);align-self:center';
       tools.appendChild(msg);
       el.appendChild(tools);
 
@@ -197,10 +292,16 @@
           del.addEventListener('click', function(){
             if (del.getAttribute('data-sure')!=='1'){ del.setAttribute('data-sure','1'); del.textContent='удалить?'; setTimeout(function(){ del.removeAttribute('data-sure'); del.textContent='✕'; }, 3000); return; }
             ITEMS.splice(idx,1); saveItems().then(draw); });
-          h.appendChild(nm); h.appendChild(x); h.appendChild(q); h.appendChild(sh); h.appendChild(del);
+          var up=document.createElement('button'); up.className='up'; up.type='button'; up.textContent='⬆ DXF'; up.title='Загрузить DXF-детали сразу в изделие «'+it.name+'» (можно выбрать несколько)';
+          up.addEventListener('click', function(){ pickAndUpload(it.id); });
+          h.appendChild(nm); h.appendChild(x); h.appendChild(q); h.appendChild(sh); h.appendChild(up); h.appendChild(del);
+          // перетащить файлы мышкой прямо на изделие
+          box.addEventListener('dragover', function(e){ e.preventDefault(); box.style.background='rgba(12,102,228,.06)'; });
+          box.addEventListener('dragleave', function(){ box.style.background=''; });
+          box.addEventListener('drop', function(e){ e.preventDefault(); box.style.background=''; uploadFiles(e.dataTransfer.files, it.id); });
           box.appendChild(h);
           var mine=dxfs.filter(function(a){ return (it.files||[]).indexOf(a.id)>=0; });
-          if (!mine.length){ var e=document.createElement('div'); e.className='empty'; e.textContent='Нет файлов — выберите это изделие у нужных DXF ниже.'; box.appendChild(e); }
+          if (!mine.length){ var e=document.createElement('div'); e.className='empty'; e.textContent='Нет файлов — нажмите «⬆ DXF» или перетащите файлы сюда.'; box.appendChild(e); }
           mine.forEach(function(att){ box.appendChild(fileRow(att,false)); });
           el.appendChild(box);
         });
