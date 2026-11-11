@@ -1009,7 +1009,7 @@
         var diff=r.was-r.total;
         msg.style.color='';
         msg.textContent='Подогнано: цены ×'+r.k.toFixed(3)+' · в счёте '+fmt(Math.round(r.total*mult))+' ₸'+(mult>1?(' (в расчёте '+fmt(Math.round(r.total))+' ₸ + '+Math.round((mult-1)*100)+'%)'):'')+
-          ' · по тарифу было '+fmt(Math.round(r.was*mult))+' ₸, уступка '+fmt(Math.round(diff*mult))+' ₸ = '+Math.round(diff/r.was*100)+'%'+' · сдельная — от изменённых цен';
+          ' · по тарифу было '+fmt(Math.round(r.was*mult))+' ₸, '+(diff>=0?('уступка '+fmt(Math.round(diff*mult))+' ₸ = '+Math.round(diff/r.was*100)+'%'):('выше тарифа на '+fmt(Math.round(-diff*mult))+' ₸ (+'+Math.round(-diff/r.was*100)+'%)'));
         if(r.warn){ msg.innerHTML=escHtml(msg.textContent)+'<div style="color:#e8c07d;margin-top:4px">'+escHtml(r.warn)+'</div>'; }
         var rl=document.getElementById('fitRates');
         if(rl) rl.innerHTML = r.rates.map(function(x){ return '<div>'+x.label+': <b>'+fmt(x.from)+'</b> → <b style="color:#e8c07d">'+fmt(x.to)+'</b> ₸/ед</div>'; }).join('');
@@ -1035,9 +1035,17 @@
         var hl=document.getElementById('verHist');
         if(hl) hl.onclick=function(ev){ ev.preventDefault();
           var box=document.getElementById('verBox'); box.style.display=box.style.display==='none'?'':'none';
+          // БЫЛО → СТАЛО (решение Асхата, 11.11.2026): у каждой правки видно сумму до и после
+          var TOT={}; j.history.forEach(function(v){ TOT[+v.version]=+v.total||0; }); if(j.active) TOT[+j.active.version]=+j.active.total||0;
+          var M=function(x){ return Math.round(x||0).toLocaleString('ru-RU'); };
           box.innerHTML=j.history.map(function(v){
-            var lbl=v.status==='deleted'?'удалён':'заменён';
-            return '<div>v'+v.version+' · '+lbl+' '+String(v.replaced_at||'').slice(0,16)+' · '+Math.round(v.total||0).toLocaleString('ru-RU')+' ₸'+(v.reason?(' · '+escHtml(v.reason)):'')+'</div>';
+            var when=String(v.replaced_at||'').slice(0,16).replace('T',' ');
+            if(v.status==='deleted') return '<div>v'+v.version+' · удалён '+when+' · было '+M(v.total)+' ₸'+(v.reason?(' · '+escHtml(v.reason)):'')+'</div>';
+            var nv=+v.version+1, was=+v.total||0, now=TOT[nv];
+            var diff=(now!=null)?(now-was):null;
+            return '<div>v'+v.version+' → v'+nv+' · '+when+' · <b>'+M(was)+' ₸ → '+(now!=null?M(now)+' ₸':'?')+'</b>'+
+              (diff?(' <span style="color:'+(diff>0?'#4bce97':'#f28b82')+'">('+(diff>0?'+':'−')+M(Math.abs(diff))+' ₸)</span>'):(diff===0?' (без изменения суммы)':''))+
+              (v.reason?(' · '+escHtml(v.reason)):'')+'</div>';
           }).join('');
         };
         var dl=document.getElementById('verDel');
