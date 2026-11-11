@@ -554,9 +554,11 @@
           if(!ps.length){ el.innerHTML='Деталей в изготовлении нет.'; return; }
           el.innerHTML=ps.map(function(p){
             var st=p.done?'<b style="color:#4bce97">✅ готово</b>':(p.list?'<span style="color:#e8c07d">'+esc(p.list)+'</span>':'');
-            return '<div style="padding:5px 0;border-bottom:1px solid var(--line);color:var(--txt)">🔧 '+esc(p.title)+(p.qty>1?' — '+p.qty+' шт':'')+' · '+st+
+            var sm=(p.total>0)?(' · <b>'+money(p.total)+' ₸</b>'):' · <span style="color:#e8c07d">сумма не посчитана</span>';
+            return '<div style="padding:5px 0;border-bottom:1px solid var(--line);color:var(--txt)">🔧 '+esc(p.title)+(p.qty>1?' — '+p.qty+' шт':'')+sm+' · '+st+
               (p.url?' · <a href="'+esc(p.url)+'" target="_blank" style="color:#579dff">карточка'+(p.number?' №'+p.number:'')+'</a>':(p.number?' · №'+p.number:''))+'</div>';
-          }).join('');
+          }).join('') + (function(){ var sum=ps.reduce(function(a,p){ return a+(+p.total||0); },0);
+            return sum>0 ? '<div style="padding:6px 0 0;color:var(--muted)">Детали из цеха: <b style="color:var(--txt)">'+money(sum)+' ₸</b> — уже входят в «Итого» ремонта</div>' : ''; })();
         }).catch(function(){ el.textContent='Не удалось загрузить детали'; });
       }
       loadParts();
