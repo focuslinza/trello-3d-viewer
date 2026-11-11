@@ -21,6 +21,13 @@
     textarea{width:100%;resize:vertical}
     .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 5px}
     .chips{display:flex;flex-wrap:wrap;gap:5px 6px}
+    .tree{border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--bg)}
+    .tn{padding:2px 0;position:relative}
+    .tn .tl{display:inline-flex;align-items:baseline;gap:6px;cursor:pointer;font-size:13px;color:var(--muted)}
+    .tn .tl.on{color:#4bce97;font-weight:600}
+    .tn .tl input{accent-color:#4bce97;transform:translateY(1px)}
+    .tn .th{font-weight:400;font-size:11.5px;color:var(--muted)}
+    .tn .tg{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
     .chipcb{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:14px;padding:4px 10px;font-size:12px;cursor:pointer;user-select:none;background:var(--bg);color:var(--muted)}
     .chipcb input{display:none}
     .chipcb.on{border-color:#2e5c44;background:#1c3329;color:#4bce97}
@@ -71,6 +78,51 @@
     {fld:'is_sales_manager',label:'Менеджер продаж',hint:'ему засчитываются заказы с сайта и из воронки продаж (процент — в его карточке)'},
     {fld:'no_timesheet',label:'Не в табеле',hint:'внештатный: агент, подрядчик — не попадает в табель, платим за результат'}
   ];
+  // ДРЕВО ДОСТУПА (решение Асхата, 11.11.2026): этапы и пропуска объединены в одно древо по разделам
+  // системы. Дочерняя ветка работает только вместе с родительской (поставили ребёнка — родитель
+  // ставится сам; сняли родителя — снимаются дети). Выбрали шаблон должности — древо отмечается само.
+  var TREE=[
+    {t:'pm',k:'can_dashboard',label:'Панель руководителя',hint:'финансы, цены, зарплата, табель',kids:[
+      {t:'pm',k:'can_hr',label:'HR кабинет',hint:'личные дела сотрудников'}]},
+    {t:'pm',k:'can_invoice',label:'Бухгалтерия',hint:'заказы, счета, оплаты, зарплаты, ремонт, обеды, брак',kids:[
+      {t:'pm',k:'can_confirm_pay',label:'Подтверждает оплаты',hint:'сверяет с банком; подтверждает и отменяет оплаты'},
+      {t:'pm',k:'can_issue_invoice',label:'Выставляет счета на оплату',hint:'«Счёт на оплату» в карточке заказа'}]},
+    {t:'st',k:'eng',label:'Расчёт заказов (инженер)',hint:'калькулятор, чертежи, DXF, новые заявки, подгонка цены',kids:[
+      {t:'pm',k:'can_see_cost',label:'Видит цены и себестоимость в калькуляторе',hint:'без этого — только итог в счёте'}]},
+    {t:'pm',k:'can_crm',label:'Продажи / CRM',hint:'клиенты, контакты, воронка',kids:[
+      {t:'pm',k:'is_sales_manager',label:'Менеджер продаж (процент с заказов)',hint:'ему засчитываются заказы с сайта и из воронки'}]},
+    {t:'pm',k:'can_supply',label:'Снабжение (полностью)',hint:'закупки, склад, цены материалов, наличные'},
+    {t:'grp',label:'Цех — участки работ',kids:[
+      {t:'st',k:'cut',label:'Резка'},{t:'st',k:'bend',label:'Гибка'},{t:'st',k:'weld',label:'Сварка'},
+      {t:'st',k:'assembly',label:'Сборка / шлейф'},{t:'st',k:'montazh',label:'Монтаж'}]},
+    {t:'pm',k:'can_timesheet',label:'Табель (заполняет)',hint:'бухгалтер видит табель и без этого'},
+    {t:'st',k:'repair',label:'Ремонт',hint:'доска ремонтов',kids:[
+      {t:'pm',k:'can_see_repair_cost',label:'Видит стоимость ремонтов'},
+      {t:'pm',k:'can_issue_repair_invoice',label:'Счета по ремонту'},
+      {t:'pm',k:'is_repair_agent',label:'Агент ремонта (бонус за заявку)'}]},
+    {t:'pm',k:'no_timesheet',label:'Не в табеле (внештатный)',hint:'агент, подрядчик — платим за результат'}
+  ];
+  var TEMPLATES=[
+    {name:'Бухгалтер',duties:'Счета, оплаты (сверка с банком и подтверждение), статусы заказов, проверка зарплат и табеля',pm:['can_invoice','can_confirm_pay','can_issue_invoice','can_see_repair_cost','can_issue_repair_invoice'],st:[]},
+    {name:'Инженер',duties:'Расчёт заказов, чертежи, материалы, оценка ремонтов',pm:['can_see_cost','can_see_repair_cost'],st:['eng','repair']},
+    {name:'Менеджер по продажам',duties:'Клиенты, заявки, счета на оплату, внесение оплат',pm:['can_crm','is_sales_manager','can_issue_invoice'],st:[]},
+    {name:'Начальник цеха',duties:'Производство, сдача, брак и переделки, табель, ремонты',pm:['can_timesheet'],st:['repair']},
+    {name:'Снабженец',duties:'Закупки, склад, цены материалов, наличные',pm:['can_supply'],st:[]},
+    {name:'Рабочий цеха',duties:'Резка, гибка, сварка, сборка, монтаж — по заданиям',pm:[],st:['cut','bend','weld','assembly','montazh']},
+    {name:'Ремонтник / агент ремонта',duties:'Заявки на ремонт, фото, работы, детали',pm:['can_see_repair_cost','is_repair_agent','can_issue_repair_invoice'],st:['repair']}
+  ];
+  function treeHtml(p){
+    var perms=p.perms||{}, stages=p.stages||[];
+    function on(n){ return n.t==='pm' ? !!perms[n.k] : n.t==='st' ? stages.indexOf(n.k)>=0 : false; }
+    function node(n, parentKey, depth){
+      var id=n.t+':'+(n.k||n.label);
+      var row='<div class="tn" style="margin-left:'+(depth*22)+'px">'+
+        (n.t==='grp' ? '<span class="tg">'+esc(n.label)+'</span>' :
+          '<label class="tl'+(on(n)?' on':'')+'" title="'+esc(n.hint||'')+'"><input type="checkbox" class="'+n.t+'" value="'+esc(n.k)+'" data-id="'+esc(id)+'"'+(parentKey?' data-parent="'+esc(parentKey)+'"':'')+(on(n)?' checked':'')+'> '+esc(n.label)+(n.hint?' <span class="th">— '+esc(n.hint)+'</span>':'')+'</label>')+'</div>';
+      return row+(n.kids||[]).map(function(c){ return node(c, n.t==='grp'?parentKey:id, depth+1); }).join('');
+    }
+    return '<div class="tree">'+TREE.map(function(n){ return node(n,null,0); }).join('')+'</div>';
+  }
   // КЛАССЫ ПРОПУСКА (решение Асхата, 09.11.2026): класс — готовый набор прав;
   // сверх класса у должности можно отметить доп. пропуска
   var CLASSES=[
@@ -118,9 +170,7 @@
         '</select> <span title="Скопирует его этапы, права и оклад">ⓘ</span></div>';
     }
     h+='<div class="lbl">Обязанности</div><textarea class="du" rows="2" placeholder="Что делает, за что отвечает">'+esc(p.duties)+'</textarea>';
-    h+='<div class="lbl">Этапы работ</div><div class="chips">'+STAGES.map(function(s){ return chip('st',s.key,s.label,'',(p.stages||[]).indexOf(s.key)>=0); }).join('')+'</div>';
-    var cl=null;   // класс пропуска убран (решение Асхата, 11.11.2026): права отмечаются прямо галочками
-    h+='<div class="lbl">Пропуска (права доступа)</div><div class="chips">'+PERMS.map(function(x){ var inCl=!!(cl&&cl.perms.indexOf(x.fld)>=0); return chip('pm'+(inCl?' incl':''),x.fld,x.label,x.hint+(inCl?' · даёт класс':''),inCl||!!(p.perms||{})[x.fld]); }).join('')+'</div>';
+    h+='<div class="lbl">Доступ по должности (древо) <span style="text-transform:none;letter-spacing:0">· шаблон: <select class="tpl"><option value="">—</option>'+TEMPLATES.map(function(t,i){ return '<option value="'+i+'">'+esc(t.name)+'</option>'; }).join('')+'</select></span></div>'+treeHtml(p);
     h+='<div class="lbl">Сетка окладов — разряды по росту</div>'+
       '<table class="gr"><thead><tr><th>Разряд</th><th>Оклад</th><th>Стаж от, мес</th><th class="hm">Нужные навыки</th><th></th></tr></thead><tbody>'+
       (p.grades||[]).map(gradeRow).join('')+'</tbody></table>'+
@@ -131,8 +181,27 @@
     wire(el);
     return el;
   }
+  function treeSync(el, cb){
+    var all=[].slice.call(el.querySelectorAll('.tree input'));
+    function byId(id){ return all.filter(function(x){ return x.getAttribute('data-id')===id; })[0]; }
+    if(cb){
+      if(cb.checked){ var p=cb.getAttribute('data-parent'); while(p){ var pc=byId(p); if(!pc) break; pc.checked=true; p=pc.getAttribute('data-parent'); } }
+      else { (function down(id){ all.forEach(function(x){ if(x.getAttribute('data-parent')===id){ x.checked=false; down(x.getAttribute('data-id')); } }); })(cb.getAttribute('data-id')); }
+    }
+    all.forEach(function(x){ x.parentNode.classList.toggle('on', x.checked); });
+  }
   function wire(el){
     [].forEach.call(el.querySelectorAll('.chipcb input'),function(cb){ cb.onchange=function(){ this.parentNode.classList.toggle('on',this.checked); }; });
+    [].forEach.call(el.querySelectorAll('.tree input'),function(cb){ cb.onchange=function(){ treeSync(el, this); }; });
+    var tpl=el.querySelector('.tpl');
+    if(tpl) tpl.onchange=function(){
+      var t=TEMPLATES[+tpl.value]; if(!t) return;
+      [].forEach.call(el.querySelectorAll('.tree input.pm'),function(x){ x.checked=t.pm.indexOf(x.value)>=0; });
+      [].forEach.call(el.querySelectorAll('.tree input.st'),function(x){ x.checked=t.st.indexOf(x.value)>=0; });
+      var nm=el.querySelector('.nm'); if(!nm.value.trim()) nm.value=t.name;
+      var du=el.querySelector('.du'); if(!du.value.trim()) du.value=t.duties;
+      treeSync(el, null);
+    };
     var sel=el.querySelector('.pcls');
     if(sel) sel.onchange=function(){
       var cur=collect(el); cur.perms._class=+sel.value||0;
@@ -146,8 +215,9 @@
     var fr=el.querySelector('.from');
     if(fr) fr.onchange=function(){
       var w=WORKERS.filter(function(x){return x.id===fr.value;})[0]; if(!w) return;
-      [].forEach.call(el.querySelectorAll('.st'),function(cb){ cb.checked=(w.stages||[]).indexOf(cb.value)>=0; cb.parentNode.classList.toggle('on',cb.checked); });
-      [].forEach.call(el.querySelectorAll('.pm'),function(cb){ cb.checked=(w[cb.value]==1); cb.parentNode.classList.toggle('on',cb.checked); });
+      [].forEach.call(el.querySelectorAll('.tree input.st'),function(cb){ cb.checked=(w.stages||[]).indexOf(cb.value)>=0; });
+      [].forEach.call(el.querySelectorAll('.tree input.pm'),function(cb){ cb.checked=(w[cb.value]==1); });
+      treeSync(el, null);
       var gs=el.querySelector('.gs'); if(gs && +w.salary>0) gs.value=w.salary;
     };
   }
