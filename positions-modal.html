@@ -99,7 +99,7 @@
     {t:'st',k:'repair',label:'Ремонт',hint:'доска ремонтов',kids:[
       {t:'pm',k:'can_see_repair_cost',label:'Видит стоимость ремонтов'},
       {t:'pm',k:'can_issue_repair_invoice',label:'Счета по ремонту'},
-      {t:'pm',k:'is_repair_agent',label:'Агент ремонта (бонус за заявку)'}]},
+      {t:'pm',k:'is_repair_agent',label:'Агент ремонта — не сотрудник, от завода (бонус за заявку)'}]},
     {t:'pm',k:'no_timesheet',label:'Не в табеле (внештатный)',hint:'агент, подрядчик — платим за результат'}
   ];
   var TEMPLATES=[
@@ -109,7 +109,8 @@
     {name:'Начальник цеха',duties:'Производство, сдача, брак и переделки, табель, ремонты',pm:['can_timesheet'],st:['repair']},
     {name:'Снабженец',duties:'Закупки, склад, цены материалов, наличные',pm:['can_supply'],st:[]},
     {name:'Рабочий цеха',duties:'Резка, гибка, сварка, сборка, монтаж — по заданиям',pm:[],st:['cut','bend','weld','assembly','montazh']},
-    {name:'Ремонтник / агент ремонта',duties:'Заявки на ремонт, фото, работы, детали',pm:['can_see_repair_cost','is_repair_agent','can_issue_repair_invoice'],st:['repair']}
+    {name:'Ремонтник',duties:'Ремонт изделий: работы, фото, детали',pm:[],st:['repair']},
+    {name:'Агент ремонта',duties:'Не сотрудник: человек от завода-клиента, отправляет изделия в ремонт; бонус за оформленную заявку',pm:['is_repair_agent','no_timesheet'],st:['repair']}
   ];
   function treeHtml(p){
     var perms=p.perms||{}, stages=p.stages||[];
