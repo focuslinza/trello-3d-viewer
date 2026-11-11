@@ -19,6 +19,7 @@
   </style>
 </head>
 <body>
+  <div id="payWarn" style="display:none;margin:4px 4px 2px;padding:6px 9px;border-radius:4px;background:#ffeceb;color:#ae2e24;border:1px solid #f87168;font-size:12px;font-weight:600"></div>
   <div id="wrap"><div class="muted">Загрузка…</div></div>
   <script src="./config.js"></script>
   <script>
@@ -73,6 +74,17 @@
       return t.card('id','labels').then(function(c){
         var has = !!((c && c.labels) || []).filter(function(l){ return LBL_PAY_RE.test(String(l && l.name || '')); }).length;
         var was = lblPrev; lblPrev = has;
+        // предупреждение на карточке: метка есть, а подтверждённой оплаты нет (метку не снимаем)
+        var pw = document.getElementById('payWarn');
+        if (!has) { if (pw.style.display !== 'none') { pw.style.display = 'none'; t.sizeTo('body'); } }
+        else if (c && c.id) fetch(WORKER+'/order-payments?cardId='+encodeURIComponent(c.id)).then(function(r){ return r.json(); }).then(function(j){
+          var conf = j && j.ok ? (+j.paidSum || 0) : 0, pend = j && j.ok ? (+j.pendingSum || 0) : 0;
+          if (conf > 0) { pw.style.display = 'none'; }
+          else { pw.style.display = ''; pw.textContent = pend > 0
+              ? '⚠ Метка «Оплата есть»: внесено ' + fmt(pend) + ' ₸, но не подтверждено учредителем или бухгалтером'
+              : '⚠ Метка «Оплата есть», но оплата не внесена и не подтверждена'; }
+          return t.sizeTo('body');
+        }).catch(function(){});
         if (!(has && was === false) || lblBusy || !c || !c.id) return;
         lblBusy = true;
         return fetch(WORKER+'/order-payments?cardId='+encodeURIComponent(c.id)).then(function(r){ return r.json(); }).then(function(j){
@@ -220,7 +232,7 @@
             eb.addEventListener('click', openEarnings);
             row2.appendChild(lbl); row2.appendChild(eb); el.appendChild(row2);
           }
-          if(admin){ addEarningsBtn(); addInvoiceBtn(); addSampleBtn(); return checkSalesLink(true, me).then(function(){ return t.sizeTo('#wrap'); }); }
+          if(admin){ addEarningsBtn(); addInvoiceBtn(); addSampleBtn(); return checkSalesLink(true, me).then(function(){ return t.sizeTo('body'); }); }
           // не админ: кнопки по правам из базы работников. «Заработок по заказу» —
           // начальнику цеха (чип «Панель руководителя» или «Видит стоимость»):
           // именно там расставляются исполнители этапов и их доли.
@@ -235,7 +247,7 @@
             if(j&&(j.canIssueInvoice||j.canInvoice)) addInvoiceBtn();
             if(j&&(j.canDashboard||j.canSeeCost)) addSampleBtn(); // партия по образцу — инженер/начальник цеха
             return checkSalesLink(!!(j&&(j.canDashboard||j.canSeeCost)), me);
-          }).catch(function(){}).then(function(){ if (myGen !== renderGen) return; return t.sizeTo('#wrap'); });
+          }).catch(function(){}).then(function(){ if (myGen !== renderGen) return; return t.sizeTo('body'); });
         });
       });
     });

@@ -82,16 +82,25 @@
   window.renderPendingPayments = function (el, onChange) {
     if (!el) return;
     fetch(W() + '/payments-pending').then(function (r) { return r.json(); }).then(function (j) {
-      var rows = (j && j.rows) || [];
-      if (!rows.length) { el.innerHTML = ''; return; }
+      var rows = (j && j.rows) || [], lab = (j && j.labeled) || [];
+      if (!rows.length && !lab.length) { el.innerHTML = ''; return; }
+      function btn(cardId, number, name) {
+        return '<button type="button" data-pcard="' + esc(cardId) + '" data-ptitle="' + esc((number ? '№' + number + ' ' : '') + String(name || '').slice(0, 40)) + '" style="padding:4px 10px;border-radius:7px;border:1px solid #2e5c44;background:#1c3329;color:#4bce97;cursor:pointer;font-size:12.5px">Открыть</button>';
+      }
       el.innerHTML = '<div style="margin:8px 0 12px;padding:10px 12px;border:1px solid #5a4a2a;background:#2b2516;border-radius:10px">' +
-        '<b style="color:#e8c07d">⏳ Оплаты ждут подтверждения (учредитель или бухгалтер): ' + rows.length + '</b>' +
+        '<b style="color:#e8c07d">⏳ Оплаты ждут подтверждения (учредитель или бухгалтер): ' + (rows.length + lab.length) + '</b>' +
         '<div style="font-size:12px;color:var(--muted,#9fadbc);margin:2px 0 6px">Пока оплата не подтверждена, она не считается и заказ в работу не идёт.</div>' +
         rows.map(function (r) {
           return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #3a3322;font-size:13px">' +
             '<span style="flex:1">' + (r.number ? '№' + esc(r.number) + ' · ' : '') + esc(String(r.name || '').slice(0, 60)) + ' — <b>' + money(r.amount) + ' ₸</b> · ' + esc(r.method) + (r.person ? ' (' + esc(r.person) + ')' : '') +
-            ' <span style="color:var(--muted,#9fadbc)">· ' + esc(r.date) + (r.by ? ' · внёс ' + esc(r.by) : '') + '</span></span>' +
-            '<button type="button" data-pcard="' + esc(r.cardId) + '" data-ptitle="' + esc((r.number ? '№' + r.number + ' ' : '') + String(r.name || '').slice(0, 40)) + '" style="padding:4px 10px;border-radius:7px;border:1px solid #2e5c44;background:#1c3329;color:#4bce97;cursor:pointer;font-size:12.5px">Открыть</button></div>';
+            ' <span style="color:var(--muted,#9fadbc)">· ' + esc(r.date) + (r.by ? ' · внёс ' + esc(r.by) : '') + '</span></span>' + btn(r.cardId, r.number, r.name) + '</div>';
+        }).join('') +
+        lab.map(function (r) {
+          return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #3a3322;font-size:13px">' +
+            '<span style="flex:1">' + (r.number ? '№' + esc(r.number) + ' · ' : '') + esc(String(r.name || '(нет расчёта)').slice(0, 60)) +
+            ' — <b style="color:#f87168">метка «' + esc(r.label || 'Оплата есть') + '», сумма не внесена</b>' +
+            (r.total ? ' · заказ ' + money(r.total) + ' ₸' : '') + (r.legacy ? ' · старая отметка «оплачен»' : '') +
+            ' <span style="color:var(--muted,#9fadbc)">' + (r.by ? '· метку поставил ' + esc(r.by) : '') + (r.at ? ' · ' + esc(r.at) : '') + '</span></span>' + btn(r.cardId, r.number, r.name) + '</div>';
         }).join('') + '</div>';
       [].forEach.call(el.querySelectorAll('[data-pcard]'), function (b) {
         b.onclick = function () { window.openPayDialog({ cardId: b.getAttribute('data-pcard'), title: b.getAttribute('data-ptitle'), onDone: function () { window.renderPendingPayments(el, onChange); if (onChange) onChange(); } }); };

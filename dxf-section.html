@@ -61,7 +61,7 @@
       return t.modal({
         title: (it ? (it.name + ' · ') : '') + (att.name || fileName),
         url: './dxf-viewer.html',
-        args: { cardId: cardId, attachmentId: att.id, fileName: fileName, itemName: it ? it.name : '', queue: queue || [] },
+        args: { cardId: cardId, attachmentId: att.id, fileName: fileName, itemName: it ? it.name : '', itemQty: it ? (+it.qty||1) : 0, queue: queue || [] },
         accentColor: '#172b4d',
         fullscreen: true
       });
@@ -110,7 +110,7 @@
       function next(){
         if(i>=list.length){
           setMsg('Загружено '+ok+' из '+list.length+(skipped?(' · пропущено не-DXF: '+skipped):'')+(errs.length?(' · ошибки: '+errs.join('; ')):''));
-          return draw();
+          return autoPlace().then(draw);
         }
         var f=list[i++]; setMsg('Загружаю '+i+' из '+list.length+': '+f.name+'…');
         var fd=new FormData(); fd.append('cardId', CARD_ID); if(itemId) fd.append('itemId', itemId); fd.append('file', f, f.name);
@@ -267,7 +267,7 @@
         qB.textContent='Рассчитать по очереди ('+todo.length+')';
         qB.title='Откроет нерассчитанные DXF один за другим: сохранили — сразу открывается следующий';
         qB.addEventListener('click', function(){
-          var q=todo.map(function(a){ var it=itemOf(a.id); return { id:a.id, fileName:a.fileName||a.name, name:a.name, itemName: it?it.name:'' }; });
+          var q=todo.map(function(a){ var it=itemOf(a.id); return { id:a.id, fileName:a.fileName||a.name, name:a.name, itemName: it?it.name:'', itemQty: it?(+it.qty||1):0 }; });
           q.shift(); openViewer(todo[0], CARD_ID, q);
         });
         tools.appendChild(qB);
@@ -317,14 +317,46 @@
       return t.sizeTo('#list');
     }
 
+    // ФАЙЛ ВСЕГДА В ИЗДЕЛИИ (решение Асхата, 11.11.2026): тогда «количество» в расчёте DXF
+    // всегда значит «штук на одно изделие».
+    //  · новая карточка (изделий нет и ни один DXF ещё не рассчитан) — создаём изделие
+    //    с названием карточки, количество 1, и кладём туда все DXF;
+    //  · одно изделие — новые DXF сами попадают в него;
+    //  · несколько изделий — раскладываем по названию файла, остальное остаётся «без изделия».
+    // Старые карточки (расчёты есть, изделий нет) не трогаем — считаются по-старому.
+    var CARD_NAME='';
+    function itemNameFromCard(){
+      var n=String(CARD_NAME||'').replace(/^\s*[#№]?\s*\d+\s*[.:\-–—]?\s*/,'').trim();
+      return (n||'Изделие 1').slice(0,60);
+    }
+    function autoPlace(){
+      var dx=FILES.filter(isDxf); if(!dx.length || editing()) return Promise.resolve();
+      var changed=false;
+      if(!ITEMS.length){
+        var anyCalc=dx.some(function(a){ return !!METRICS[a.id]; });
+        if(anyCalc) return Promise.resolve();   // старая карточка
+        ITEMS=[{ id:'i'+Date.now().toString(36), name:itemNameFromCard(), qty:1, files:dx.map(function(a){ return a.id; }) }];
+        changed=true;
+      } else {
+        dx.forEach(function(a){
+          if(itemOf(a.id)) return;
+          if(METRICS[a.id]) return;               // уже рассчитан «без изделия» — не переносим молча
+          var it = ITEMS.length===1 ? ITEMS[0] : guessItem(a);
+          if(it){ it.files.push(a.id); changed=true; }
+        });
+      }
+      if(!changed) return Promise.resolve();
+      return saveItems().then(function(){ setMsg('Файлы разложены по изделиям автоматически'); });
+    }
+
     var rendering=false;
     function render(){
       if (rendering || editing()) return Promise.resolve();
       rendering=true;
-      return t.card('id','attachments').then(function(card){
-        CARD_ID=card.id; FILES=(card.attachments||[]);
+      return t.card('id','attachments','name').then(function(card){
+        CARD_ID=card.id; FILES=(card.attachments||[]); CARD_NAME=card.name||'';
         if (!FILES.filter(isDxf).length && !FILES.filter(isZzx).length) return draw();
-        return loadMetrics(card.id).then(function(m){ METRICS=m; return draw(); });
+        return loadMetrics(card.id).then(function(m){ METRICS=m; return autoPlace(); }).then(draw);
       }).catch(function(err){
         document.getElementById('list').innerHTML='<div class="empty">Ошибка: '+esc(err&&err.message?err.message:'неизвестно')+'</div>';
         return t.sizeTo('#list');
