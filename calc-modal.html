@@ -580,11 +580,12 @@
     // В DXF-расчёте файла quantity = штук НА ОДНО изделие; здесь умножаем на число изделий.
     // Файлы вне изделий считаются как раньше (quantity = на весь заказ).
     var DXF_ITEMS=[];
-    function applyItems(raw, items){
+    function applyItems(raw, items, attNames){
       DXF_ITEMS = Array.isArray(items) ? items : [];
       raw = raw || {};
       if(!DXF_ITEMS.length) return raw;
-      var of={}; DXF_ITEMS.forEach(function(it){ (it.files||[]).forEach(function(f){ of[f]=it; }); });
+      // ZZX хранятся под ключом «zzx:имя файла», а в изделии — id вложения: сопоставляем по имени
+      var of={}; DXF_ITEMS.forEach(function(it){ (it.files||[]).forEach(function(f){ of[f]=it; if(attNames && attNames[f]) of['zzx:'+attNames[f]]=it; }); });
       var out={};
       Object.keys(raw).forEach(function(k){
         var m=raw[k]||{}, it=of[k];
@@ -712,7 +713,7 @@
           fetch(WORKER+'/dxf-get?prune=1&cardId='+encodeURIComponent(ctx.cardId))
             .then(function(r){return r.json();}).then(function(jd){
               if(!jd||!jd.ok) return;
-              dxfMetrics = applyItems(jd.metrics || {}, jd.items);
+              dxfMetrics = applyItems(jd.metrics || {}, jd.items, jd.attNames);
               window.__DXF_STALE = jd.staleCount||0;
               var hint=document.getElementById('dxfHint');
               if(hint && jd.staleCount){ hint.textContent='Пропущены расчёты '+jd.staleCount+' DXF, которых уже нет на карточке — они не попадут в расчёт. Кнопка «🧹 Забыть старые DXF» удалит их насовсем.'; }
@@ -939,7 +940,7 @@
       if(ctx.cardId){
         fetch(WORKER+'/dxf-get?prune=1&cardId='+encodeURIComponent(ctx.cardId))
           .then(function(r){return r.json();})
-          .then(function(jd){ if(jd&&jd.ok) dxfMetrics = applyItems(jd.metrics||{}, jd.items); })
+          .then(function(jd){ if(jd&&jd.ok) dxfMetrics = applyItems(jd.metrics||{}, jd.items, jd.attNames); })
           .catch(function(){})
           .then(function(){
             if(Object.keys(dxfMetrics).length){ doPullFromMetrics(); return; }
@@ -960,7 +961,7 @@
         .then(function(r){return r.json();}).then(function(jd){
           self.disabled=false;
           if(!jd||!jd.ok) throw new Error((jd&&jd.error)||'?');
-          dxfMetrics=applyItems(jd.metrics||{}, jd.items); self.style.display='none';
+          dxfMetrics=applyItems(jd.metrics||{}, jd.items, jd.attNames); self.style.display='none';
           document.getElementById('dxfHint').textContent='Старые DXF забыты ('+(jd.staleCount||0)+'). Нажмите «Загрузить из DXF» — подтянется только то, что есть на карточке.';
           
         }).catch(function(e){ self.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
