@@ -66,6 +66,8 @@
     /* cost hidden for workers without permission */
     body.nocost .lt, body.nocost #brkSec, body.nocost #taxFld, body.nocost #totalBig, body.nocost #totalTax { display:none !important; }
     .nocost input.sp{display:none}
+    /* право «Меняет тарифы резки и гибки» (древо должности): поле тарифа в строке видно и без «Видит стоимость» */
+    body.nocost.canrates input.sp{display:inline-block}
     .nocostNote { color:var(--muted) !important; font-weight:600; }
     .actions button { height:36px; border-radius:4px; font-size:13px; font-weight:600; cursor:pointer; padding:0 16px; border:none; }
     .save { background:#1f845a; color:#fff; }
@@ -1227,6 +1229,7 @@
           .then(function(r){return r.json();})
           .then(function(j){
             if(j && j.found){
+              if(j.canEditRates) document.body.classList.add('canrates');
               var isRepair = EMBED_QS.get('mode')==='repair';
               return applyOk(isRepair ? !!j.canSeeRepairCost : !!j.canSeeCost);
             }
@@ -1238,7 +1241,7 @@
         if(admin) return true;
         return t.member('id').then(function(m){
           return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((m&&m.id)||'')).then(function(r){return r.json();})
-            .then(function(j){ return !!(j&&j.canSeeCost); }).catch(function(){ return false; });
+            .then(function(j){ if(j&&j.canEditRates) document.body.classList.add('canrates'); return !!(j&&j.canSeeCost); }).catch(function(){ return false; });
         });
       }).then(function(canSee){
         CAN_SEE_COST = canSee;
