@@ -487,8 +487,12 @@
         base.forEach(function(b){ b.row._sp.value=Math.round(b.std*k*100)/100; });
         return CALC.compute(gather()).total;
       }
+      // ПОДГОНКА ВВЕРХ БЕЗ ПОТОЛКА ×5 (урок 11.11.2026: в карточке записали малую сумму, реальная
+      // в 5+ раз больше — подогнать было нельзя). Ищем множитель до ×200, но при большом
+      // множителе предупреждаем: возможно, в расчёт внесены не все работы и материалы.
       var lo=0.02, hi=5, t0=totalAt(1);
-      if(totalAt(hi)<target) { totalAt(1); return { ok:false, err:'Сумма слишком большая — не хватает даже при пятикратной цене.' }; }
+      while(totalAt(hi)<target && hi<200) hi*=2;
+      if(totalAt(hi)<target) { totalAt(1); return { ok:false, err:'Сумма слишком большая — даже при ценах ×200 не хватает. Проверьте, все ли работы внесены в расчёт.' }; }
       if(totalAt(lo)>target) { totalAt(1); return { ok:false, err:'Сумма слишком маленькая: даже при минимальных ценах итог выше (материалы и фиксированные строки).' }; }
       for(var i=0;i<40;i++){ var mid=(lo+hi)/2; if(totalAt(mid)<target) lo=mid; else hi=mid; }
       var k=(lo+hi)/2, fin=totalAt(k);
@@ -499,7 +503,7 @@
         else { var mm=CALC.MAT[d.code]; lbl=(mm&&mm.lbl)||d.code; }
         return { label:lbl, from:Math.round(b.std), to:Math.round(b.std*k) };
       });
-      return { ok:true, k:k, total:fin, was:t0, rates:rates };
+      return { ok:true, k:k, total:fin, was:t0, rates:rates, warn: k>3 ? ('⚠ Цены работ подняты в '+k.toFixed(1)+' раза выше тарифа. Если реальный заказ больше — лучше внести недостающие работы и материалы, тогда учёт и зарплаты будут точнее.') : '' };
     }
     var lastResult=null;
     function recompute(){
@@ -1006,6 +1010,7 @@
         msg.style.color='';
         msg.textContent='Подогнано: цены ×'+r.k.toFixed(3)+' · в счёте '+fmt(Math.round(r.total*mult))+' ₸'+(mult>1?(' (в расчёте '+fmt(Math.round(r.total))+' ₸ + '+Math.round((mult-1)*100)+'%)'):'')+
           ' · по тарифу было '+fmt(Math.round(r.was*mult))+' ₸, уступка '+fmt(Math.round(diff*mult))+' ₸ = '+Math.round(diff/r.was*100)+'%'+' · сдельная — от изменённых цен';
+        if(r.warn){ msg.innerHTML=escHtml(msg.textContent)+'<div style="color:#e8c07d;margin-top:4px">'+escHtml(r.warn)+'</div>'; }
         var rl=document.getElementById('fitRates');
         if(rl) rl.innerHTML = r.rates.map(function(x){ return '<div>'+x.label+': <b>'+fmt(x.from)+'</b> → <b style="color:#e8c07d">'+fmt(x.to)+'</b> ₸/ед</div>'; }).join('');
       };
@@ -1032,7 +1037,7 @@
           var box=document.getElementById('verBox'); box.style.display=box.style.display==='none'?'':'none';
           box.innerHTML=j.history.map(function(v){
             var lbl=v.status==='deleted'?'удалён':'заменён';
-            return '<div>v'+v.version+' · '+lbl+' '+String(v.replaced_at||'').slice(0,16)+' · '+Math.round(v.total||0).toLocaleString('ru-RU')+' ₸'+(v.reason?(' · '+esc(v.reason)):'')+'</div>';
+            return '<div>v'+v.version+' · '+lbl+' '+String(v.replaced_at||'').slice(0,16)+' · '+Math.round(v.total||0).toLocaleString('ru-RU')+' ₸'+(v.reason?(' · '+escHtml(v.reason)):'')+'</div>';
           }).join('');
         };
         var dl=document.getElementById('verDel');
