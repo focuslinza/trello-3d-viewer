@@ -47,7 +47,8 @@
     function extOf(n){ var m = /\.([a-z0-9]+)$/i.exec(String(n || '')); return m ? m[1].toLowerCase() : ''; }
     function saveName(f){ var n = safe(f.name || f.fileName), e = extOf(f.fileName || f.name); if (e && extOf(n) !== e) n += '.' + e; return n; }
     function url(f, save){ return W + '/download?' + new URLSearchParams({ cardId: cardId, attachmentId: f.id, fileName: f.fileName || f.name }).toString() + (save ? '&save=1&as=' + encodeURIComponent(saveName(f)) : ''); }
-    document.getElementById('ttl').textContent = 'Файлы изделия «' + item + '»';
+    var kind = (Q.get('kind') || '').toUpperCase();
+    document.getElementById('ttl').textContent = (kind ? 'Все ' + kind + ' изделия «' : 'Файлы изделия «') + item + '»';
     document.getElementById('sub').textContent = files.length + ' файл(ов) · папка «' + safe(item) + '»';
     document.getElementById('list').innerHTML = files.map(function(f, i){ return '<li><span>' + esc(saveName(f)) + '</span><span class="st" id="st' + i + '">—</span></li>'; }).join('');
     function st(i, t, cls){ var e = document.getElementById('st' + i); if (e) { e.textContent = t; e.className = 'st' + (cls ? ' ' + cls : ''); } }
