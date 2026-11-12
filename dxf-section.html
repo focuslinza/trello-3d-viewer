@@ -221,6 +221,14 @@
       var w=window.open(u.toString(), '_blank');
       if(!w) setMsg('Браузер заблокировал окно — разрешите всплывающие окна для trello.com');
     }
+    // ОТКРЫТЬ PDF / КАРТИНКУ / STEP во всплывающем окне Trello (не скачивать; закрывается
+    // крестиком или кликом мимо окна) — решение Асхата, 12.11.2026
+    function openOther(att){
+      var fn=att.fileName||att.name||'', e=getExt(fn||att.url||'');
+      if (e==='.step'||e==='.stp') return t.modal({ title: att.name||fn, url:'./viewer.html', args:{ cardId:CARD_ID, attachmentId:att.id, fileName:fn, isUpload: att.isUpload===false?'0':'1' }, accentColor:'#172b4d', fullscreen:true });
+      if (/^\.(pdf|png|jpe?g|webp|gif|svg|bmp)$/.test(e)) return t.modal({ title: att.name||fn, url:'./file-preview.html', args:{ cardId:CARD_ID, attachmentId:att.id, fileName:fn }, accentColor:'#172b4d', height: 760 });
+      setMsg('«'+(att.name||fn)+'» нельзя показать в окне — скачайте кнопкой ⬇');
+    }
     function fileRow(att, isZ){
       var fileName=att.fileName||att.name||'';
       var isO=isOther(att);
@@ -231,7 +239,7 @@
       var txt=document.createElement('span'); txt.textContent=att.name||fileName;
       nm.appendChild(ext); nm.appendChild(txt);
       var btn=document.createElement('button'); btn.className='btn'; btn.type='button';
-      if (isO){ btn.style.background='#626f86'; btn.textContent='Открыть'; btn.addEventListener('click', function(){ window.open(att.url, '_blank'); }); }
+      if (isO){ btn.style.background='#626f86'; btn.textContent='Открыть'; btn.addEventListener('click', function(){ openOther(att); }); }
       else if (isZ){ btn.style.background='#8a5a2b'; btn.textContent='Просмотр'; btn.addEventListener('click', function(){ openZzx(att, CARD_ID); }); }
       else { btn.textContent='Открыть / Расчёт'; btn.addEventListener('click', function(){ openViewer(att, CARD_ID); }); }
       row.appendChild(nm);
@@ -368,7 +376,8 @@
           box.addEventListener('dragleave', function(){ box.style.background=''; });
           box.addEventListener('drop', function(e){ e.preventDefault(); box.style.background=''; uploadFiles(e.dataTransfer.files, it.id); });
           box.appendChild(h);
-          var mine=files.concat(others).filter(function(a){ return (it.files||[]).indexOf(a.id)>=0; });
+          // сначала модель/чертёж/фото (PDF, STEP, картинки), потом DXF/ZZX — полная картина без прокрутки
+          var mine=others.concat(files).filter(function(a){ return (it.files||[]).indexOf(a.id)>=0; });
           if (!mine.length){ var e=document.createElement('div'); e.className='empty'; e.textContent='Нет файлов — нажмите «⬆ Файлы», перетащите файлы сюда или отметьте их галочкой ниже и перенесите.'; box.appendChild(e); }
           mine.forEach(function(att){ box.appendChild(fileRow(att,isZzx(att))); });
           el.appendChild(box);
