@@ -417,10 +417,20 @@
           if(op) op.onclick=function(){ window.open(r.trello_card_url,'_blank'); };
           var sb=document.getElementById('calcSend');
           if(sb) sb.onclick=function(){
+            // без компании и контактного лица с телефоном — не отправляем (решение Асхата, 12.11.2026)
+            var _cs=document.getElementById('fComp'), cn=document.getElementById('fCompName').value.trim()||((_cs&&_cs.value&&_cs.selectedIndex>=0)?_cs.options[_cs.selectedIndex].text.trim():''), ct=document.getElementById('fContact').value.trim(), ph=document.getElementById('fPhone').value.trim();
+            var miss=[]; if(!cn) miss.push('компания'); if(!ct) miss.push('контактное лицо'); if(ph.replace(/\D/g,'').length<10) miss.push('телефон');
+            if(miss.length){ document.getElementById('calcMsg').textContent='Сначала заполните: '+miss.join(', ');
+              [['fCompName',!cn],['fContact',!ct],['fPhone',miss.indexOf('телефон')>=0]].forEach(function(x){ var el=document.getElementById(x[0]); if(el) el.style.outline=x[1]?'2px solid #e2483d':''; });
+              return; }
             if(!confirm('Отправить лид «'+(r.title||'')+'» на расчёт производству?\nВ Trello появится карточка с файлами лида.')) return;
             sb.disabled=true;
             document.getElementById('calcMsg').textContent='Отправка…';
-            post('/sales-to-calc',{id:r.id, byName:MYNAME}).then(function(j){
+            // сначала сохраняем то, что введено в поля, потом отправляем
+            var body={ id:r.id, title:document.getElementById('fTitle').value.trim()||r.title, companyId:document.getElementById('fComp').value, companyName:cn, contact:ct, phone:ph,
+              amount:+document.getElementById('fAmount').value||0, source:document.getElementById('fSrc').value, sourceCode:document.getElementById('fSrcCode').value.trim(),
+              note:document.getElementById('fNote').value, status:(r.status||'new'), nextAt:document.getElementById('fNext').value||null, byName:MYNAME };
+            post('/sales-save',body).then(function(sv){ if(sv&&sv.error) return sv; r.company_name=cn; r.contact=ct; r.phone=ph; return post('/sales-to-calc',{id:r.id, byName:MYNAME}); }).then(function(j){
               if(j.error){ sb.disabled=false; document.getElementById('calcMsg').textContent=j.error; return; }
               r.trello_card_id=j.cardId; r.trello_card_url=j.cardUrl||''; r.calc_status='sent';
               if(j.attachErrors && j.attachErrors.length) alert('Карточка создана, но часть файлов не прикрепилась:\n'+j.attachErrors.join('\n'));
