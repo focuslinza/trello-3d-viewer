@@ -226,7 +226,7 @@
     function openOther(att){
       var fn=att.fileName||att.name||'', e=getExt(fn||att.url||'');
       if (e==='.step'||e==='.stp') return t.modal({ title: att.name||fn, url:'./viewer.html', args:{ cardId:CARD_ID, attachmentId:att.id, fileName:fn, isUpload: att.isUpload===false?'0':'1' }, accentColor:'#172b4d', fullscreen:true });
-      if (/^\.(pdf|png|jpe?g|webp|gif|svg|bmp)$/.test(e)) return t.modal({ title: att.name||fn, url:'./file-preview.html', args:{ cardId:CARD_ID, attachmentId:att.id, fileName:fn }, accentColor:'#172b4d', height: 760 });
+      if (/^\.(pdf|png|jpe?g|webp|gif|svg|bmp)$/.test(e)) return t.modal({ title: att.name||fn, url:'./file-preview.html?v=3', args:{ cardId:CARD_ID, attachmentId:att.id, fileName:fn }, accentColor:'#172b4d', height: 760 });
       setMsg('«'+(att.name||fn)+'» нельзя показать в окне — скачайте кнопкой ⬇');
     }
     function fileRow(att, isZ){
