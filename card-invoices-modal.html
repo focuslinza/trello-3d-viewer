@@ -26,6 +26,15 @@
     .btn.green{background:var(--green)}
     .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
     .btn.red{background:transparent;border:1px solid #7a3a32;color:#e8a59d}
+    .inv{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:10px;background:#1f2428}
+    .inv-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+    .inv-no{font-weight:700;font-size:15px}
+    .inv-sum{font-weight:700;font-size:17px;white-space:nowrap}
+    .inv-meta{display:flex;flex-wrap:wrap;gap:4px 18px;margin-top:6px;font-size:13px}
+    .inv-sent{margin-top:6px;font-size:12px;color:#4bce97}
+    .inv-unsent{margin-top:6px;font-size:12px;color:#f5cd47}
+    .inv-act{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+    .inv-act .sp{flex:1}
     .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:flex-end;gap:10px}
     .lockbox{background:#3a2320;border:1px solid #7a3a32;border-radius:10px;padding:16px;color:#e8a59d;text-align:center;margin-top:24px}
   </style>
@@ -151,26 +160,25 @@
     if(!ROWS.length){
       h+='<div class="muted">По этому заказу счета ещё не выставлялись. Нажмите «Счёт на оплату» в карточке, скачайте PDF — и счёт появится здесь автоматически.</div>';
     } else {
-      h+='<table><thead><tr><th>№ счёта</th><th>Дата</th><th>Покупатель</th><th class="num">Сумма</th><th>Поставщик</th><th></th></tr></thead><tbody>';
+      // карточки счетов вместо широкой таблицы: всё внутри рамки, кнопки переносятся (12.11.2026)
       ROWS.forEach(function(r,i){
         var supLbl=(r.supplier&&(r.supplier.label||r.supplier.name))||'—';
-        h+='<tr>'+
-          '<td><b>'+esc(r.number)+'</b></td>'+
-          '<td class="small">'+esc(r.dateIso?String(r.dateIso).slice(0,10):String(r.createdAt||'').slice(0,10))+'</td>'+
-          '<td>'+esc((r.buyer&&r.buyer.name)||'—')+(r.sentTo?'<div class="small" style="color:#4bce97">выслан: '+esc(r.sentTo)+(r.sentAt?' · '+esc(String(r.sentAt).slice(0,16).replace("T"," ")):'')+'</div>':'')+(r.archived?'<div class="small" style="color:#e8a59d">аннулирован</div>':'')+'</td>'+
-          '<td class="num">'+money(r.total)+' ₸</td>'+
-          '<td class="small muted">'+esc(supLbl)+'</td>'+
-          '<td style="white-space:nowrap;text-align:right">'+
-            '<button class="btn vw" data-i="'+i+'" type="button" title="Открыть в новом окне без скачивания">Просмотр</button> '+
-            '<button class="btn green dl" data-i="'+i+'" type="button">Скачать PDF</button> '+
-            '<button class="btn ghost ml" data-i="'+i+'" type="button" title="Письмо в Zoho всем, кто у компании получает счета на почту; PDF приложите сами (кнопка «Скачать PDF»)">✉ Письмо</button> '+
-            '<button class="btn ed" data-i="'+i+'" type="button" title="Исправить строки, разделить, выставить остаток или аннулировать — номер счёта не меняется">✎ Изменить</button> '+
+        var dt=r.dateIso?String(r.dateIso).slice(0,10).split('-').reverse().join('.'):String(r.createdAt||'').slice(0,10);
+        h+='<div class="inv">'+
+          '<div class="inv-top"><div><span class="inv-no">Счёт № '+esc(r.number)+'</span><span class="muted"> от '+esc(dt)+'</span></div>'+
+            '<div class="inv-sum">'+money(r.total)+' ₸</div></div>'+
+          '<div class="inv-meta"><span><span class="muted">Покупатель:</span> '+esc((r.buyer&&r.buyer.name)||'—')+'</span><span><span class="muted">Поставщик:</span> '+esc(supLbl)+'</span></div>'+
+          (r.sentTo?'<div class="inv-sent">✓ выслан: '+esc(r.sentTo)+(r.sentAt?' · '+esc(String(r.sentAt).slice(0,16).replace("T"," ")):'')+'</div>':'<div class="inv-unsent">не отмечен как высланный</div>')+
+          '<div class="inv-act">'+
             '<button class="btn green pay" data-i="'+i+'" type="button" title="Отметить оплату заказа: сумма, дата, способ и куда">₸ Оплата</button>'+
-            (CAN_DEL?' <button class="btn red del" data-i="'+i+'" type="button" title="Удалить из журнала">✕</button>':'')+
-          '</td>'+
-        '</tr>';
+            '<button class="btn vw" data-i="'+i+'" type="button" title="Открыть в новом окне без скачивания">Просмотр</button>'+
+            '<button class="btn ghost dl" data-i="'+i+'" type="button">⬇ PDF</button>'+
+            '<button class="btn ghost ml" data-i="'+i+'" type="button" title="Письмо в Zoho всем, кто у компании получает счета на почту; PDF приложите сами (кнопка «⬇ PDF»)">✉ Письмо</button>'+
+            '<button class="btn ghost ed" data-i="'+i+'" type="button" title="Исправить строки, разделить, выставить остаток или аннулировать — номер счёта не меняется">✎ Изменить</button>'+
+            (CAN_DEL?'<span class="sp"></span><button class="btn red del" data-i="'+i+'" type="button" title="Удалить (запись останется в истории счетов)">✕ Удалить</button>':'')+
+          '</div>'+
+        '</div>';
       });
-      h+='</tbody></table>';
       h+='<div class="small muted" style="margin-top:10px">PDF собирается заново из сохранённых данных счёта — он идентичен тому, что скачивался при выставлении.</div>';
     }
     h+='</div>';
