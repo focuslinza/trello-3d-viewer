@@ -44,7 +44,18 @@
     return TT.api.authorize({ scope: 'read', expiration: 'never' }).then(function () { return TT.api.getToken(); }).then(function (t) { TT.tok = t || null; return TT.tok; });
   }
   function TOK() { try { return localStorage.getItem('ms_board_token') || ''; } catch (e) { return ''; } }
-  function hdr() { var h = { 'Content-Type': 'application/json' }; var t = TOK(); if (t) h['X-MS-Token'] = t; if (TT.tok) h['X-Trello-Token'] = TT.tok; var mid = TT.mid || window.__msMemberId; if (mid) h['X-Trello-Member'] = mid; return h; }
+  // кто открыл окно: своё окно Trello, либо родительское окно того же сайта (счёт внутри
+  // «Бухгалтерии» открыт во вложенной рамке — там Trello не отвечает, а родитель знает)
+  function upMid() {
+    var w = window;
+    for (var i = 0; i < 4; i++) {
+      try { if (w.__msMemberId) return w.__msMemberId; } catch (e) { return ''; }
+      if (!w.parent || w.parent === w) break;
+      w = w.parent;
+    }
+    return '';
+  }
+  function hdr() { var h = { 'Content-Type': 'application/json' }; var t = TOK(); if (t) h['X-MS-Token'] = t; if (TT.tok) h['X-Trello-Token'] = TT.tok; var mid = TT.mid || upMid(); if (mid) h['X-Trello-Member'] = mid; return h; }
   function askFounderLink() {
     var v = prompt('Подтверждать оплаты может только учредитель или бухгалтер.\n\nВставьте свою личную ссылку входа (из «Зарплата» → 📱, или ссылку своей доски). Это нужно сделать один раз на этом компьютере.');
     if (!v) return false;

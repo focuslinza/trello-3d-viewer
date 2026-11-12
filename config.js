@@ -74,7 +74,7 @@
       // КТО ДЕЛАЕТ ДЕЙСТВИЕ (11.11.2026): аккаунт Trello открывшего окно — серверу, чтобы узнавать
       // учредителя и бухгалтера без ссылок. Только для изменений (POST), чтения не трогаем.
       try {
-        var _mid = MEMBER || window.__msMemberId || '';
+        var _mid = MEMBER || window.__msMemberId || (function(){ var w = window; for (var i = 0; i < 4; i++) { try { if (w.__msMemberId) return w.__msMemberId; } catch (e) { return ''; } if (!w.parent || w.parent === w) break; w = w.parent; } return ''; })() || '';
         if (ours && _mid && init && String(init.method || '').toUpperCase() === 'POST') {
           var _h = init.headers || {};
           if (!(_h['X-Trello-Member'])) init = Object.assign({}, init, { headers: Object.assign({}, _h, { 'X-Trello-Member': _mid }) });
