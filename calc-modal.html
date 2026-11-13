@@ -995,7 +995,17 @@
     function restore(){
       var src = MODE_REPAIR
         ? fetch(WORKER+'/repair-calc-get?id='+REPAIR_ID).then(function(r){return r.json();}).then(function(j){ return (j&&j.ok&&j.calc)||null; })
-        : t.get('card','shared','calcData',null);
+        // РАСЧЁТ ИЗ БАЗЫ (урок 13.11.2026, карточка 3765, 62 DXF/ZZX): данные карточки Trello
+        // вмещают только 4096 символов — большой расчёт туда не влезал, и при открытии
+        // калькулятор показывал пустоту/старую версию. Главный источник теперь база.
+        : fetch(WORKER+'/calc-get?id='+encodeURIComponent(ctx.cardId||'')).then(function(r){return r.json();})
+            .then(function(j){
+              var row=j&&j.ok&&j.row; var inp=row&&row.inputs;
+              if(typeof inp==='string'){ try{ inp=JSON.parse(inp); }catch(e){ inp=null; } }
+              if(inp && (inp.operations||inp.materials||inp.components)) return { inputs: inp };
+              return t.get('card','shared','calcData',null);
+            })
+            .catch(function(){ return t.get('card','shared','calcData',null); });
       return src.then(function(d){
         if(!d || !d.inputs) { return; }
         var i=d.inputs;
@@ -1236,7 +1246,9 @@
         return out;
       }).then(function(out){
         if(!out || !out.ok) throw new Error((out&&out.error)||'не записано');
-        return t.set('card','shared','calcData',calcData).catch(function(){}).then(function(){ return out; });
+        // в данные карточки — только итог (лимит Trello 4096 символов); весь расчёт — в базе
+        var cd=calcData; try{ if(JSON.stringify(calcData).length>3800) cd={ subtotal:calcData.subtotal, taxRate:calcData.taxRate, taxAmount:calcData.taxAmount, total:calcData.total, savedAt:calcData.savedAt, inDb:true }; }catch(e){}
+        return t.set('card','shared','calcData',cd).catch(function(){}).then(function(){ return out; });
       }).then(function(out){
         msg.className='msg ok';
         msg.textContent='Сохранено: версия '+(out.version||1)+

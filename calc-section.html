@@ -114,7 +114,14 @@
       }).then(function(){
         // list (status) is optional — fire-and-forget so it can never block the chain
         try { t.list('name').then(function(l){ CARD.status=(l&&l.name)||''; }).catch(function(){}); } catch(e){}
-        return t.get('card','shared','calcData', null);
+        // итог берём из базы (там весь расчёт), а данные карточки — только если база молчит
+        var fromCard = t.get('card','shared','calcData', null).catch(function(){ return null; });
+        if (!CARD.id) return fromCard;
+        return fetch(WORKER+'/calc-get?id='+encodeURIComponent(CARD.id)).then(function(r){ return r.json(); }).then(function(j){
+          var row = j && j.ok && j.row;
+          if (row && row.total != null && !row.hidden) return { total: +row.total, taxRate: +row.tax_rate || 0, savedAt: row.updated_at };
+          return fromCard;
+        }).catch(function(){ return fromCard; });
       }).then(function(d){
         if (myGen !== renderGen) return; // устарело — подоспела более новая перерисовка
         var el=document.getElementById('wrap');
