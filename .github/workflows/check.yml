@@ -1,11 +1,36 @@
 name: Проверка окон системы
-on: [push, workflow_dispatch]
+# После каждой заливки: окна проходят проверку → версия помечается «последняя рабочая»
+# (метка known-good). Не проходят → сайт сам возвращается к последней рабочей версии
+# (решение Асхата, 14.11.2026: система сама хранит рабочую версию и откатывается при сбое).
+on:
+  push: { branches: [main] }
+  workflow_dispatch:
+concurrency: { group: check, cancel-in-progress: false }
+permissions: { contents: write }
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: cd tests && npm install --no-audit --no-fund
-      - run: node tests/run.mjs
+      - name: Проверка окон
+        id: t
+        run: |
+          if node tests/run.mjs; then echo "ok=1" >> $GITHUB_OUTPUT; else echo "ok=0" >> $GITHUB_OUTPUT; fi
+      - name: Пометить как последнюю рабочую версию
+        if: steps.t.outputs.ok == '1'
+        run: git tag -f known-good HEAD && git push -f origin known-good
+      - name: Вернуть последнюю рабочую версию
+        if: steps.t.outputs.ok == '0'
+        run: |
+          git config user.name "watchdog"; git config user.email "watchdog@users.noreply.github.com"
+          if git rev-parse known-good >/dev/null 2>&1 && [ "$(git rev-parse known-good)" != "$(git rev-parse HEAD)" ]; then
+            git revert --no-edit known-good..HEAD || { git revert --abort || true; git checkout known-good -- . ; git commit -qam "Возврат последней рабочей версии (проверка окон не прошла)"; }
+            git push origin HEAD:main
+            curl -s -m 30 -X POST "https://trello-3d-viewer.azhanbos.workers.dev/watchdog-report" -H 'Content-Type: application/json' \
+              -d '{"kind":"rollback","text":"окна системы не прошли проверку после обновления — возвращена прежняя версия окон"}' || true
+          fi
+          exit 1
