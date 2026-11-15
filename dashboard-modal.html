@@ -861,9 +861,11 @@
             : '<button class="btn" id="brdToDb" type="button" style="border-color:#2e5c44;color:#9ee6bd">Переключить на свою базу →</button>')+
         ' <span id="brdModeMsg" class="muted"></span></div></div>';
       b.innerHTML=h;
-      var t=encodeURIComponent(tok());
-      document.getElementById('brdOpenTrello').href='https://mes.ttms.kz/board?token='+t;
-      document.getElementById('brdOpenDb').href='https://mes.ttms.kz/board?token='+t+'&db=1';
+      var setLinks=function(tk){ var t=encodeURIComponent(tk||''); var a1=document.getElementById('brdOpenTrello'), a2=document.getElementById('brdOpenDb');
+        if(a1) a1.href='https://mes.ttms.kz/board?token='+t; if(a2) a2.href='https://mes.ttms.kz/board?token='+t+'&db=1'; };
+      setLinks(tok());
+      // в окне Trello личной ссылки нет — берём её у сервера (он узнаёт руководителя по аккаунту Trello)
+      if(!tok()) fetch(WORKER+'/my-board-token').then(function(r){return r.json()}).then(function(j){ if(j&&j.ok&&j.token) setLinks(j.token); }).catch(function(){});
       var imp=document.getElementById('brdImport');
       // ИМПОРТ ПОРЦИЯМИ (урок 09.2026: один большой вызов упирался в лимит
       // Cloudflare «Too many API requests») — идём этапами, показывая прогресс
