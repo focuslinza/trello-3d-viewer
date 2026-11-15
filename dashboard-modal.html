@@ -97,6 +97,9 @@
       <!-- «Цели» убраны (решение Асхата, 11.2026) -->
       <div class="tab" id="goalsBtn" data-sec="1" style="display:none">Цели</div>
       <div class="tab" id="settingsBtn" data-sec="1" title="Своя доска, здоровье системы, резервные копии">Настройки</div>
+      <!-- «Доступ» и «Заявки» перенесены сюда из шапки своей доски (решение Асхата, 15.11.2026) -->
+      <div class="tab" id="accessBtn" data-sec="1" title="Какие колонки доски видит каждый работник">Доступ</div>
+      <div class="tab" id="reqBtn" data-sec="1" title="Заявки сотрудников на вход в систему">Заявки</div>
       <!-- входят в «Настройки», отдельными вкладками не показываются -->
       <div class="tab" id="boardBtn" data-sec="1" data-inset="1" style="display:none">Своя доска</div>
       <div class="tab" id="healthBtn" data-sec="1" data-inset="1" style="display:none">Здоровье</div>
@@ -1159,6 +1162,7 @@
     // нет ни одного раздела «Настроек» — вкладку прячем
     var anySet=['boardBtn','healthBtn','backupBtn'].some(function(id){ var e=document.getElementById(id); return e && !e.__msDenied; });
     if(!anySet) st.style.display='none';
+    reqCount();
     var first=TABS.filter(function(x){ return x.style.display!=='none'; })[0];
     if(first) openTab(first);
   }
@@ -1178,6 +1182,91 @@
     var tbClose=function(){ ov.remove(); };
     document.getElementById('tbBack').onclick=tbClose;
     document.getElementById('tbX').onclick=tbClose;
+  };
+  // ===== ДОСТУП К КОЛОНКАМ и ЗАЯВКИ НА ВХОД (перенесены из шапки своей доски, 15.11.2026) =====
+  // личная ссылка руководителя: из памяти браузера (своя доска) или у сервера (окно Trello — узнаёт по аккаунту)
+  var _bossTok='';
+  function bossTok(){
+    var l=''; try{ l=localStorage.getItem('ms_board_token')||''; }catch(e){}
+    if(l) return Promise.resolve(l);
+    if(_bossTok) return Promise.resolve(_bossTok);
+    return new Promise(function(res){ var n=0; (function ask(){
+      fetch(WORKER+'/my-board-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(function(r){return r.json();})
+        .then(function(j){ if(j&&j.ok&&j.token){ _bossTok=j.token; res(j.token); } else if(++n<5) setTimeout(ask,1200); else res(''); })
+        .catch(function(){ if(++n<5) setTimeout(ask,1200); else res(''); }); })(); });
+  }
+  function secPage(title){
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;overflow:auto;color:var(--txt)';
+    ov.innerHTML='<div style="max-width:760px;margin:0 auto;padding:16px"><div style="font-weight:700;font-size:16px;color:#e6edf3;margin-bottom:10px">'+title+'</div><div class="secBody muted">Загрузка…</div></div>';
+    document.body.appendChild(ov); adaptOverlay(ov);
+    return ov.querySelector('.secBody');
+  }
+  var SEL_CSS='background:#22272b;border:1px solid #3a444f;color:#dfe5ec;border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;max-width:100%';
+  document.getElementById('accessBtn').onclick=function(){
+    var body=secPage('⚙ Доступ к колонкам доски');
+    bossTok().then(function(tk){
+      return fetch(WORKER+'/board-access?token='+encodeURIComponent(tk)).then(function(r){return r.json();}).then(function(j){
+        if(j.error){ body.textContent=j.error; return; }
+        var wopts=''; j.workers.forEach(function(x){ wopts+='<option value="'+esc(x.id)+'">'+esc(x.name)+(j.access[x.id]?' — видит '+j.access[x.id].length+' кол.':'')+'</option>'; });
+        body.classList.remove('muted');
+        body.innerHTML='<div class="muted" style="margin-bottom:10px">Отметьте, какие колонки видит работник. Ни одной галочки — видит все. Руководителя это не ограничивает.</div>'+
+          '<select id="acW" style="'+SEL_CSS+';width:100%;margin-bottom:12px">'+wopts+'</select>'+
+          '<div id="acL" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:14px"></div>'+
+          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn" id="acSave" type="button" style="background:#1f6ce8;border-color:#1f6ce8;color:#fff">Сохранить</button>'+
+          '<button class="btn" id="acAll" type="button">Снять все галочки (полный доступ)</button><span id="acMsg" class="muted"></span></div>';
+        var sel=document.getElementById('acW'), L=document.getElementById('acL'), msg=document.getElementById('acMsg');
+        function fill(){ var cur=j.access[sel.value]||[]; L.innerHTML='';
+          j.lists.forEach(function(l){ var lab=document.createElement('label'); lab.style.cssText='display:flex;gap:8px;align-items:center;cursor:pointer;padding:6px 8px;border:1px solid #2e3947;border-radius:8px';
+            lab.innerHTML='<input type="checkbox" class="acC" value="'+esc(l.id)+'"'+(cur.indexOf(l.id)>=0?' checked':'')+'> '+esc(l.name); L.appendChild(lab); }); msg.textContent=''; }
+        sel.onchange=fill; fill();
+        document.getElementById('acAll').onclick=function(){ [].forEach.call(L.querySelectorAll('.acC'),function(c){ c.checked=false; }); };
+        document.getElementById('acSave').onclick=function(){
+          var ids=[].map.call(L.querySelectorAll('.acC:checked'),function(c){ return c.value; }); msg.textContent='Сохраняю…';
+          fetch(WORKER+'/board-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tk,workerId:sel.value,listIds:ids})})
+            .then(function(r){return r.json();}).then(function(j2){ if(j2.error){ msg.textContent=j2.error; return; }
+              if(ids.length) j.access[sel.value]=ids; else delete j.access[sel.value];
+              var o=sel.options[sel.selectedIndex]; o.textContent=o.textContent.replace(/ — видит.*$/,'')+(ids.length?' — видит '+ids.length+' кол.':'');
+              msg.textContent='Сохранено ✓ '+(ids.length?('видит '+ids.length+' кол.'):'полный доступ'); })
+            .catch(function(e){ msg.textContent='Нет связи: '+(e&&e.message||e); });
+        };
+      });
+    }).catch(function(e){ body.textContent='Нет связи с сервером: '+(e&&e.message||e); });
+  };
+  function reqCount(){ // число новых заявок — прямо на вкладке
+    var b=document.getElementById('reqBtn'); if(!b || b.__msDenied) return;
+    bossTok().then(function(tk){ return fetch(WORKER+'/auth-requests?token='+encodeURIComponent(tk)).then(function(r){return r.json();}); })
+      .then(function(j){ var n=(j&&j.ok&&j.requests)?j.requests.length:0; b.textContent='Заявки'+(n?' ('+n+')':''); b.style.color=n?'#f5cd47':''; }).catch(function(){});
+  }
+  document.getElementById('reqBtn').onclick=function(){
+    var body=secPage('🔑 Заявки на вход');
+    bossTok().then(function(tk){
+      function load(){
+        fetch(WORKER+'/auth-requests?token='+encodeURIComponent(tk)).then(function(r){return r.json();}).then(function(D){
+          if(!D||!D.ok){ body.textContent=(D&&D.error)||'ошибка'; return; }
+          body.classList.remove('muted');
+          var hist=(D.recent&&D.recent.length)?'<div class="muted" style="margin-top:16px">Недавние решения:</div>'+D.recent.map(function(r){ return '<div class="muted">'+(r.status==='approved'?'✅':'⛔')+' '+esc(r.name)+' · '+esc(String(r.decided_at||'').slice(0,16).replace('T',' '))+'</div>'; }).join(''):'';
+          var top='<div class="muted" style="margin-bottom:10px">Работник подаёт заявку на mes.ttms.kz/register. Выберите, кто это из списка (или «новый работник») и должность. После одобрения он входит на mes.ttms.kz/login по телефону и паролю.</div>';
+          if(!D.requests.length){ body.innerHTML=top+'<div>Новых заявок нет.</div>'+hist+'<div id="rqMsg" style="margin-top:10px"></div>'; reqCount(); return; }
+          body.innerHTML=top+D.requests.map(function(r){
+            var wo='<option value="">➕ новый работник</option>'+D.workers.map(function(w){ return '<option value="'+esc(w.id)+'"'+(r.worker_id===w.id?' selected':'')+'>'+esc(w.name)+(w.hasLogin?' (вход уже есть)':'')+'</option>'; }).join('');
+            var po='<option value="">— не менять —</option>'+D.positions.map(function(p){ return '<option value="'+esc(p.id)+'"'+(p.name===r.want_position?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('');
+            return '<div style="border:1px solid #2e3947;border-radius:10px;padding:12px;margin-bottom:10px"><b style="color:#e6edf3;font-size:15px">'+esc(r.name)+'</b> <span class="muted">· +'+esc(r.phone)+' · хочет: '+esc(r.want_position||'—')+(r.note?' · «'+esc(r.note)+'»':'')+' · '+esc(String(r.created_at).slice(0,16))+'</span>'+
+              '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:8px"><div style="flex:1;min-width:180px"><div class="muted small">Кто это</div><select id="rqW'+r.id+'" style="'+SEL_CSS+';width:100%">'+wo+'</select></div>'+
+              '<div style="flex:1;min-width:180px"><div class="muted small">Должность</div><select id="rqP'+r.id+'" style="'+SEL_CSS+';width:100%">'+po+'</select></div>'+
+              '<button class="btn rqOk" data-id="'+r.id+'" type="button" style="background:#2e7d57;border-color:#2e7d57;color:#fff">Одобрить</button>'+
+              '<button class="btn rqNo" data-id="'+r.id+'" type="button" style="border-color:#e2574c;color:#ff8f85">Отклонить</button></div></div>'; }).join('')+hist+'<div id="rqMsg" style="margin-top:10px"></div>';
+          function dec(id,ok){ var msg=document.getElementById('rqMsg'); msg.textContent='Сохраняю…';
+            fetch(WORKER+'/auth-decide?token='+encodeURIComponent(tk),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:+id,approve:!!ok,workerId:ok?document.getElementById('rqW'+id).value:'',positionId:ok?document.getElementById('rqP'+id).value:''})})
+              .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ load(); setTimeout(function(){ var m=document.getElementById('rqMsg'); if(m){ m.style.color='#7be0a8'; m.textContent=j.note||'Готово'; } },400); } else { msg.style.color='#ff8f85'; msg.textContent=(j&&j.error)||'ошибка'; } })
+              .catch(function(){ msg.style.color='#ff8f85'; msg.textContent='нет связи'; }); }
+          [].forEach.call(body.querySelectorAll('.rqOk'),function(b){ b.onclick=function(){ dec(b.getAttribute('data-id'),1); }; });
+          [].forEach.call(body.querySelectorAll('.rqNo'),function(b){ b.onclick=function(){ dec(b.getAttribute('data-id'),0); }; });
+          reqCount();
+        }).catch(function(){ body.textContent='нет связи'; });
+      }
+      load();
+    });
   };
   document.getElementById('backupBtn').onclick=function(){
     var ov=document.createElement('div');
@@ -1265,6 +1354,7 @@
     var gb=document.getElementById('goalsBtn'); if(gb) gb.style.display='none';
     // «Настройки» (своя доска, здоровье, копии) — только учредителю (решение Асхата, 08.11.2026)
     var stb=document.getElementById('settingsBtn'); if(stb){ stb.style.display='none'; stb.__msDenied=1; }
+    var rqb=document.getElementById('reqBtn'); if(rqb){ rqb.style.display='none'; rqb.__msDenied=1; }
     t.member('id').then(function(me){
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||''))
         .then(function(r){return r.json();});
