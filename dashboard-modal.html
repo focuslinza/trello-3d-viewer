@@ -862,8 +862,8 @@
         ' <span id="brdModeMsg" class="muted"></span></div></div>';
       b.innerHTML=h;
       var t=encodeURIComponent(tok());
-      document.getElementById('brdOpenTrello').href=WORKER+'/board?token='+t;
-      document.getElementById('brdOpenDb').href=WORKER+'/board?token='+t+'&db=1';
+      document.getElementById('brdOpenTrello').href='https://mes.ttms.kz/board?token='+t;
+      document.getElementById('brdOpenDb').href='https://mes.ttms.kz/board?token='+t+'&db=1';
       var imp=document.getElementById('brdImport');
       // ИМПОРТ ПОРЦИЯМИ (урок 09.2026: один большой вызов упирался в лимит
       // Cloudflare «Too many API requests») — идём этапами, показывая прогресс
