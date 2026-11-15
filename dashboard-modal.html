@@ -865,7 +865,8 @@
         if(a1) a1.href='https://mes.ttms.kz/board?token='+t; if(a2) a2.href='https://mes.ttms.kz/board?token='+t+'&db=1'; };
       setLinks(tok());
       // в окне Trello личной ссылки нет — берём её у сервера (он узнаёт руководителя по аккаунту Trello)
-      if(!tok()) fetch(WORKER+'/my-board-token').then(function(r){return r.json()}).then(function(j){ if(j&&j.ok&&j.token) setLinks(j.token); }).catch(function(){});
+      // (POST: аккаунт Trello сервер получает только с изменяющими запросами; повторяем, пока аккаунт не определится)
+      if(!tok()){ var tries=0; (function ask(){ fetch(WORKER+'/my-board-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){ if(j&&j.ok&&j.token) setLinks(j.token); else if(++tries<6) setTimeout(ask,1500); }).catch(function(){ if(++tries<6) setTimeout(ask,1500); }); })(); }
       var imp=document.getElementById('brdImport');
       // ИМПОРТ ПОРЦИЯМИ (урок 09.2026: один большой вызов упирался в лимит
       // Cloudflare «Too many API requests») — идём этапами, показывая прогресс
