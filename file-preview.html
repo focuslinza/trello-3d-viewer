@@ -2,31 +2,141 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Просмотр файла</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
-    html,body { margin:0; height:100%; background:#1d2125; color:#dee4ea; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; }
-    #wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
-    #wrap.pdf { display:block; overflow:auto; padding:10px 0; }
-    #wrap.pdf canvas { display:block; margin:0 auto 10px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.4); max-width:calc(100% - 20px); height:auto; }
-    iframe { width:100%; height:100%; border:0; background:#fff; }
-    img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
-    #msg { padding:24px; text-align:center; font-size:14px; color:#9fadbc; }
+    html,body { margin:0; height:100%; background:#1d2125; color:#dee4ea; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; overflow:hidden; }
+    #view { position:fixed; inset:0; overflow:auto; touch-action:pan-x pan-y; }
+    #view.grab { cursor:grab; } #view.grabbing { cursor:grabbing; user-select:none; }
+    #stage { display:flex; flex-direction:column; box-sizing:border-box; min-width:100%; min-height:100%; width:max-content; padding:10px; }
+    #stage canvas { display:block; margin:0 auto 10px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.4); height:auto; flex:0 0 auto; }
+    #stage img { display:block; margin:auto; flex:0 0 auto; height:auto; -webkit-user-drag:none; user-select:none; }
+    #msg { margin:auto; padding:24px; text-align:center; font-size:14px; color:#9fadbc; }
+    #zb { position:fixed; right:16px; bottom:16px; display:none; align-items:center; gap:2px; background:rgba(40,46,51,.94); border-radius:8px; padding:4px; box-shadow:0 0 0 1px rgba(255,255,255,.1),0 6px 18px rgba(0,0,0,.5); z-index:5; }
+    #zb.on { display:flex; }
+    #zb button { height:34px; min-width:34px; border:none; border-radius:6px; background:none; color:#dee4ea; font-size:18px; font-family:inherit; cursor:pointer; padding:0 8px; }
+    #zb button:hover { background:rgba(255,255,255,.12); }
+    #zb .pc { font-size:13px; min-width:58px; font-variant-numeric:tabular-nums; }
+    #zb .fit { font-size:13px; }
+    @media (max-width:520px){ #zb { right:50%; transform:translateX(50%); bottom:12px; } }
   </style>
 </head>
 <body>
-  <div id="wrap"><div id="msg">Загрузка…</div></div>
+  <div id="view"><div id="stage"><div id="msg">Загрузка…</div></div></div>
+  <div id="zb">
+    <button type="button" id="zout" title="Уменьшить (Ctrl + колесо мыши)">−</button>
+    <button type="button" class="pc" id="zpc" title="Вернуть 100%">100%</button>
+    <button type="button" id="zin" title="Увеличить (Ctrl + колесо мыши)">+</button>
+    <button type="button" class="fit" id="zfit" title="Вписать в окно">По размеру окна</button>
+  </div>
   <script>
     // ПРОСМОТР PDF / КАРТИНКИ во всплывающем окне (решение Асхата, 12.11.2026): не скачивается,
     // закрывается крестиком или кликом мимо окна. Для скачивания — кнопка ⬇ в списке файлов.
+    // МАСШТАБ (решение Асхата, 16.11.2026): кнопки − / + , Ctrl+колесо мыши, двойной клик,
+    // на телефоне — двумя пальцами; при увеличении лист можно двигать мышью.
     var t = window.TrelloPowerUp.iframe();
     var W = (window.WORKER_URL || '').replace(/\/$/, '');
     var fileName = t.arg('fileName') || '', ext = String(fileName).toLowerCase().split('.').pop();
     var src = W + '/download?' + new URLSearchParams({ cardId: t.arg('cardId'), attachmentId: t.arg('attachmentId'), fileName: fileName }).toString() + '&inline=1';
-    var wrap = document.getElementById('wrap');
+    var view = document.getElementById('view'), stage = document.getElementById('stage');
+    var Z = 1, ZMIN = 0.25, ZMAX = 8;
+    var items = [];          // { el, fitW, page?, v0?, rs? }
+    var reTimer = null, dragged = false;
+
+    function msg(text){ stage.innerHTML = '<div id="msg"></div>'; document.getElementById('msg').textContent = text; }
+    function availW(){ return Math.max(200, view.clientWidth - 20); }
+    function availH(){ return Math.max(200, view.clientHeight - 20); }
+    function label(){ document.getElementById('zpc').textContent = Math.round(Z * 100) + '%'; }
+    function layout(){
+      items.forEach(function(it){ it.el.style.width = Math.round(it.fitW * Z) + 'px'; });
+      view.classList.toggle('grab', view.scrollWidth > view.clientWidth + 2 || view.scrollHeight > view.clientHeight + 2);
+      label();
+      // PDF перерисовываем чётче под новый масштаб (с задержкой, чтобы не тормозило при прокрутке колеса)
+      if (items.length && items[0].page) { clearTimeout(reTimer); reTimer = setTimeout(rerender, 220); }
+    }
+    // масштаб с сохранением точки под курсором / пальцами
+    function zoomTo(nz, cx, cy){
+      nz = Math.min(ZMAX, Math.max(ZMIN, nz)); if (!items.length || Math.abs(nz - Z) < 1e-4) return;
+      var r = view.getBoundingClientRect();
+      if (cx == null) { cx = r.left + view.clientWidth / 2; cy = r.top + view.clientHeight / 2; }
+      var px = view.scrollLeft + (cx - r.left), py = view.scrollTop + (cy - r.top);
+      var k = nz / Z; Z = nz; layout();
+      view.scrollLeft = px * k - (cx - r.left); view.scrollTop = py * k - (cy - r.top);
+    }
+    function step(dir, cx, cy){ zoomTo(dir > 0 ? Z * 1.25 : Z / 1.25, cx, cy); }
+    document.getElementById('zin').onclick = function(){ step(1); };
+    document.getElementById('zout').onclick = function(){ step(-1); };
+    document.getElementById('zpc').onclick = function(){ zoomTo(1); };
+    document.getElementById('zfit').onclick = function(){ zoomTo(1); view.scrollLeft = 0; view.scrollTop = 0; };
+    // Ctrl + колесо (и щипок на тачпаде — он приходит как wheel с ctrlKey)
+    view.addEventListener('wheel', function(e){
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault(); zoomTo(Z * Math.exp(-e.deltaY * 0.0025), e.clientX, e.clientY);
+    }, { passive: false });
+    window.addEventListener('keydown', function(e){
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); step(1); }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); step(-1); }
+      else if (e.key === '0') { e.preventDefault(); zoomTo(1); }
+    });
+    // двойной клик / двойной тап: увеличить в 2,5 раза в этом месте, повторно — вернуть
+    view.addEventListener('dblclick', function(e){ if (!items.length) return; e.preventDefault(); if (Z > 1.05) zoomTo(1, e.clientX, e.clientY); else zoomTo(2.5, e.clientX, e.clientY); });
+    // перетаскивание мышью, когда лист больше окна
+    var dr = null;
+    view.addEventListener('mousedown', function(e){
+      if (e.button !== 0 || !view.classList.contains('grab')) return;
+      dr = { x: e.clientX, y: e.clientY, sl: view.scrollLeft, st: view.scrollTop }; dragged = false; view.classList.add('grabbing'); e.preventDefault();
+    });
+    window.addEventListener('mousemove', function(e){
+      if (!dr) return; var dx = e.clientX - dr.x, dy = e.clientY - dr.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) dragged = true;
+      view.scrollLeft = dr.sl - dx; view.scrollTop = dr.st - dy;
+    });
+    window.addEventListener('mouseup', function(){ if (dr) { dr = null; view.classList.remove('grabbing'); setTimeout(function(){ dragged = false; }, 0); } });
+    // два пальца на телефоне
+    var pin = null;
+    function tdist(ts){ var a = ts[0], b = ts[1]; return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
+    view.addEventListener('touchstart', function(e){ if (e.touches.length === 2 && items.length) { pin = { d: tdist(e.touches), z: Z }; e.preventDefault(); } }, { passive: false });
+    view.addEventListener('touchmove', function(e){
+      if (!pin || e.touches.length !== 2) return; e.preventDefault();
+      var cx = (e.touches[0].clientX + e.touches[1].clientX) / 2, cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      zoomTo(pin.z * tdist(e.touches) / pin.d, cx, cy);
+    }, { passive: false });
+    view.addEventListener('touchend', function(e){ if (e.touches.length < 2) pin = null; });
+    window.addEventListener('resize', function(){
+      if (!items.length) return;
+      if (items[0].page) items.forEach(function(it){ it.fitW = availW(); });
+      else fitImage();
+      layout();
+    });
+
+    // ---- PDF ----
+    var MAXPX = 16e6; // предел пикселей одного листа — чтобы телефон не падал на большом увеличении
+    function paint(it){
+      var dpr = window.devicePixelRatio || 1, cssW = it.fitW * Z;
+      var sc = cssW * dpr / it.v0.width;
+      var maxSc = Math.sqrt(MAXPX / (it.v0.width * it.v0.height)); if (sc > maxSc) sc = maxSc;
+      if (it.rs && Math.abs(it.rs - sc) / sc < 0.15) return Promise.resolve();
+      it.rs = sc;
+      var vp = it.page.getViewport({ scale: sc });
+      var c = document.createElement('canvas'); c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+      return it.page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(function(){
+        // готовый лист подменяем целиком — без мигания
+        var old = it.el; old.width = c.width; old.height = c.height; old.getContext('2d').drawImage(c, 0, 0);
+      });
+    }
+    var busy = false, again = false;
+    function rerender(){
+      if (busy) { again = true; return; }
+      busy = true; var i = 0;
+      (function next(){
+        if (i >= items.length) { busy = false; if (again) { again = false; rerender(); } return; }
+        paint(items[i++]).then(next, next);
+      })();
+    }
+
     if (ext === 'pdf') {
       // PDF рисуем сами (pdf.js), без встроенного просмотрщика браузера: Edge/Chrome блокируют
       // его внутри окна Trello («Эта страница заблокирована Microsoft Edge»)
@@ -35,31 +145,45 @@
         lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         return lib.getDocument({ data: buf }).promise;
       }).then(function(pdf){
-        wrap.innerHTML = ''; wrap.className = 'pdf';
-        var width = Math.max(320, wrap.clientWidth - 20), n = 1;
+        stage.innerHTML = '';
+        var n = 1;
         function page(){
           if (n > pdf.numPages) return;
           return pdf.getPage(n++).then(function(pg){
-            var v0 = pg.getViewport({ scale: 1 }), sc = width / v0.width, dpr = window.devicePixelRatio || 1;
-            var vp = pg.getViewport({ scale: sc * dpr });
-            var c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height; c.style.width = (vp.width / dpr) + 'px';
-            wrap.appendChild(c);
-            return pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(page);
+            var v0 = pg.getViewport({ scale: 1 });
+            var c = document.createElement('canvas'); stage.appendChild(c);
+            var it = { el: c, fitW: availW(), page: pg, v0: v0, rs: 0 };
+            c.style.width = Math.round(it.fitW * Z) + 'px';
+            items.push(it);
+            document.getElementById('zb').classList.add('on');
+            return paint(it).then(page);
           });
         }
         return page();
-      }).catch(function(e){ wrap.className = ''; wrap.innerHTML = '<div id="msg">Не удалось открыть PDF: ' + String(e && e.message || e) + '</div>'; });
+      }).then(function(){ layout(); })
+        .catch(function(e){ msg('Не удалось открыть PDF: ' + String(e && e.message || e)); });
     } else if (/^(png|jpe?g|webp|gif|svg|bmp)$/.test(ext)) {
       // картинку тоже берём данными (blob), а не прямой ссылкой — так её ничто не блокирует
-      var im = new Image(); im.onload = function(){ wrap.innerHTML = ''; wrap.appendChild(im); };
-      im.onerror = function(){ document.getElementById('msg').textContent = 'Не удалось открыть картинку'; };
+      var im = new Image(); im.draggable = false;
+      im.onload = function(){
+        stage.innerHTML = ''; stage.appendChild(im);
+        items = [{ el: im, fitW: 0 }]; fitImage(); layout();
+        document.getElementById('zb').classList.add('on');
+      };
+      im.onerror = function(){ msg('Не удалось открыть картинку'); };
       fetch(src).then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
         .then(function(b){ im.src = URL.createObjectURL(b); })
-        .catch(function(e){ document.getElementById('msg').textContent = 'Не удалось открыть картинку: ' + (e && e.message || e); });
-      // клик по пустому месту вокруг картинки тоже закрывает окно
-      wrap.addEventListener('click', function(e){ if (e.target === wrap) t.closeModal(); });
+        .catch(function(e){ msg('Не удалось открыть картинку: ' + (e && e.message || e)); });
+      // клик по пустому месту вокруг картинки закрывает окно (если не тащили лист)
+      view.addEventListener('click', function(e){ if (!dragged && (e.target === view || e.target === stage) && Z <= 1.001) t.closeModal(); });
     } else {
-      document.getElementById('msg').textContent = 'Этот тип файла нельзя показать в окне — скачайте его кнопкой ⬇.';
+      msg('Этот тип файла нельзя показать в окне — скачайте его кнопкой ⬇.');
+    }
+    // картинка «по размеру окна»: не больше окна и не больше своего настоящего размера
+    function fitImage(){
+      var im = items[0] && items[0].el; if (!im || !im.naturalWidth) return;
+      var k = Math.min(availW() / im.naturalWidth, availH() / im.naturalHeight, 1);
+      items[0].fitW = im.naturalWidth * k;
     }
   </script>
 </body>
