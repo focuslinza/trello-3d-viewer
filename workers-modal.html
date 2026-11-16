@@ -320,6 +320,31 @@
     // ссылка для WhatsApp и ПИН для входа на цеховом компьютере.
     // токен руководителя (личная ссылка, с которой открыта доска) — нужен сервером
     // для выдачи и смены доступов (урок 10.2026)
+    function loginForm(w, acc){
+      var old=document.getElementById('lgOvl'); if(old) old.remove();
+      var o=document.createElement('div'); o.id='lgOvl';
+      o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;display:flex;align-items:center;justify-content:center;padding:16px';
+      o.innerHTML='<div style="background:#22272b;color:#dfe5ec;border-radius:10px;padding:18px 20px;width:min(380px,100%);box-shadow:0 10px 30px rgba(0,0,0,.5)">'+
+        '<div style="font-weight:700;font-size:15px;margin-bottom:4px">Вход на mes.ttms.kz</div>'+
+        '<div style="font-size:12.5px;color:#9fadbc;margin-bottom:12px">'+String(w.name||'').replace(/</g,'&lt;')+' будет входить по этому телефону и паролю. Старые входы закроются.</div>'+
+        '<div style="font-size:12px;color:#9fadbc">Телефон</div><input id="lgPh" type="tel" placeholder="+7 7xx xxx xx xx" value="'+String(w.phone||'').replace(/"/g,'&quot;')+'" style="width:100%;box-sizing:border-box;margin:4px 0 10px">'+
+        '<div style="font-size:12px;color:#9fadbc">Пароль (не короче 8 знаков)</div><input id="lgPw" type="text" autocomplete="off" style="width:100%;box-sizing:border-box;margin:4px 0 6px">'+
+        '<div id="lgEr" style="color:#fd9891;font-size:12.5px;min-height:16px"></div>'+
+        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="lgNo" type="button">Отмена</button><button id="lgOk" type="button" style="background:#25d366;color:#fff;border-color:#25d366">Сохранить вход</button></div></div>';
+      document.body.appendChild(o);
+      o.addEventListener('click',function(e){ if(e.target===o) o.remove(); });
+      document.getElementById('lgNo').onclick=function(){ o.remove(); };
+      document.getElementById('lgPh').focus();
+      document.getElementById('lgOk').onclick=function(){
+        var b=this, er=document.getElementById('lgEr'); b.disabled=true; er.textContent='';
+        fetch(WORKER+'/worker-login-set',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+          body:JSON.stringify({workerId:w.id, phone:document.getElementById('lgPh').value, password:document.getElementById('lgPw').value, adminToken:ADMIN_TOKEN()})})
+          .then(function(r){return r.json();}).then(function(j){
+            b.disabled=false; if(j.error){ er.textContent=j.error; return; }
+            w.phone=j.phone; w.hasLogin=1; acc.className='acct ok'; acc.textContent='✔ аккаунт · '+j.phone; o.remove(); alert(j.note);
+          }).catch(function(e){ b.disabled=false; er.textContent='Сеть: '+(e&&e.message||e); });
+      };
+    }
     function ADMIN_TOKEN(){ try{ return localStorage.getItem('ms_board_token')||''; }catch(e){ return ''; } }
     // QR рисуется в браузере: личная ссылка не уходит на сторонний сервис
     function drawQr(el, text, size){
@@ -612,6 +637,9 @@
           })
           .catch(function(e){ btn.disabled=false; alert('Сеть: '+(e&&e.message||e)); });
       });
+      // ВХОД НА mes.ttms.kz ЗАДАЁТ РУКОВОДИТЕЛЬ (16.11.2026): клик по «нет аккаунта» / «✔ аккаунт»
+      var acc=card.querySelector('.acct');
+      if(acc){ acc.style.cursor='pointer'; acc.title='Задать или сменить вход: телефон и пароль'; acc.addEventListener('click', function(){ loginForm(w, acc); }); }
       var delBtn=card.querySelector('.del');
       if(delBtn) delBtn.addEventListener('click', function(){ delRow(card); });
       var rst=card.querySelector('.restore');
