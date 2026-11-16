@@ -50,12 +50,17 @@
     .map-links a:active { background: rgba(76,154,255,0.18); }
     .empty-box { padding: 6px 2px; }
     /* одна строка: компания · заказчик · телефон · WhatsApp · Звонок (решение Асхата, 05.11.2026) */
-    .line1 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
-    .line1 .co { font-size: 14px; font-weight: 700; color: var(--txt); }
-    .line1 .nm { font-size: 13px; font-weight: 600; color: var(--txt); }
-    .line1 .num { font-size: 13px; color: var(--muted); white-space: nowrap; }
-    .line1 .sep { color: var(--muted); }
-    .line1 .actions { margin-left: auto; }
+    /* всё в ОДИН ряд, кнопки одного размера (решение Асхата, 16.11.2026): длинные названия обрезаются «…»,
+       на узком экране (телефон) кнопки переносятся вниз отдельной строкой */
+    .line1 { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+    .line1 .co { font-size: 14px; font-weight: 700; color: var(--txt); min-width: 48px; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .line1 .nm { font-size: 13px; font-weight: 600; color: var(--txt); min-width: 48px; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .line1 .num { font-size: 13px; color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
+    .line1 .sep { color: var(--muted); flex: 0 0 auto; }
+    .line1 .actions { margin-left: auto; flex: 0 0 auto; }
+    .line1 .actions a.wa, .line1 .actions a.call, .line1 .actions button.btn { width: 96px; height: 32px; padding: 0; font-size: 12.5px; border: 1px solid transparent; }
+    .line1 .actions a.call { border-color: var(--line); }
+    @media (max-width: 520px) { .line1 { flex-wrap: wrap; } .line1 .actions { margin-left: 0; width: 100%; } .line1 .actions a.wa, .line1 .actions a.call, .line1 .actions button.btn { flex: 1 1 0; width: auto; } }
   </style>
 </head>
 <body>
