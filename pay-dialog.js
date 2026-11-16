@@ -110,7 +110,7 @@
           return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #3a3322;font-size:13px">' +
             '<span style="flex:1">' + (r.number ? '№' + esc(r.number) + ' · ' : '') + esc(String(r.name || '(нет расчёта)').slice(0, 60)) +
             ' — <b style="color:#f87168">метка «' + esc(r.label || 'Оплата есть') + '», сумма не внесена</b>' +
-            (r.total ? ' · заказ ' + money(r.total) + ' ₸' : '') + (r.legacy ? ' · старая отметка «оплачен»' : '') +
+            (r.total ? ' · заказ ' + money(r.total) + ' ₸' : '') + (r.noCalc && r.name ? ' · <span style="color:#e2b203">нет расчёта</span>' : '') + (r.legacy ? ' · старая отметка «оплачен»' : '') +
             ' <span style="color:var(--muted,#9fadbc)">' + (r.by ? '· метку поставил ' + esc(r.by) : '') + (r.at ? ' · ' + esc(r.at) : '') + '</span></span>' + btn(r.cardId, r.number, r.name) + '</div>';
         }).join('') + '</div>';
       [].forEach.call(el.querySelectorAll('[data-pcard]'), function (b) {
