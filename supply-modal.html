@@ -85,6 +85,10 @@
     label.fchk{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:12px;cursor:pointer}
     .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
     .thumbs img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+    /* быстрая заявка: только форма, без доски снабжения */
+    html.quick #app, html.quick .bar { display:none !important; }
+    html.quick .ovl { position:static; background:none; padding:0; }
+    html.quick .pop { max-width:none; border:none; border-radius:0; }
   </style>
 </head>
 <body>
@@ -95,6 +99,11 @@
   <script>
     var t = window.TrelloPowerUp.iframe();
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+    // БЫСТРАЯ ЗАЯВКА ИЗ КАРТОЧКИ (решение Асхата, 16.11.2026): метка «СНАБЖЕНИЕ» на заказе открывает
+    // это окно сразу с формой новой заявки; в комментарий само пишется «Для заказа №…»
+    var QUICK = String(t.arg('quick')||'')==='1', ORDER_NO = String(t.arg('orderNumber')||''), ORDER_CARD = String(t.arg('orderCardId')||'');
+    var ORDER_TAG = ORDER_NO ? 'Для заказа №' + ORDER_NO : '';
+    if (QUICK) document.documentElement.classList.add('quick');
     document.getElementById('close').onclick=function(){ t.closeModal(); };
 
     var TAB='req', REQS=[], OPEN=0, TOOLS=[], DUE=0, CASH=null, TOOL_EDIT=null;
@@ -259,14 +268,14 @@
       });
       return chain;
     }
-    function closeSupOvl(){ var el=document.getElementById('supOvlHost'); if(el) el.innerHTML=''; }
+    function closeSupOvl(){ if (QUICK) { t.closeModal(); return; } var el=document.getElementById('supOvlHost'); if(el) el.innerHTML=''; }
 
     function openSupCreate(){
       var h='<div class="ovl" id="supOvl"><div class="pop">';
       h+='<h3>Новая заявка на снабжение</h3><div class="muted">Что купить — опишите и приложите фото или документ. Заявка попадёт в колонку «Новая заявка».</div>';
       h+='<div class="fld"><label>Что нужно</label><input type="text" id="sName" placeholder="например: диски отрезные 125мм"></div>';
       h+='<div class="fld"><label>Количество</label><input type="text" id="sQty" placeholder="например: 20 шт"></div>';
-      h+='<div class="fld"><label>Комментарий</label><input type="text" id="sComment" placeholder="какие именно, для чего"></div>';
+      h+='<div class="fld"><label>Комментарий</label>'+(ORDER_TAG?'<div class="muted" style="margin-bottom:4px">📌 '+esc(ORDER_TAG)+' — добавится в комментарий сам</div>':'')+'<input type="text" id="sComment" placeholder="какие именно, для чего"></div>';
       h+='<div class="fld"><label>Ссылка (если нашли в магазине)</label><input type="text" id="sLink" placeholder="https://…"></div>';
       h+='<label class="fchk"><input type="checkbox" id="sUrgent"> 🔥 Срочно</label>';
       h+='<label class="fchk">📎 Фото или документы <input type="file" id="sFiles" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" multiple></label>';
@@ -283,13 +292,14 @@
         btn.disabled=true; msg.textContent='Отправка…';
         fetch(WORKER+'/supply-request',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({ name:name, qty:document.getElementById('sQty').value.trim(),
-            comment:document.getElementById('sComment').value.trim(), link:document.getElementById('sLink').value.trim(),
+            comment:[ORDER_TAG, document.getElementById('sComment').value.trim()].filter(Boolean).join('. '), link:document.getElementById('sLink').value.trim(),
+            orderNumber:ORDER_NO, orderCardId:ORDER_CARD,
             urgent:document.getElementById('sUrgent').checked?1:0, byMemberId:ME.id, byName:ME.name })})
         .then(function(r){return r.json();}).then(function(j){
           if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
           var files=document.getElementById('sFiles').files;
           return files.length ? uploadFiles(j.id, files, msg) : null;
-        }).then(function(){ closeSupOvl(); loadAll(); })
+        }).then(function(){ if (QUICK) { t.closeModal(); return; } closeSupOvl(); loadAll(); })
         .catch(function(e){ btn.disabled=false; msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
       };
     }
@@ -1202,7 +1212,7 @@
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(ME.id))
         .then(function(r){return r.json();}).then(function(j){ CAN_SUPPLY=!!(j&&j.canSupply); })
         .catch(function(){ CAN_SUPPLY=false; });
-    }).then(loadAll)
+    }).then(function(){ if (QUICK) { openSupCreate(); setTimeout(function(){ var n=document.getElementById('sName'); if(n) n.focus(); }, 50); return; } return loadAll(); })
       .catch(function(e){ document.getElementById('boot').textContent='Ошибка: '+(e&&e.message||e); });
   </script>
 </body>
