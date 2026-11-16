@@ -36,6 +36,10 @@
     .savebar{position:sticky;bottom:0;background:var(--bg,#1d2125);border-top:1px solid var(--line,#3a414a);padding:10px 4px;display:flex;gap:12px;align-items:center;z-index:5;margin-top:14px}
     .wtop .sal{width:130px;text-align:right}
     .wtop .mem{width:190px}
+    .acct{font-size:12px;padding:5px 10px;border-radius:7px;white-space:nowrap;border:1px solid transparent}
+    .acct.ok{color:#7ee2b8;background:#16382b;border-color:#216e4e}
+    .acct.no{color:#e8c07d;background:#3a2f14;border-color:#6b5a1e}
+    .linkwarn{display:none !important}
     .wrowlbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 5px}
     .chips{display:flex;flex-wrap:wrap;gap:5px 6px;align-items:center}
     .chipcb{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:14px;
@@ -481,7 +485,12 @@
           '</select>'+
           '<input class="sal" type="number" min="0" step="1000" placeholder="оклад ₸/мес" value="'+(w.salary!=null&&+w.salary>0?w.salary:'')+'" title="Оклад, ₸/мес — действует при типе «Оклад» и «Оклад + сдельная»; при «Сдельной» игнорируется"'+(((w.pay_type||(w.is_salaried==1?'both':'piece'))==='piece')?' style="display:none"':'')+'>'+
           '<span class="wage" title="Ставка в день = оклад ÷ рабочие дни">—</span>'+
-          '<select class="mem" title="Trello-аккаунт">'+memberOptionsHtml(w.trello_member_id||'')+'</select>'+
+          // АККАУНТ НОВОЙ СИСТЕМЫ вместо Trello (решение Асхата, 16.11.2026): вход — телефон + пароль на mes.ttms.kz.
+          // Внутренний идентификатор (.mem) система ведёт сама — в форме его не выбирают.
+          '<input type="hidden" class="mem" value="'+String(w.trello_member_id||'').replace(/"/g,'&quot;')+'">'+
+          (w.hasLogin
+            ? '<span class="acct ok" title="Сотрудник зарегистрирован на mes.ttms.kz и входит по телефону и паролю">✔ аккаунт'+(w.phone?' · '+String(w.phone).replace(/</g,'&lt;'):'')+'</span>'
+            : '<span class="acct no" title="Сотрудник ещё не зарегистрировался: пусть откроет mes.ttms.kz → «Регистрация», затем одобрите заявку во вкладке «Заявки» и укажите, что это он">нет аккаунта</span>')+
           // без привязки к Trello сдельная/офисный % никогда не дойдёт до «Моего заработка» —
           // показываем это сразу в панели, а не оставляем руководителя гадать по нулям
           '<span class="linkwarn" style="color:#e8c07d;font-size:11.5px;margin-left:6px'+
