@@ -96,7 +96,7 @@
       var rows = (j && j.rows) || [], lab = (j && j.labeled) || [];
       if (!rows.length && !lab.length) { el.innerHTML = ''; return; }
       function btn(cardId, number, name) {
-        return '<button type="button" data-pcard="' + esc(cardId) + '" data-ptitle="' + esc((number ? '№' + number + ' ' : '') + String(name || '').slice(0, 40)) + '" style="padding:4px 10px;border-radius:7px;border:1px solid #2e5c44;background:#1c3329;color:#4bce97;cursor:pointer;font-size:12.5px">Открыть</button>';
+        return '<button type="button" data-pcard="' + esc(cardId) + '" data-ptitle="' + esc((number ? '№' + number + ' ' : '') + String(name || '').slice(0, 40)) + '" style="padding:4px 10px;border-radius:7px;border:1px solid #2e5c44;background:#1c3329;color:#4bce97;cursor:pointer;font-size:12.5px">Оплата</button>';
       }
       el.innerHTML = '<div style="margin:8px 0 12px;padding:10px 12px;border:1px solid #5a4a2a;background:#2b2516;border-radius:10px">' +
         '<b style="color:#e8c07d">⏳ Оплаты ждут подтверждения (учредитель или бухгалтер): ' + (rows.length + lab.length) + '</b>' +
