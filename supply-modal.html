@@ -85,6 +85,11 @@
     label.fchk{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:12px;cursor:pointer}
     .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
     .thumbs img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+    /* кнопки подачи заявки — зелёные, как WhatsApp в карточке (16.11.2026) */
+    #supNewBtn, #sSend { background:#25d366 !important; color:#fff !important; border-color:#25d366 !important; font-weight:600; }
+    #supNewBtn:hover, #sSend:hover { background:#1fbf5b !important; }
+    #supNewBtn:active, #sSend:active { background:#1da851 !important; }
+    #sSend:disabled { opacity:.6; }
     /* заявка из заказа (цех) — плавно разгорается и гаснет ярко-красным, цикл 1 с */
     @keyframes supGlow { 0%,100% { box-shadow:0 0 0 1px rgba(255,40,40,.25), 0 0 0 rgba(255,30,30,0); background-color:var(--bg,#1d2125); }
                          50% { box-shadow:0 0 0 2px #ff2d2d, 0 0 22px 6px rgba(255,30,30,.85); background-color:#5a1414; } }
