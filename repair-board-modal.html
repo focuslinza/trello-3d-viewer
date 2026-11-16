@@ -172,6 +172,7 @@
       if(CUR){ openCard(CUR.id); } // перечитать заявку — цена могла обновиться из калькулятора
       loadAll();
     }
+    window.addEventListener('message', function(e){ if(e.data&&e.data.ms_sup_done){ closeEmbed(); return; } });
     window.addEventListener('message', function(e){
       if(e && e.data && e.data.metalshopEmbedClose) closeEmbed();
     });
@@ -419,7 +420,10 @@
         '<div id="ttlEdit" style="display:none;margin:0 0 10px"><input id="ttlInp" type="text" style="width:100%;box-sizing:border-box;font-size:20px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 10px">'+
         '<div style="margin-top:6px"><button class="btn green" id="ttlSave" type="button">Сохранить</button> <button class="btn" id="ttlCancel" type="button">Отмена</button> <span class="msg" id="ttlMsg"></span></div></div>';
       h+='<div style="margin-bottom:14px;display:flex;align-items:center;gap:12px"><span class="num-badge" style="font-size:14px">'+esc(r.number)+'</span>'+
-         '<button class="btn" id="labelBtn" type="button" title="Этикетка с номером и QR — распечатать и наклеить на изделие">▦ QR / печать</button></div>';
+         // кнопка «QR / печать» убрана (решение Асхата, 16.11.2026)
+         // СНАБЖЕНИЕ ИЗ РЕМОНТА (решение Асхата, 16.11.2026) — как метка «СНАБЖЕНИЕ» на основной доске
+         '<button class="btn" id="supBtn" type="button" style="background:#c9372c;color:#fff;border-color:#c9372c;font-weight:600" title="Заказать у снабжения то, что нужно для этого ремонта">📦 Снабжение</button>'+
+         '<span id="supPend" class="muted" style="font-size:12px"></span></div>';
       // 3. описание — в таком же затемнённом боксе, как остальные разделы
       h+='<div class="sec"><div class="sh">Описание</div>';
       var descText = r.description || r.note || '';
@@ -617,6 +621,15 @@
       // «Посчитать» доступно всем допущенным (работник/инженер); сохранение расчёта
       // автоматически делает заявку «сделанной» (статусами дальше управляет бухгалтер)
       document.getElementById('calcBtn').onclick=function(){ openCalcEmbed(r); };
+      document.getElementById('supBtn').onclick=function(){
+        openEmbed('./supply-modal.html?quick=1&orderNumber='+encodeURIComponent(r.number||'')+'&orderCardId=repair-'+encodeURIComponent(r.id)+
+          '&orderTag='+encodeURIComponent('Для ремонта '+(r.number||('Р-'+r.id))+' «'+(r.title||'')+'»')+'&t='+Date.now(), '📦 Заявка на снабжение · '+(r.number||''));
+      };
+      // сколько заявок по этому ремонту ещё не куплено
+      fetch(WORKER+'/supply-list').then(function(x){return x.json();}).then(function(j){
+        var n=((j&&j.requests)||[]).filter(function(q){ return q.orderCardId==='repair-'+r.id && (q.status==='new'||q.status==='work'); }).length;
+        var el=document.getElementById('supPend'); if(el&&n) el.textContent='в снабжении: '+n+' заявк'+(n===1?'а':'и')+' ждут покупки';
+      }).catch(function(){});
       // этикетка: номер + название + QR (печать из новой вкладки)
       (function(){
         var lb=document.getElementById('labelBtn'); if(!lb) return;

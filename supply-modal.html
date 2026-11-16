@@ -117,8 +117,12 @@
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     // БЫСТРАЯ ЗАЯВКА ИЗ КАРТОЧКИ (решение Асхата, 16.11.2026): метка «СНАБЖЕНИЕ» на заказе открывает
     // это окно сразу с формой новой заявки; в комментарий само пишется «Для заказа №…»
-    var QUICK = String(t.arg('quick')||'')==='1', ORDER_NO = String(t.arg('orderNumber')||''), ORDER_CARD = String(t.arg('orderCardId')||'');
-    var ORDER_TAG = ORDER_NO ? 'Для заказа №' + ORDER_NO : '';
+    var QS = new URLSearchParams(location.search);
+    function qa(k){ var v=''; try{ v=t.arg(k); }catch(e){} return String(v||QS.get(k)||''); }
+    var QUICK = qa('quick')==='1', ORDER_NO = qa('orderNumber'), ORDER_CARD = qa('orderCardId');
+    // из ремонта приходит готовая подпись «Для ремонта Р-166» (16.11.2026)
+    var ORDER_TAG = qa('orderTag') || (ORDER_NO ? 'Для заказа №' + ORDER_NO : '');
+    function quickClose(){ try{ parent.postMessage({ms_sup_done:1},'*'); }catch(e){} try{ t.closeModal(); }catch(e){} }
     if (QUICK) document.documentElement.classList.add('quick');
     document.getElementById('close').onclick=function(){ t.closeModal(); };
 
@@ -285,7 +289,7 @@
       });
       return chain;
     }
-    function closeSupOvl(){ if (QUICK) { t.closeModal(); return; } var el=document.getElementById('supOvlHost'); if(el) el.innerHTML=''; }
+    function closeSupOvl(){ if (QUICK) { quickClose(); return; } var el=document.getElementById('supOvlHost'); if(el) el.innerHTML=''; }
 
     // справочник материалов и компонентов — тот же, что в калькуляторе (заводские + свои, без скрытых)
     var CATALOG=null, CATALOG_P=null;
@@ -376,7 +380,7 @@
           if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
           var files=document.getElementById('sFiles').files;
           return files.length ? uploadFiles(j.id, files, msg) : null;
-        }).then(function(){ if (QUICK) { t.closeModal(); return; } closeSupOvl(); loadAll(); })
+        }).then(function(){ if (QUICK) { quickClose(); return; } closeSupOvl(); loadAll(); })
         .catch(function(e){ btn.disabled=false; msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
       };
     }
