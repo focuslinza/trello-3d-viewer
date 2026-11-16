@@ -195,8 +195,12 @@
       ov.querySelector('#pdC').onclick = close;
       var lgb = ov.querySelector('#pdLegacy');
       if (lgb) lgb.onclick = function () {
+        // способ оплаты обязателен (решение Асхата, 16.11.2026)
+        var e = ov.querySelector('#pdE'), person = ((ov.querySelector('#pdP') || {}).value || '').trim();
+        if (!method) { if (e) e.textContent = 'Сначала выберите способ оплаты ниже — без него оплату подтвердить нельзя'; return; }
+        if (method === 'person' && !person) { if (e) e.textContent = 'Укажите, кому перевели'; ov.querySelector('#pdP').focus(); return; }
         if (!confirm('Подтвердить, что заказ оплачен полностью: ' + money(S.total) + ' ₸?')) return;
-        post('/order-payment-legacy-confirm', { cardId: cardId });
+        post('/order-payment-legacy-confirm', { cardId: cardId, method: method, person: person });
       };
       var ttb = ov.querySelector('#pdTT');
       if (ttb) ttb.onclick = function () {
