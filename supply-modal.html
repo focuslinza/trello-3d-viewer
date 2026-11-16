@@ -85,6 +85,12 @@
     label.fchk{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:12px;cursor:pointer}
     .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
     .thumbs img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+    #sPick{width:100%;box-sizing:border-box;margin-bottom:6px}
+    .sreq{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+    .reqbtn{background:none;border:1px dashed #b3641f;color:#e08a3c;border-radius:6px;padding:5px 10px;font-size:12px;font-family:inherit;cursor:pointer}
+    .reqbtn:hover,.reqbtn.on{background:#3a2410;color:#ffb066}
+    .snew{margin-top:8px;padding:8px 10px;border-radius:8px;background:#3a2410;border:1px solid #b3641f;color:#ffcf9f;font-size:12.5px;line-height:1.5}
+    .snew select{margin-left:4px}
     /* кнопки подачи заявки — зелёные, как WhatsApp в карточке (16.11.2026) */
     #supNewBtn, #sSend { background:#25d366 !important; color:#fff !important; border-color:#25d366 !important; font-weight:600; }
     #supNewBtn:hover, #sSend:hover { background:#1fbf5b !important; }
@@ -281,10 +287,51 @@
     }
     function closeSupOvl(){ if (QUICK) { t.closeModal(); return; } var el=document.getElementById('supOvlHost'); if(el) el.innerHTML=''; }
 
+    // справочник материалов и компонентов — тот же, что в калькуляторе (заводские + свои, без скрытых)
+    var CATALOG=null, CATALOG_P=null;
+    function loadCatalog(){
+      if(CATALOG_P) return CATALOG_P;
+      CATALOG_P=fetch(WORKER+'/pricing-get').then(function(r){return r.json();}).then(function(j){
+        var p=(j&&j.pricing)||{}, C=window.CALC||{};
+        function build(F,cu){
+          var map={}, order=[];
+          Object.keys(F||{}).forEach(function(c){ map[c]={sec:F[c].sec||'Прочее',lbl:F[c].lbl||c,spec:F[c].spec||''}; order.push(c); });
+          (cu||[]).forEach(function(it){ if(!it||!it.code) return;
+            if(map[it.code]){ if(it.hidden){ delete map[it.code]; return; } if(it.sec) map[it.code].sec=it.sec; if(it.lbl) map[it.code].lbl=it.lbl; if(it.spec!=null) map[it.code].spec=it.spec; }
+            else if(!it.hidden){ map[it.code]={sec:it.sec||'ДРУГИЕ',lbl:it.lbl||it.code,spec:it.spec||''}; order.push(it.code); } });
+          var groups={}, secs=[];
+          order.forEach(function(c){ var it=map[c]; if(!it) return; if(!groups[it.sec]){ groups[it.sec]=[]; secs.push(it.sec); } groups[it.sec].push(it); });
+          return {groups:groups, secs:secs};
+        }
+        CATALOG={ mat:build(C.FACT_MAT||C.MAT, p.customMat), cmp:build(C.FACT_CMP||C.CMP, p.customCmp) };
+        return CATALOG;
+      }).catch(function(){ CATALOG={mat:{groups:{},secs:[]},cmp:{groups:{},secs:[]}}; return CATALOG; });
+      return CATALOG_P;
+    }
+    function fillPick(sel){
+      loadCatalog().then(function(cat){
+        if(!sel||!sel.parentNode) return;
+        [['mat','Материалы'],['cmp','Компоненты']].forEach(function(k){
+          cat[k[0]].secs.forEach(function(sec){
+            var og=document.createElement('optgroup'); og.label=k[1]+' · '+sec;
+            cat[k[0]].groups[sec].forEach(function(it){
+              var o=document.createElement('option'); o.value=it.lbl; o.textContent=it.lbl+(it.spec?' ['+it.spec+']':'');
+              o.setAttribute('data-full', sec+' · '+it.lbl+(it.spec?' ['+it.spec+']':'')); og.appendChild(o); });
+            sel.appendChild(og);
+          });
+        });
+      });
+    }
+
     function openSupCreate(){
       var h='<div class="ovl" id="supOvl"><div class="pop">';
       h+='<h3>Новая заявка на снабжение</h3><div class="muted">Что купить — опишите и приложите фото или документ. Заявка попадёт в колонку «Новая заявка».</div>';
-      h+='<div class="fld"><label>Что нужно</label><input type="text" id="sName" placeholder="например: диски отрезные 125мм"></div>';
+      h+='<div class="fld"><label>Что нужно</label>'+
+         '<select id="sPick"><option value="">— выбрать из списка материалов и компонентов —</option></select>'+
+         '<input type="text" id="sName" placeholder="или впишите сами, например: диски отрезные 125мм">'+
+         '<div class="sreq"><button type="button" class="reqbtn" data-k="mat">нет нужного материала — запросить новый</button>'+
+         '<button type="button" class="reqbtn" data-k="cmp">нет нужного компонента — запросить новый</button></div>'+
+         '<div id="sNewNote" class="snew" style="display:none"></div></div>';
       h+='<div class="fld"><label>Количество</label><input type="text" id="sQty" placeholder="например: 20 шт"></div>';
       h+='<div class="fld"><label>Комментарий</label>'+(ORDER_TAG?'<div class="muted" style="margin-bottom:4px">📌 '+esc(ORDER_TAG)+' — добавится в комментарий сам</div>':'')+'<input type="text" id="sComment" placeholder="какие именно, для чего"></div>';
       h+='<div class="fld"><label>Ссылка (если нашли в магазине)</label><input type="text" id="sLink" placeholder="https://…"></div>';
@@ -294,6 +341,24 @@
       h+='<div class="popbar"><span class="muted" id="sMsg"></span><button class="btn" id="sCancel" type="button">Отмена</button><button class="btn primary" id="sSend" type="button">Отправить заявку</button></div>';
       h+='</div></div>';
       document.getElementById('supOvlHost').innerHTML=h;
+      // СПИСОК КАК В КАЛЬКУЛЯТОРЕ (решение Асхата, 16.11.2026): материал/компонент выбирают, не печатая;
+      // нет в списке — «запросить новый»: снабженец заведёт позицию с ценой в «Цены материалов».
+      var NEWCAT='';
+      fillPick(document.getElementById('sPick'));
+      document.getElementById('sPick').onchange=function(){
+        var o=this.options[this.selectedIndex]; if(!this.value) return;
+        document.getElementById('sName').value=o.getAttribute('data-full')||o.textContent; setNew('');
+      };
+      function setNew(k){
+        NEWCAT=k; var n=document.getElementById('sNewNote');
+        [].forEach.call(document.querySelectorAll('.reqbtn'),function(b){ b.classList.toggle('on', b.getAttribute('data-k')===k); });
+        if(!k){ n.style.display='none'; n.innerHTML=''; return; }
+        var units=(k==='mat'?['м²','м','кг','шт']:['шт','м','кг','комплект','литр']);
+        n.style.display=''; n.innerHTML='📋 Запрос на новый '+(k==='mat'?'материал':'компонент')+': впишите название выше. Снабженец добавит его с ценой в «Цены материалов». Единица: '+
+          '<select id="sUnit">'+units.map(function(u){return '<option>'+u+'</option>';}).join('')+'</select>';
+        document.getElementById('sPick').value=''; document.getElementById('sName').focus();
+      }
+      [].forEach.call(document.querySelectorAll('.reqbtn'),function(b){ b.onclick=function(){ var k=this.getAttribute('data-k'); setNew(NEWCAT===k?'':k); }; });
       document.getElementById('sCancel').onclick=closeSupOvl;
       document.getElementById('supOvl').onclick=function(e){ if(e.target===this) closeSupOvl(); };
       document.getElementById('sSend').onclick=function(){
@@ -302,8 +367,9 @@
         var btn=this, msg=document.getElementById('sMsg');
         btn.disabled=true; msg.textContent='Отправка…';
         fetch(WORKER+'/supply-request',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ name:name, qty:document.getElementById('sQty').value.trim(),
-            comment:[ORDER_TAG, document.getElementById('sComment').value.trim()].filter(Boolean).join('. '), link:document.getElementById('sLink').value.trim(),
+          body:JSON.stringify({ name:(NEWCAT?'В калькулятор: ':'')+name, qty:document.getElementById('sQty').value.trim(),
+            comment:[ NEWCAT?('📋 Нужно внедрить цену в раздел «Цены материалов» ('+(NEWCAT==='mat'?'материал':'компонент')+', ед.: '+((document.getElementById('sUnit')||{}).value||'')+')'):'',
+                      ORDER_TAG, document.getElementById('sComment').value.trim()].filter(Boolean).join('. '), link:document.getElementById('sLink').value.trim(),
             orderNumber:ORDER_NO, orderCardId:ORDER_CARD,
             urgent:document.getElementById('sUrgent').checked?1:0, byMemberId:ME.id, byName:ME.name })})
         .then(function(r){return r.json();}).then(function(j){

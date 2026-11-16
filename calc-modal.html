@@ -363,10 +363,12 @@
         if(!name){ msg.textContent='Напишите, что нужно — снабженец должен понять, какую позицию заводить.'; return; }
         var btn=this; btn.disabled=true; msg.textContent='Отправляю…';
         t.member('id','fullName').catch(function(){ return {}; }).then(function(me){
-          var comment='📋 ДОБАВИТЬ В СПРАВОЧНИК КАЛЬКУЛЯТОРА (Снабжение → «💲 Цены материалов» → «Свои материалы/компоненты»; '+(isMat?'материал':'компонент')+', ед.: '+document.getElementById('rqUnit').value+')'+
-            ' — для заказа №'+(ctx.cardNumber||'?')+' «'+(ctx.cardName||'')+'»'+(document.getElementById('rqCom').value.trim()?(' · '+document.getElementById('rqCom').value.trim()):'');
+          // текст — по решению Асхата (16.11.2026): снабженцу сразу ясно, что делать
+          var comment='📋 Нужно внедрить цену в раздел «Цены материалов» ('+(isMat?'материал':'компонент')+', ед.: '+document.getElementById('rqUnit').value+')'+
+            '. Для заказа №'+(ctx.cardNumber||'?')+' «'+(ctx.cardName||'')+'»'+(document.getElementById('rqCom').value.trim()?('. '+document.getElementById('rqCom').value.trim()):'');
           return fetch(WORKER+'/supply-request',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({ name:'В калькулятор: '+name, qty:'', comment:comment, link:(ctx.cardId?('https://trello.com/c/'+ctx.cardId):''),
+            body:JSON.stringify({ name:'В калькулятор: '+name, qty:'', comment:comment, link:'',
+              orderNumber:String(ctx.cardNumber||''), orderCardId:String(ctx.cardId||''),
               urgent:document.getElementById('rqUrg').checked?1:0, byMemberId:(me&&me.id)||'', byName:(me&&me.fullName)||'' })});
         }).then(function(r){return r.json();}).then(function(j){
           if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
