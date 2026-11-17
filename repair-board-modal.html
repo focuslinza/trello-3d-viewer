@@ -1099,7 +1099,7 @@
         })
         .catch(function(){ if(!admin){ PRICED=false; CAN_SEE_COST=false; } });
     }).then(function(){
-      if(IS_ADMIN) document.getElementById('importBtn').style.display='';
+      // кнопка «Импорт с Trello» убрана (17.11.2026): ушли с Trello
       return Promise.all([loadCompanies(), loadWorkers()]);
     }).then(loadAll)
     .catch(function(e){ document.getElementById('board').innerHTML='<div class="empty">Ошибка: '+esc(e&&e.message||e)+'</div>'; });
