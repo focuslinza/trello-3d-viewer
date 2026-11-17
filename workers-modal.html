@@ -335,15 +335,18 @@
         function e(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
         box.innerHTML='<div class="sec" style="border-color:#6b5a1e"><h3 style="color:#f5cd47">🔑 Заявки на вход: '+D.requests.length+'</h3>'+
           D.requests.map(function(r){
-            var wo='<option value="">➕ новый сотрудник</option>'+D.workers.map(function(w){ return '<option value="'+e(w.id)+'"'+(r.worker_id===w.id?' selected':'')+'>'+e(w.name)+'</option>'; }).join('');
+            // совпадение по имени: слово из заявки есть в имени уже существующего сотрудника → сразу подставляем его
+            var rw=String(r.name||'').toLowerCase().split(/\s+/).filter(function(x){ return x.length>=3; });
+            var guess=r.worker_id||''; if(!guess){ var cand=D.workers.filter(function(w){ var n=String(w.name||'').toLowerCase(); return rw.some(function(x){ return n.indexOf(x)>=0; }); }); if(cand.length===1) guess=cand[0].id; }
+            var wo='<option value=""'+(guess?'':' selected')+'>— выберите, кто это —</option><option value="__new">➕ новый сотрудник (раньше его не было)</option>'+D.workers.map(function(w){ return '<option value="'+e(w.id)+'"'+(guess===w.id?' selected':'')+'>'+e(w.name)+'</option>'; }).join('');
             var po='<option value="">— должность не менять —</option>'+D.positions.map(function(p){ return '<option value="'+e(p.id)+'">'+e(p.name)+'</option>'; }).join('');
             return '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 0;border-top:1px solid var(--line)"><b>'+e(r.name)+'</b><span class="hint">+'+e(r.phone)+(r.note?' · '+e(r.note):'')+'</span>'+
               '<span style="flex:1"></span><span class="hint">Кто это:</span><select id="rqW'+r.id+'">'+wo+'</select><select id="rqP'+r.id+'">'+po+'</select>'+
               '<button class="btn rqOk" data-id="'+r.id+'" type="button" style="background:#2e7d57;border-color:#2e7d57;color:#fff">Одобрить</button>'+
               '<button class="btn rqNo" data-id="'+r.id+'" type="button" style="border-color:#e2574c;color:#ff8f85">Отклонить</button></div>'; }).join('')+
           '<div class="hint" id="rqMsg" style="margin-top:6px">Если человек уже есть в списке ниже — выберите его в «Кто это», иначе появится дубль без должности.</div></div>';
-        function dec(id,ok){ var m=document.getElementById('rqMsg'); m.textContent='Сохраняю…';
-          fetch(WORKER+'/auth-decide'+q,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:+id,approve:!!ok,workerId:ok?document.getElementById('rqW'+id).value:'',positionId:ok?document.getElementById('rqP'+id).value:''})})
+        function dec(id,ok){ var m=document.getElementById('rqMsg'); if(ok&&!document.getElementById('rqW'+id).value){ m.style.color='#ff8f85'; m.textContent='Сначала выберите в «Кто это» — существующего сотрудника или «новый».'; return; } m.textContent='Сохраняю…';
+          fetch(WORKER+'/auth-decide'+q,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:+id,approve:!!ok,workerId:ok&&document.getElementById('rqW'+id).value!=='__new'?document.getElementById('rqW'+id).value:'',positionId:ok?document.getElementById('rqP'+id).value:''})})
             .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ loadRequests(); if(typeof loadAll==='function') loadAll(); else location.reload(); } else { m.style.color='#ff8f85'; m.textContent=(j&&j.error)||'ошибка'; } })
             .catch(function(){ m.style.color='#ff8f85'; m.textContent='нет связи'; }); }
         [].forEach.call(box.querySelectorAll('.rqOk'),function(b){ b.onclick=function(){ dec(b.getAttribute('data-id'),1); }; });
