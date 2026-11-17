@@ -175,6 +175,15 @@
     }
     h+='<div class="lbl">Обязанности</div><textarea class="du" rows="2" placeholder="Что делает, за что отвечает">'+esc(p.duties)+'</textarea>';
     h+='<div class="lbl">Доступ по должности (древо) <span style="text-transform:none;letter-spacing:0">· шаблон: <select class="tpl"><option value="">—</option>'+TEMPLATES.map(function(t,i){ return '<option value="'+i+'">'+esc(t.name)+'</option>'; }).join('')+'</select></span></div>'+treeHtml(p);
+    // КОЛОНКИ ДОСКИ — ПО ДОЛЖНОСТИ (решение Асхата, 16.11.2026): вместо отдельной вкладки «Доступ»
+    var curL=(p.perms&&p.perms._lists)||[];
+    h+='<div class="lbl">Колонки доски, которые видит должность</div>'+
+      (LISTS.length
+        ? '<div class="chips lcs">'+LISTS.map(function(l){ var on=curL.indexOf(String(l.id))>=0;
+            return '<label class="chipcb'+(on?' on':'')+'"><input type="checkbox" class="lc" value="'+esc(l.id)+'"'+(on?' checked':'')+'>'+esc(l.name)+'</label>'; }).join('')+'</div>'+
+          '<div class="muted" style="font-size:11.5px;margin-top:4px">Ничего не отмечено — видит все колонки. У человека с двумя должностями колонки складываются.</div>'
+        : '<div class="muted" style="font-size:12px">'+(LISTS_ERR||'Список колонок загружается…')+'</div>'+
+          '<div class="lcs-keep" data-keep="'+esc(JSON.stringify(curL))+'" style="display:none"></div>');
     h+='<div class="lbl">Сетка окладов — разряды по росту</div>'+
       '<table class="gr"><thead><tr><th>Разряд</th><th>Оклад</th><th>Стаж от, мес</th><th class="hm">Нужные навыки</th><th></th></tr></thead><tbody>'+
       (p.grades||[]).map(gradeRow).join('')+'</tbody></table>'+
@@ -234,7 +243,13 @@
     return { id: el.getAttribute('data-id')||undefined,
       name: el.querySelector('.nm').value.trim(), duties: el.querySelector('.du').value,
       stages: [].map.call(el.querySelectorAll('.st:checked'),function(c){return c.value;}),
-      perms: (function(){ var o=[].reduce.call(el.querySelectorAll('.pm:checked'),function(o,c){ o[c.value]=1; return o; },{}); return o; })(),
+      perms: (function(){ var o=[].reduce.call(el.querySelectorAll('.pm:checked'),function(o,c){ o[c.value]=1; return o; },{});
+        // колонки доски; если список колонок не загрузился — сохраняем прежний выбор, а не стираем
+        var keep=el.querySelector('.lcs-keep');
+        var ls=keep ? (function(){ try{ return JSON.parse(keep.getAttribute('data-keep'))||[]; }catch(e){ return []; } })()
+                    : [].map.call(el.querySelectorAll('.lc:checked'),function(c){return c.value;});
+        if(ls.length) o._lists=ls;
+        return o; })(),
       grades: [].map.call(el.querySelectorAll('tbody tr'),function(tr){
         return { name: tr.querySelector('.gn').value.trim(), salary: +tr.querySelector('.gs').value||0,
           minMonths: +tr.querySelector('.gm').value||0, skills: tr.querySelector('.gk').value.split(',').map(function(s){return s.trim();}).filter(Boolean) };
@@ -264,13 +279,17 @@
     if(!POS.length) list.innerHTML='<div class="muted" style="padding:6px 0 12px">Должностей пока нет. Создайте первую — например «Сварщик», «Начальник цеха», «Бухгалтер».</div>';
     POS.forEach(function(p){ list.appendChild(card(p,false)); });
   }
+  var LISTS=[], LISTS_ERR='';
+  function bTok(){ try{ return localStorage.getItem('ms_board_token')||''; }catch(e){ return ''; } }
   function load(){
     return Promise.all([
       fetch(WORKER+'/positions-list').then(function(r){return r.json();}),
-      fetch(WORKER+'/workers-list').then(function(r){return r.json();}).catch(function(){return {};})
+      fetch(WORKER+'/workers-list').then(function(r){return r.json();}).catch(function(){return {};}),
+      fetch(WORKER+'/board-access?token='+encodeURIComponent(bTok())).then(function(r){return r.json();}).catch(function(){return {error:'нет связи'};})
     ]).then(function(a){
       if(!a[0]||!a[0].ok) throw new Error((a[0]&&a[0].error)||'ошибка');
       POS=a[0].positions||[]; ASSIGN=a[0].assign||{}; WORKERS=(a[1]&&a[1].workers)||[];
+      if(a[2]&&a[2].ok){ LISTS=a[2].lists||[]; LISTS_ERR=''; } else { LISTS=[]; LISTS_ERR='Колонки сейчас недоступны ('+((a[2]&&a[2].error)||'?')+') — прежний выбор сохранится.'; }
       render();
     }).catch(function(e){ document.getElementById('list').textContent='Ошибка загрузки: '+(e&&e.message||e); });
   }
