@@ -192,7 +192,7 @@
       COLS.forEach(function(c,ci){
         var cards=v.filter(function(r){ return r.status===c.key; });
         h+='<div class="col" data-col="'+c.key+'"><div class="colhd"><span class="t">'+c.title+'</span><span class="n">'+cards.length+'</span></div>';
-        if(c.key==='new') h+='<button class="btn" data-newin="1" type="button" style="width:100%;margin-bottom:8px">+ Заявка</button>';
+        if(c.key==='new') h+='<button class="btn" data-newin="1" type="button" style="width:100%;margin-bottom:8px;background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600">+ Заявка</button>';
         if(!cards.length) h+='<div class="empty">Пусто</div>';
         cards.forEach(function(r){
           h+='<div class="kcard" draggable="true" data-id="'+r.id+'">';
