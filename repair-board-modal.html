@@ -320,6 +320,25 @@
     }
     function closeOvl(){ document.getElementById('ovlHost').innerHTML=''; }
 
+    // Фото: две отдельные кнопки — снять камерой или выбрать из галереи. Итоговый файл всегда лежит в input#<id>
+    function photoPickerHtml(id){
+      return '<div class="fld"><label>Фото</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+        '<label class="btn" style="cursor:pointer;margin:0">📷 Снять<input type="file" id="'+id+'Cam" accept="image/*" capture="environment" style="display:none"></label>'+
+        '<label class="btn" style="cursor:pointer;margin:0">🖼 Из галереи<input type="file" id="'+id+'Gal" accept="image/*" style="display:none"></label>'+
+        '<span class="muted" id="'+id+'Name" style="font-size:12px">файл не выбран</span>'+
+        '<input type="file" id="'+id+'" style="display:none"></div></div>';
+    }
+    function wirePhotoPicker(id){
+      var main=document.getElementById(id), nm=document.getElementById(id+'Name');
+      ['Cam','Gal'].forEach(function(k){
+        var inp=document.getElementById(id+k); if(!inp) return;
+        inp.onchange=function(){
+          var f=inp.files&&inp.files[0]; if(!f) return;
+          try{ var dt=new DataTransfer(); dt.items.add(f); main.files=dt.files; }catch(e){ main._f=f; }
+          nm.textContent=f.name||'фото выбрано';
+        };
+      });
+    }
     function openCreate(){
       var h='<div class="ovl" id="ovl"><div class="pop">';
       h+='<h3>Новая заявка на ремонт</h3><div class="muted">Что сломалось — сфотографируйте и опишите, заявка сразу попадёт в первую колонку.</div>';
@@ -327,16 +346,18 @@
         h+='<div style="background:#1c3329;border:1px solid #2e5c44;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12.5px;color:#a8d5b5">'+
            '💰 За каждую полностью оформленную заявку — описание поломки, фирма, контактное лицо и фото — вам начисляется <b>'+money(AGENT_BONUS)+' ₸</b> (видно в «Моём заработке»).</div>';
       }
-      h+='<div class="fld"><label>Что нужно починить</label><input type="text" id="cTitle" placeholder="например: тележка, погнуто колесо"></div>';
+      h+='<div class="fld"><label>Наименование</label><input type="text" id="cTitle" placeholder="например: Тележка, замена колеса"></div>';
       h+='<div class="fld"><label>Категория</label><select id="cCat">'+categoryOptions('')+'</select><input type="text" id="cCatNew" placeholder="Название категории" style="display:none;margin-top:6px"></div>';
       h+='<div class="fld"><label>Клиент</label><select id="cCompany">'+companyOptions('')+'</select></div>';
       h+='<div class="fld" id="cContactW" style="display:none"><label>Контактное лицо</label><select id="cContact"></select>'+newContactBox('cContact')+'</div>';
       h+='<div class="fld" id="cObjectW" style="display:none"><label>Объект</label><select id="cObject"></select></div>';
+      h+='<div class="fld"><label>Описание</label><textarea id="cDesc" rows="3" placeholder="Что сломалось, что нужно сделать" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit"></textarea></div>';
       h+='<label class="f"><input type="checkbox" id="cUrgent"> 🔥 Срочно</label>';
-      h+='<label class="f">📷 Фото <input type="file" id="cFile" accept="image/*" capture="environment"></label>';
+      h+=photoPickerHtml('cFile');
       h+='<div class="popbar"><span class="msg" id="cMsg"></span><button class="btn" id="cCancel" type="button">Отмена</button><button class="btn primary" id="cSend" type="button">Отправить заявку</button></div>';
       h+='</div></div>';
       document.getElementById('ovlHost').innerHTML=h;
+      wirePhotoPicker('cFile');
       document.getElementById('cCancel').onclick=closeOvl;
       document.getElementById('ovl').onclick=function(e){ if(e.target===this) closeOvl(); };
       document.getElementById('cCat').onchange=function(){
@@ -351,7 +372,7 @@
       };
       document.getElementById('cSend').onclick=function(){
         var title=document.getElementById('cTitle').value.trim();
-        if(!title){ alert('Опишите, что нужно починить.'); return; }
+        if(!title){ alert('Укажите наименование.'); return; }
         var catSel=document.getElementById('cCat');
         var category = catSel.value==='__new__' ? document.getElementById('cCatNew').value.trim() : catSel.value;
         var companyId=document.getElementById('cCompany').value;
@@ -370,7 +391,7 @@
         return post('/repair-request',{ title:title, category:category, companyId:companyId||null,
           companyName:co?co.name:'', contactName:contactName||'',
           objectName:(document.getElementById('cObject')||{}).value||'',
-          urgent:document.getElementById('cUrgent').checked, byMemberId:ME.id, byName:ME.name })
+          description:(document.getElementById('cDesc').value||'').trim(), urgent:document.getElementById('cUrgent').checked, byMemberId:ME.id, byName:ME.name })
         .then(function(j){
           if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
           var chain=Promise.resolve();
@@ -951,9 +972,10 @@
       });
       h+='<button type="button" class="btn" id="perfAdd" style="margin-top:8px">+ ещё исполнитель</button>';
       h+='<div class="fld"><label>Комментарий</label><input type="text" id="doneNote" placeholder="Что сделали (кратко)"></div>';
-      h+='<label class="f">📷 Фото <input type="file" id="doneFile" accept="image/*" capture="environment"></label>';
+      h+=photoPickerHtml('doneFile');
       h+='<button class="btn green" id="doneSubmit" type="button" style="margin-top:10px">Готово — посчитать заработок</button>';
       box.innerHTML=h;
+      wirePhotoPicker('doneFile');
 
       if(!DONE_FROM_CALC){
         [].forEach.call(box.querySelectorAll('.opKind'), function(s){ s.onchange=function(){ opRows[+this.getAttribute('data-i')].kind=this.value; drawDoneForm(); }; });
