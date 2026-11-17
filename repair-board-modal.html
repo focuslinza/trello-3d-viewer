@@ -21,7 +21,7 @@
     .btn.danger{border-color:#7a3a32;color:#e8a59d}
     .btn:disabled{opacity:.5;cursor:not-allowed}
     /* канбан */
-    .board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start}
+    .board{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start}
     @media (max-width:820px){ .board{grid-template-columns:1fr} }
     .col{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:10px;min-height:120px}
     .col.dragover{border-color:var(--blue);background:#232c3a}
@@ -100,7 +100,8 @@
     var ME={id:'',name:''}, PRICED=false, IS_ADMIN=false, CAN_SEE_COST=false, CAN_ISSUE=false, IS_AGENT=false, AGENT_BONUS=0;
     var ROWS=[], COMPANIES=[], WORKERS=[], FILTER='', ONLY_URGENT=false, THUMBS={};
     var CATEGORIES_SEED=['Тележка','Стеллаж','Шкаф','Стол','Полка','Дверь/дверца','Мотор/электрика','Прочее'];
-    var COLS=[ {key:'new',title:'Новые заявки на ремонт'}, {key:'done',title:'Сделано'}, {key:'sent',title:'Отправлен'} ];
+    var COLS=[ {key:'new',title:'Новые заявки на ремонт'}, {key:'done',title:'Сделано'}, {key:'sent',title:'Отправлен'}, {key:'avr',title:'АВР'} ];
+    var SHOW_AVR=false, AVRBASE=0;   // колонка «АВР»: карточки не грузим, пока не нажмут «Показать» (лёгкая загрузка)
 
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
@@ -124,11 +125,13 @@
       return fetch(WORKER+u).then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил');
         ROWS=(j.requests||[]).filter(function(r){ return r.status!=='rejected'; });
+        var _wasAvr=SHOW_AVR; AVRBASE=j.avrCount||0; SHOW_AVR=false;
         renderBoard();
+        if(_wasAvr) loadAvr().catch(function(){});
         // заход из бухгалтерии по номеру заявки — сразу открыть её карточку
         if(AUTO_OPEN){ var _id=AUTO_OPEN; AUTO_OPEN=''; if(ROWS.some(function(x){ return String(x.id)===String(_id); })) openCard(_id); }
         // миниатюры: одним батч-запросом id первого фото каждой заявки
-        var ids=ROWS.map(function(r){return r.id;});
+        var ids=ROWS.filter(function(r){ return r.status!=='avr'; }).map(function(r){return r.id;});
         if(ids.length){
           fetch(WORKER+'/repair-thumbs?ids='+ids.join(',')).then(function(r){return r.json();}).then(function(t){
             if(t&&t.ok){ THUMBS=t.thumbs||{}; renderBoard(); }
@@ -186,12 +189,29 @@
         return (r.number+' '+r.title+' '+(r.companyName||'')+' '+(r.category||'')).toLowerCase().indexOf(f)>=0;
       });
     }
+    function loadAvr(){
+      var u=(PRICED?('/repair-list?full=1&viewerId='+encodeURIComponent(ME.id||'')+'&avr=1'):'/repair-list?avr=1');
+      return fetch(WORKER+u).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'ошибка');
+        var have={}; ROWS.forEach(function(r){ have[r.id]=1; });
+        (j.requests||[]).forEach(function(r){ if(!have[r.id]) ROWS.push(r); });
+        SHOW_AVR=true; renderBoard();
+      });
+    }
     function renderBoard(){
       var v=visible();
       var h='<div class="board">';
       COLS.forEach(function(c,ci){
         var cards=v.filter(function(r){ return r.status===c.key; });
+        if(c.key==='avr' && !SHOW_AVR){
+          var moved=ROWS.filter(function(r){ return r.status==='avr'; }).length;
+          h+='<div class="col" data-col="avr"><div class="colhd"><span class="t">'+c.title+'</span><span class="n">'+(AVRBASE+moved)+'</span></div>'+
+             '<div class="empty" style="padding:14px 6px">Карточки АВР скрыты, чтобы доска грузилась быстрее.</div>'+
+             '<button class="btn" id="avrShow" type="button" style="width:100%">Показать карточки</button></div>';
+          return;
+        }
         h+='<div class="col" data-col="'+c.key+'"><div class="colhd"><span class="t">'+c.title+'</span><span class="n">'+cards.length+'</span></div>';
+        if(c.key==='avr') h+='<button class="btn" id="avrHide" type="button" style="width:100%;margin-bottom:8px">Скрыть карточки</button>';
         if(c.key==='new') h+='<button class="btn" data-newin="1" type="button" style="width:100%;margin-bottom:8px;background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600">+ Заявка</button>';
         if(!cards.length) h+='<div class="empty">Пусто</div>';
         cards.forEach(function(r){
@@ -228,6 +248,9 @@
     var dragId=null;
     function wireBoard(){
       [].forEach.call(document.querySelectorAll('[data-newin]'), function(b){ b.onclick=openCreate; });
+      var aS=document.getElementById('avrShow'), aH=document.getElementById('avrHide');
+      if(aS) aS.onclick=function(){ aS.disabled=true; aS.textContent='Загружаю…'; loadAvr().catch(function(e){ aS.disabled=false; aS.textContent='Показать карточки'; alert('Не получилось: '+(e&&e.message||e)); }); };
+      if(aH) aH.onclick=function(){ var n=ROWS.filter(function(r){ return r.status==='avr'; }).length; AVRBASE=0; ROWS=ROWS.filter(function(r){ return r.status!=='avr'; }); AVRBASE=n; SHOW_AVR=false; renderBoard(); };
       [].forEach.call(document.querySelectorAll('.kcard'), function(c){
         c.onclick=function(e){ if(e.target.classList.contains('mv'))return; openCard(+this.getAttribute('data-id')); };
         c.ondragstart=function(e){ dragId=+this.getAttribute('data-id'); this.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; };
@@ -418,7 +441,7 @@
       }).catch(function(e){ alert('Не удалось открыть: '+(e&&e.message||e)); });
     }
 
-    function statusLabel(s){ return s==='new'?'новая':s==='done'?'сделано':s==='sent'?'отправлен':s==='rejected'?'отклонена':s; }
+    function statusLabel(s){ return s==='new'?'новая':s==='done'?'сделано':s==='sent'?'отправлен':s==='avr'?'АВР':s==='rejected'?'отклонена':s; }
     function opsSummary(ops){
       var LBL={cut:'Резка',cutTube:'Резка трубы',bend:'Гибка',bendTube:'Гибка трубы',bendRod:'Гибка прута',weld:'Сварка'};
       if(!ops||!ops.length) return '';
