@@ -10,6 +10,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
   <script src="./invoice-doc.js?v=3"></script>
+  <script src="./kp-doc.js?v=1"></script>
   <script src="./calc-engine.js?v=23"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc;
@@ -71,10 +72,12 @@
     <div style="display:flex;gap:14px;align-items:center">
       <div class="tot" id="grand">—</div>
       <button class="btn" id="pdfList" type="button" style="background:#0c66e4;border-color:#0c66e4;color:#fff" title="Ранее выставленные счета по этому заказу — просмотр и скачивание PDF">Счета по заказу · изменить</button>
+      <button class="btn" id="kpList" type="button" style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff" title="Коммерческие предложения по выбранным заказам: скачать, удалить, история">📄 КП по заказу</button>
     </div>
     <div style="display:flex;gap:10px">
-      <button class="btn ghost" id="close" type="button">Закрыть</button>
+      <button class="btn" id="kpGen" type="button" disabled style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff;font-weight:700" title="Коммерческое предложение (PDF) по выбранным заказам">📄 Создать КП</button>
       <button class="btn green" id="gen" type="button" disabled>🧾 Создать счёт</button>
+      <button class="btn ghost" id="close" type="button">Закрыть</button>
     </div>
   </div>
 
@@ -677,6 +680,7 @@
     // при наличных счёт не формируется
     (function(){ var g0=document.getElementById('gen');
       if(g0 && !supplierKey){ g0.disabled=true; g0.title='Сначала выберите компанию-поставщика вверху окна'; }
+      var k0=document.getElementById('kpGen'); if(k0 && !supplierKey){ k0.disabled=true; k0.title='Сначала выберите компанию-поставщика вверху окна'; }
     })();
     (function(){ var g=document.getElementById('gen'); if(false && g && supplierKey==='cash'){ g.disabled=true; g.title='Наличные — счёт не формируется; отметьте оплату кнопкой «оплачен»'; } })();
     var bs=document.getElementById('buyerSel');
@@ -917,6 +921,7 @@
     document.getElementById('grand').textContent='Итого по счёту: '+money(g)+' ₸';
     var ok = !!ctx.buyer && (selectedOrders().length>0 || validExtras().length>0);
     document.getElementById('gen').disabled=!ok;
+    var kg=document.getElementById('kpGen'); if(kg) kg.disabled=!(ok && supplierKey);
   }
 
   // суммы в счёте округляются ВВЕРХ до целого тенге (150 456,12 → 150 457):
@@ -1217,8 +1222,117 @@
       });
     };
   }
+
+  // ========================================================================
+  // КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ (решение Асхата, 18.11.2026): PDF по образцу «КП TTMS».
+  // Поставщик и покупатель — как выбрано в окне, строки и цены — как в счёте (с налогом
+  // компании). На заказ — одно действующее КП; новое — только с удалением старого.
+  // ========================================================================
+  var KP_TERMS = { term:'1 неделя', delivery:'Самовывоз', payment:'100%', warranty:'1 год (12 мес)', days:10 };
+  function askKpTerms(){
+    return new Promise(function(done){
+      var co = companyById(selectedCompanyId) || {};
+      var people = (co.contacts||[]).filter(function(c){ return c && c.name; });
+      var d=new Date(); d.setDate(d.getDate()+KP_TERMS.days);
+      var inp='width:100%;box-sizing:border-box;padding:7px 8px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px';
+      var row=function(lbl,html){ return '<div style="margin-bottom:8px"><div class="small muted" style="margin-bottom:3px">'+lbl+'</div>'+html+'</div>'; };
+      var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px">'+
+        '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;max-width:520px;width:100%;padding:18px 20px;max-height:90vh;overflow:auto">'+
+        '<div style="font-weight:700;font-size:15px;margin-bottom:10px">Коммерческое предложение</div>'+
+        row('Кому (контактное лицо)', '<select id="kpWho" style="'+inp+'"><option value="">— не указывать —</option>'+people.map(function(c){ return '<option value="'+esc(c.name)+'">'+esc(c.name+(c.role?' · '+c.role:''))+'</option>'; }).join('')+'</select>')+
+        row('Действительно до', '<input type="date" id="kpValid" value="'+isoDate(d)+'" style="'+inp+'">')+
+        row('Срок изготовления / поставки', '<input id="kpTerm" value="'+esc(KP_TERMS.term)+'" style="'+inp+'">')+
+        row('Место и условия доставки', '<input id="kpDel" value="'+esc(KP_TERMS.delivery)+'" style="'+inp+'">')+
+        row('Условия оплаты', '<input id="kpPay" value="'+esc(KP_TERMS.payment)+'" style="'+inp+'">')+
+        row('Гарантийный срок', '<input id="kpWar" value="'+esc(KP_TERMS.warranty)+'" style="'+inp+'">')+
+        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button class="btn ghost" id="kpNo" type="button">Отмена</button><button class="btn green" id="kpOk" type="button">Создать КП</button></div>'+
+        '</div></div>';
+      var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host);
+      if(people.length===1) host.querySelector('#kpWho').value=people[0].name;
+      host.querySelector('#kpNo').onclick=function(){ host.remove(); done(null); };
+      host.querySelector('#kpOk').onclick=function(){
+        var v=host.querySelector('#kpValid').value;
+        if(!v){ host.querySelector('#kpValid').focus(); return; }
+        var r={ who:host.querySelector('#kpWho').value, validIso:v,
+          terms:{ term:host.querySelector('#kpTerm').value.trim(), delivery:host.querySelector('#kpDel').value.trim(), payment:host.querySelector('#kpPay').value.trim(), warranty:host.querySelector('#kpWar').value.trim() } };
+        KP_TERMS.term=r.terms.term; KP_TERMS.delivery=r.terms.delivery; KP_TERMS.payment=r.terms.payment; KP_TERMS.warranty=r.terms.warranty;
+        host.remove(); done(r);
+      };
+    });
+  }
+  function kpFileName(data){ return 'КП_'+data.number+'_'+((data.buyer&&data.buyer.name)?String(data.buyer.name).replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30):'клиент')+'.pdf'; }
+  function kpDownload(data){ if(!setupFonts()){ alert('Не удалось загрузить генератор PDF. Проверьте интернет.'); return; } pdfMake.createPdf(window.KP.buildKpDoc(data)).download(kpFileName(data)); }
+  async function generateKp(){
+    var kb=document.getElementById('kpGen');
+    if(!supplierKey){ alert('Выберите компанию-поставщика вверху окна — от неё зависят реквизиты и налог.'); return; }
+    if(!setupFonts()){ alert('Не удалось загрузить генератор PDF (pdfMake). Проверьте интернет.'); return; }
+    var orders=selectedOrders().filter(function(o){ return !o.isRepair; });
+    if(!orders.length){ alert('Отметьте галочкой заказы для КП.'); return; }
+    var coSet={}; orders.forEach(function(o){ var cid=o.company_id||(o.company_name?idByName(o.company_name):null); if(cid) coSet[cid]=1; });
+    if(Object.keys(coSet).length>1){ alert('В одно КП нельзя включать заказы разных компаний.'); return; }
+    var okNames = await askInvoiceNames(orders); if(!okNames) return;
+    var tr = await askKpTerms(); if(!tr) return;
+    var data;
+    try { data=buildData(); } catch(e){ alert(e.message||e); return; }
+    data.items=data.items.filter(function(it){ return it.cardId || !it.code; }).map(function(it){ return { name:it.name, qty:it.qty, unit:'шт', price:it.price, cardId:it.cardId||'' }; });
+    var today=new Date();
+    data.date=ruDate(today); data.validUntil=ruDate(fromIso(tr.validIso)); data.terms=tr.terms;
+    data.buyer=Object.assign({}, ctx.buyer||{}, { contact: tr.who||'' });
+    var total=data.items.reduce(function(s,it){ return s+Math.round((+it.price||0)*(+it.qty||1)); },0);
+    var body={ cardIds: orders.map(function(o){ return o.cardId; }), supplierKey:supplierKey, dateIso:isoDate(today), total:total, data:data };
+    kb.disabled=true; var k0=kb.textContent; kb.textContent='Сохраняю…';
+    function send(replaceIds){
+      body.replaceIds=replaceIds||[];
+      return fetch(WORKER+'/kp-save',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(body) }).then(function(r){ return r.json(); });
+    }
+    send().then(function(j){
+      if(j && j.error && j.active && j.active.length){
+        var lst=j.active.map(function(a){ return '№'+a.number+(a.dateIso?' от '+a.dateIso:''); }).join(', ');
+        if(!confirm('По этим заказам уже есть КП '+lst+'.\n\nКП должно быть одно. Удалить старое (оно останется в истории) и создать новое?')) return { cancelled:1 };
+        return send(j.active.map(function(a){ return a.id; }));
+      }
+      return j;
+    }).then(function(j){
+      kb.disabled=false; kb.textContent=k0;
+      if(!j || j.cancelled) return;
+      if(j.error){ alert(j.error); return; }
+      data.number=j.number; kpDownload(data);
+      alert('КП №'+j.number+' создано. PDF скачан — отправьте его клиенту.');
+    }).catch(function(e){ kb.disabled=false; kb.textContent=k0; alert('Ошибка: '+(e&&e.message||e)); });
+  }
+  // история КП по отмеченным заказам (или по всем заказам клиента)
+  function showKpList(){
+    var ids=(selectedOrders().length?selectedOrders():clientOrders()).filter(function(o){ return !o.isRepair; }).map(function(o){ return o.cardId; });
+    if(!ids.length){ alert('Выберите клиента — покажу КП по его заказам.'); return; }
+    fetch(WORKER+'/kp-list?cardIds='+encodeURIComponent(ids.join(',')),{credentials:'include'}).then(function(r){ return r.json(); }).then(function(j){
+      var it=(j&&j.items)||[];
+      var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px">'+
+        '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;max-width:680px;width:100%;padding:18px 20px;max-height:85vh;overflow:auto">'+
+        '<div style="font-weight:700;font-size:15px;margin-bottom:10px">КП по заказам</div>';
+      if(!it.length) h+='<div class="muted">КП ещё не создавались.</div>';
+      it.forEach(function(k){
+        var live=!k.deletedAt;
+        h+='<div style="display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:8px 0'+(live?'':';opacity:.55')+'">'+
+          '<div style="flex:1"><b>КП №'+esc(k.number)+'</b> · '+esc(k.dateIso||'')+' · '+esc(k.buyer||'')+' · <b>'+money(k.total)+' ₸</b>'+
+          '<div class="small muted">'+(live?'действует':'удалено '+esc(String(k.deletedAt||'').slice(0,10))+(k.deletedBy?' · '+esc(k.deletedBy):''))+(k.createdBy?' · создал(а): '+esc(k.createdBy):'')+'</div></div>'+
+          (k.data?'<button class="btn" type="button" data-kpdl="'+k.id+'">Скачать</button>':'')+
+          (live?'<button class="btn ghost" type="button" data-kpdel="'+k.id+'" style="color:#f87168">Удалить</button>':'')+'</div>';
+      });
+      h+='<div style="text-align:right;margin-top:12px"><button class="btn ghost" id="kpLx" type="button">Закрыть</button></div></div></div>';
+      var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host);
+      host.querySelector('#kpLx').onclick=function(){ host.remove(); };
+      [].forEach.call(host.querySelectorAll('[data-kpdl]'),function(b){ b.onclick=function(){ var k=it.filter(function(x){ return String(x.id)===b.getAttribute('data-kpdl'); })[0]; if(k&&k.data){ var d=k.data; d.number=k.number; kpDownload(d); } }; });
+      [].forEach.call(host.querySelectorAll('[data-kpdel]'),function(b){ b.onclick=function(){
+        if(!confirm('Удалить КП? Оно останется в истории как «удалено», и по заказу можно будет создать новое.')) return;
+        fetch(WORKER+'/kp-delete',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify({ id:+b.getAttribute('data-kpdel') }) })
+          .then(function(r){ return r.json(); }).then(function(x){ if(x&&x.error){ alert(x.error); return; } host.remove(); showKpList(); });
+      }; });
+    }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
+  }
   document.getElementById('close').onclick=function(){ t.closeModal(); };
   document.getElementById('gen').onclick=generate;
+  document.getElementById('kpGen').onclick=generateKp;
+  document.getElementById('kpList').onclick=showKpList;
 
   loadContext()
     .then(function(){ if(!ctx.cardId && !MODE_REPAIR){ boot('Не удалось определить карточку.'); return Promise.reject('no card'); } })
