@@ -1194,6 +1194,23 @@
     var tp=topOffset()+'px'; overlays().forEach(function(o){ o.style.top=tp; });
     if(CUR && CUR.getAttribute('data-per') && CUR_KEY && CUR_KEY!==periodKey()) openTab(CUR);
   };
+  // РАЗДЕЛЫ ПАНЕЛИ ПО ДОЛЖНОСТИ (решение Асхата, 18.11.2026): учредитель видит всё; у остальных с
+  // «Панелью руководителя» — только отмеченные в должности разделы (не отмечен ни один — все, как раньше)
+  function applyDashTabs(){
+    return t.member('id').then(function(me){
+      return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent((me&&me.id)||'')).then(function(r){ return r.json(); });
+    }).then(function(j){
+      if(!j || j.isFounder || !j.dashTabs) return;
+      var d=j.dashTabs, any=Object.keys(d).some(function(k){ return d[k]; });
+      if(!any) return;
+      var MAP={ fin:'financeBtn', prices:'pricingBtn', positions:'positionsBtn', staff:'workers', tabel:'tabelBtn', settings:'settingsBtn' };
+      Object.keys(MAP).forEach(function(k){
+        if(d[k]) return;
+        var el=document.getElementById(MAP[k]); if(el){ el.style.display='none'; el.__msDenied=1; }
+      });
+      if(!d.settings) ['boardBtn','healthBtn','backupBtn'].forEach(function(id){ var e=document.getElementById(id); if(e){ e.style.display='none'; e.__msDenied=1; } });
+    }).catch(function(){});
+  }
   function initTabs(){
     TABS.forEach(function(el){
       el.__msOpen = el.onclick; el.onclick=null;
@@ -1384,7 +1401,7 @@
           try{ window.__KNOWN_CUSTOM={ mat:(p.customMat||[]).map(function(x){return x.code;}), cmp:(p.customCmp||[]).map(function(x){return x.code;}), op:(p.customOp||[]).map(function(x){return x.code;}) }; }catch(e){}
           PRICING_EDIT={ mat:p.mat||{}, cmp:p.cmp||{}, coef:p.coef||{}, customMat:p.customMat||[], customCmp:p.customCmp||[], customOp:p.customOp||[],
           matOstBySec:p.matOstBySec||{}, matRahBySec:p.matRahBySec||{}, cmpOstBySec:p.cmpOstBySec||{}, cmpRahBySec:p.cmpRahBySec||{}, opOstBySec:p.opOstBySec||{}, opRahBySec:p.opRahBySec||{}, rates:p.rates||{} }; }
-      }).catch(function(){}).then(load).then(initTabs);
+      }).catch(function(){}).then(load).then(applyDashTabs).then(initTabs);
       return;
     }
     // не админ: проверяем право «Панель руководителя» (начальник цеха и т.п.)
