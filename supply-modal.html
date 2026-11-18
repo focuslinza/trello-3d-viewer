@@ -147,7 +147,7 @@
           return adminIn(res[1])||adminIn(res[2]);
         }).catch(function(){ return false; });
     }
-    var IS_ADMIN=false;
+    var IS_ADMIN=false, IS_FOUNDER=false;   // учредитель: кнопка «выдача → расход»
     function canUse(){
       return isDirector().then(function(admin){
         IS_ADMIN=admin;
@@ -535,7 +535,8 @@
           var rid='issue-'+i0.id;
           h+='<tr><td>'+esc(i0.date)+'</td><td class="num" style="color:#579dff">+'+money(i0.amount)+' ₸</td><td>'+esc(i0.note||'')+'</td>'+
              '<td><span class="crec" data-id="'+rid+'">…</span>'+(IS_ADMIN?' <label style="cursor:pointer;color:#8ab4ff" title="Прикрепить чек или документ">📎<input type="file" accept="image/*,application/pdf" class="cfile" data-id="'+rid+'" style="display:none"></label>':'')+'</td>'+
-             '<td>'+(IS_ADMIN?('<button class="btn danger idel" data-id="'+i0.id+'" type="button">✕</button>'):'')+'</td></tr>';
+             '<td style="white-space:nowrap">'+(IS_FOUNDER?(i0.toExpense?'<span class="muted" style="font-size:11.5px;margin-right:6px" title="Расход по этой выдаче уже создан">✓ в расходе</span>':'<button class="btn i2e" data-id="'+i0.id+'" type="button" title="Создать расход с той же датой, суммой и заметкой (деньги потрачены сразу)" style="margin-right:6px">→ в расход</button>'):'')+
+               (IS_ADMIN?('<button class="btn danger idel" data-id="'+i0.id+'" type="button">✕</button>'):'')+'</td></tr>';
         });
         h+='</tbody></table>';
       }
@@ -1252,6 +1253,13 @@
           .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error); return j.id?uploadPending('cash', 'issue-'+j.id, 'ip', msg):null; }).then(function(){ loadAll(); })
           .catch(function(e){ msg.textContent='Не сохранилось: '+(e&&e.message||e); btn.disabled=false; });
       };
+      [].forEach.call(document.querySelectorAll('.i2e'), function(b){
+        b.onclick=function(){ var id=+this.getAttribute('data-id'), btn=this; btn.disabled=true; btn.textContent='…';
+          fetch(WORKER+'/cash-issue-to-expense',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({id:id})})
+            .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); loadAll(); })
+            .catch(function(e){ alert('Не получилось: '+(e&&e.message||e)); btn.disabled=false; btn.textContent='→ в расход'; });
+        };
+      });
       [].forEach.call(document.querySelectorAll('.idel'), function(b){
         b.onclick=function(){ var id=+this.getAttribute('data-id');
           if(!confirm('Удалить эту выдачу? Остаток пересчитается.')) return;
@@ -1293,10 +1301,9 @@
       return isDirector();
     }).then(function(admin){
       IS_ADMIN=admin;
-      if(admin){ CAN_SUPPLY=true; return; }
       return fetch(WORKER+'/worker-perms?memberId='+encodeURIComponent(ME.id))
-        .then(function(r){return r.json();}).then(function(j){ CAN_SUPPLY=!!(j&&j.canSupply); })
-        .catch(function(){ CAN_SUPPLY=false; });
+        .then(function(r){return r.json();}).then(function(j){ CAN_SUPPLY=admin||!!(j&&j.canSupply); IS_FOUNDER=!!(j&&j.isFounder); })
+        .catch(function(){ CAN_SUPPLY=admin; });
     }).then(function(){ if (QUICK) { openSupCreate(); setTimeout(function(){ var n=document.getElementById('sName'); if(n) n.focus(); }, 50); return; } return loadAll(); })
       .catch(function(e){ document.getElementById('boot').textContent='Ошибка: '+(e&&e.message||e); });
   </script>
