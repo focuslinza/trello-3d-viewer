@@ -57,6 +57,10 @@
       Людей назначают на должности во вкладке «Зарплата»; права и оклад человека берутся из его должностей. Изменили должность — у всех, кто на ней, права и оклад обновятся сами.</div>
     <div id="list" class="muted">Загрузка…</div>
     <button class="btn add" id="addPos" type="button">+ новая должность</button>
+    <div class="savebar" style="position:sticky;bottom:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 0;margin-top:12px;background:var(--bg,#1d2125);border-top:1px solid var(--line,#3a414a)">
+      <button class="btn" id="saveAllPos" type="button" style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff;font-weight:700;padding:10px 22px">💾 Сохранить всё</button>
+      <span id="saveAllPosMsg" style="font-size:13px"></span>
+    </div>
     <div id="msg" class="muted" style="margin-top:8px;font-size:12.5px"></div>
   </div>
 <script>
@@ -293,6 +297,25 @@
       render();
     }).catch(function(e){ document.getElementById('list').textContent='Ошибка загрузки: '+(e&&e.message||e); });
   }
+  // «СОХРАНИТЬ ВСЁ» (решение Асхата, 18.11.2026): сохраняет все должности по очереди, как кнопка у каждой
+  document.getElementById('saveAllPos').onclick=function(){
+    var btn=this, m=document.getElementById('saveAllPosMsg');
+    var cards=[].filter.call(document.querySelectorAll('.pcard'),function(el){ return collect(el).name; });
+    if(!cards.length){ m.textContent='Нечего сохранять.'; return; }
+    btn.disabled=true; var done=0, bad=[], chain=Promise.resolve();
+    cards.forEach(function(el){ chain=chain.then(function(){
+      var p=collect(el); m.style.color=''; m.textContent='Сохраняю '+(done+1)+' из '+cards.length+'…';
+      return fetch(WORKER+'/position-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({position:p})})
+        .then(function(r){return r.json();}).then(function(j){ done++; if(!j||!j.ok) bad.push(p.name+': '+((j&&j.error)||'?')); })
+        .catch(function(e){ done++; bad.push(p.name+': нет связи'); });
+    }); });
+    chain.then(function(){
+      btn.disabled=false;
+      if(bad.length){ m.style.color='#f87168'; m.textContent='Не сохранилось: '+bad.join('; '); }
+      else { m.style.color='#4bce97'; m.textContent='✓ Сохранено должностей: '+done; }
+      load();
+    });
+  };
   document.getElementById('addPos').onclick=function(){
     var c=card(null,true); document.getElementById('list').appendChild(c); c.querySelector('.nm').focus();
   };
