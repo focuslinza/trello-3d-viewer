@@ -1305,33 +1305,71 @@
     }).catch(function(e){ kb.disabled=false; kb.textContent=k0; alert('Ошибка: '+(e&&e.message||e)); });
   }
   // история КП по отмеченным заказам (или по всем заказам клиента)
+  // «КП ПО ЗАКАЗУ» — как «Счета по заказу» (решение Асхата, 18.11.2026): действующие КП карточками
+  // (Просмотр во всплывающем окне поверх, ⬇ PDF, ✕ Удалить) и история удалённых
+  function kpPreview(k){
+    if(!k||!k.data){ alert('В этом КП не сохранены данные — открыть нельзя.'); return; }
+    if(!setupFonts()){ alert('Не удалось загрузить генератор PDF. Проверьте интернет.'); return; }
+    var d=k.data; d.number=k.number;
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1200;display:flex;align-items:center;justify-content:center;padding:14px';
+    ov.innerHTML='<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;width:min(900px,100%);height:min(92vh,1100px);display:flex;flex-direction:column;overflow:hidden">'+
+      '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line)"><b style="flex:1">КП № '+esc(k.number)+'</b>'+
+      '<button class="btn ghost" type="button" data-pdl>⬇ PDF</button><button class="btn ghost" type="button" data-px title="Закрыть">✕</button></div>'+
+      '<div data-pb style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted)">Готовлю КП…</div></div>';
+    document.body.appendChild(ov);
+    function close(){ try{ if(ov.__u) URL.revokeObjectURL(ov.__u); }catch(e){} ov.remove(); }
+    ov.querySelector('[data-px]').onclick=close;
+    ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+    ov.querySelector('[data-pdl]').onclick=function(){ kpDownload(d); };
+    pdfMake.createPdf(window.KP.buildKpDoc(d)).getBlob(function(blob){
+      var u=URL.createObjectURL(blob); ov.__u=u;
+      ov.querySelector('[data-pb]').innerHTML='<iframe src="'+u+'#view=FitH" style="width:100%;height:100%;border:0;background:#fff"></iframe>';
+    });
+  }
   function showKpList(){
     var ids=(selectedOrders().length?selectedOrders():clientOrders()).filter(function(o){ return !o.isRepair; }).map(function(o){ return o.cardId; });
+    if(!ids.length && ctx.cardId) ids=[ctx.cardId];
     if(!ids.length){ alert('Выберите клиента — покажу КП по его заказам.'); return; }
+    var old=document.getElementById('kpLst'); if(old) old.remove();
+    var host=document.createElement('div'); host.id='kpLst';
+    host.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;flex-direction:column';
+    host.innerHTML='<div style="display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--bg2)"><b style="flex:1;text-align:center;font-size:15px">КП по заказу</b>'+
+      '<button class="btn ghost" type="button" id="kpLx" title="Закрыть">✕</button></div><div id="kpLb" style="flex:1;overflow:auto;padding:14px 16px">Загрузка…</div>';
+    document.body.appendChild(host);
+    host.querySelector('#kpLx').onclick=function(){ host.remove(); };
     fetch(WORKER+'/kp-list?cardIds='+encodeURIComponent(ids.join(',')),{credentials:'include'}).then(function(r){ return r.json(); }).then(function(j){
-      var it=(j&&j.items)||[];
-      var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px">'+
-        '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;max-width:680px;width:100%;padding:18px 20px;max-height:85vh;overflow:auto">'+
-        '<div style="font-weight:700;font-size:15px;margin-bottom:10px">КП по заказам</div>';
-      if(!it.length) h+='<div class="muted">КП ещё не создавались.</div>';
-      it.forEach(function(k){
-        var live=!k.deletedAt;
-        h+='<div style="display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:8px 0'+(live?'':';opacity:.55')+'">'+
-          '<div style="flex:1"><b>КП №'+esc(k.number)+'</b> · '+esc(k.dateIso||'')+' · '+esc(k.buyer||'')+' · <b>'+money(k.total)+' ₸</b>'+
-          '<div class="small muted">'+(live?'действует':'удалено '+esc(String(k.deletedAt||'').slice(0,10))+(k.deletedBy?' · '+esc(k.deletedBy):''))+(k.createdBy?' · создал(а): '+esc(k.createdBy):'')+'</div></div>'+
-          (k.data?'<button class="btn" type="button" data-kpdl="'+k.id+'">Скачать</button>':'')+
-          (live?'<button class="btn ghost" type="button" data-kpdel="'+k.id+'" style="color:#f87168">Удалить</button>':'')+'</div>';
+      var it=(j&&j.items)||[], live=it.filter(function(k){ return !k.deletedAt; }), dead=it.filter(function(k){ return k.deletedAt; });
+      var card='border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--bg2)';
+      var h='<div style="max-width:900px;margin:0 auto"><h3 style="margin:0 0 10px;font-size:13px;text-transform:uppercase;color:var(--muted)">КП, в которые входит этот заказ</h3>';
+      if(!live.length) h+='<div class="muted" style="margin-bottom:14px">Действующих КП нет. Отметьте заказы и нажмите «Создать КП».</div>';
+      live.forEach(function(k){
+        var dd=k.data||{}, sup=(dd.supplier&&(dd.supplier.label||dd.supplier.name))||'—';
+        h+='<div style="'+card+'"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><b style="font-size:15px">КП № '+esc(k.number)+'</b><span class="muted"> от '+esc(String(k.dateIso||'').split('-').reverse().join('.'))+'</span>'+
+          (dd.validUntil?'<span class="muted"> · действует до '+esc(dd.validUntil)+'</span>':'')+'</div><b style="font-size:15px">'+money(k.total)+' ₸</b></div>'+
+          '<div class="small" style="margin:4px 0 8px"><span class="muted">Покупатель:</span> '+esc(k.buyer||'—')+' &nbsp; <span class="muted">Поставщик:</span> '+esc(sup)+(k.createdBy?' &nbsp; <span class="muted">Создал(а):</span> '+esc(k.createdBy):'')+'</div>'+
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+            '<button class="btn" type="button" data-kpv="'+k.id+'" style="background:#0c66e4;border-color:#0c66e4;color:#fff">Просмотр</button>'+
+            '<button class="btn ghost" type="button" data-kpdl="'+k.id+'">⬇ PDF</button>'+
+            (window.__KP_OK?'<span style="flex:1"></span><button class="btn ghost" type="button" data-kpdel="'+k.id+'" style="color:#f87168;border-color:#f87168">✕ Удалить</button>':'')+
+          '</div></div>';
       });
-      h+='<div style="text-align:right;margin-top:12px"><button class="btn ghost" id="kpLx" type="button">Закрыть</button></div></div></div>';
-      var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host);
-      host.querySelector('#kpLx').onclick=function(){ host.remove(); };
-      [].forEach.call(host.querySelectorAll('[data-kpdl]'),function(b){ b.onclick=function(){ var k=it.filter(function(x){ return String(x.id)===b.getAttribute('data-kpdl'); })[0]; if(k&&k.data){ var d=k.data; d.number=k.number; kpDownload(d); } }; });
+      if(dead.length){
+        h+='<h3 style="margin:18px 0 8px;font-size:13px;text-transform:uppercase;color:var(--muted)">История КП — удалённые</h3><table style="width:100%;border-collapse:collapse">'+
+          dead.map(function(k){ return '<tr style="border-top:1px solid var(--line);opacity:.8"><td style="padding:6px 4px"><s>№ '+esc(k.number)+'</s></td><td class="small">'+esc(k.dateIso||'')+'</td><td class="small" style="text-align:right">'+money(k.total)+' ₸</td>'+
+            '<td class="small" style="color:#e8a59d;padding:0 8px">удалено '+esc(String(k.deletedAt||'').slice(0,10))+(k.deletedBy?' · '+esc(k.deletedBy):'')+'</td>'+
+            '<td style="text-align:right"><button class="btn ghost" type="button" data-kpv="'+k.id+'">Просмотр</button></td></tr>'; }).join('')+'</table>';
+      }
+      host.querySelector('#kpLb').innerHTML=h+'</div>';
+      function byId(b,a){ var id=b.getAttribute(a); return it.filter(function(x){ return String(x.id)===id; })[0]; }
+      [].forEach.call(host.querySelectorAll('[data-kpv]'),function(b){ b.onclick=function(){ kpPreview(byId(b,'data-kpv')); }; });
+      [].forEach.call(host.querySelectorAll('[data-kpdl]'),function(b){ b.onclick=function(){ var k=byId(b,'data-kpdl'); if(k&&k.data){ var d=k.data; d.number=k.number; kpDownload(d); } }; });
       [].forEach.call(host.querySelectorAll('[data-kpdel]'),function(b){ b.onclick=function(){
         if(!confirm('Удалить КП? Оно останется в истории как «удалено», и по заказу можно будет создать новое.')) return;
         fetch(WORKER+'/kp-delete',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify({ id:+b.getAttribute('data-kpdel') }) })
-          .then(function(r){ return r.json(); }).then(function(x){ if(x&&x.error){ alert(x.error); return; } host.remove(); showKpList(); });
+          .then(function(r){ return r.json(); }).then(function(x){ if(x&&x.error){ alert(x.error); return; } showKpList(); });
       }; });
-    }).catch(function(e){ alert('Сеть: '+(e&&e.message||e)); });
+    }).catch(function(e){ host.querySelector('#kpLb').textContent='Сеть: '+(e&&e.message||e); });
   }
   document.getElementById('close').onclick=function(){ t.closeModal(); };
   document.getElementById('gen').onclick=generate;
