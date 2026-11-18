@@ -771,13 +771,45 @@
     document.getElementById('hlBack').onclick=function(){ ov.remove(); };
     function esc(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     var KIND={ error:'ошибка в окне', http:'сервер не ответил', stuck:'зависло, перезапущено', perm:'права не определились' };
+    // ПОМОЩНИК-ИИ: предложения правок — руководитель решает «Да»/«Нет», ИИ выполняет только одобренное
+    function loadAi(tok){
+      var box=document.getElementById('aiBox'); if(!box) return;
+      fetch(WORKER+'/ai-proposals',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminToken: tok }) })
+        .then(function(r){ return r.json(); }).then(function(j){
+          var it=(j&&j.items)||[];
+          var ST={ pending:['⏳','ждёт вашего решения','#f5cd47'], approved:['🛠','одобрено — ИИ выполнит при следующей проверке','#9ee6bd'], rejected:['✖','отклонено','#9fadbc'], done:['✅','сделано','#9ee6bd'], failed:['❌','не получилось','#f87168'] };
+          var h='<div style="border:1px solid #2e5c44;border-radius:8px;padding:10px 12px;margin-bottom:12px">'+
+            '<b>🤖 Помощник-ИИ: предложения</b><div style="font-size:12px;color:var(--muted,#9fadbc);margin:2px 0 6px">ИИ каждый день смотрит сбои ниже и предлагает правки. Он делает только то, на что вы нажали «Да».</div>';
+          if(!it.length) h+='<div style="font-size:12px;color:var(--muted,#9fadbc)">Пока предложений нет.</div>';
+          it.forEach(function(p){
+            var s=ST[p.status]||['•',p.status,'#9fadbc'];
+            h+='<div style="border-top:1px solid var(--line,#3a414a);padding:8px 0">'+
+              '<div style="display:flex;gap:8px;align-items:flex-start"><div>'+s[0]+'</div><div style="flex:1"><b>'+esc(p.title)+'</b>'+
+              '<div style="font-size:12px;color:'+s[2]+'">'+s[1]+(p.decided_by?' · '+esc(p.decided_by):'')+'</div>'+
+              (p.detail?'<div style="font-size:12.5px;margin-top:4px;white-space:pre-wrap">'+esc(p.detail)+'</div>':'')+
+              (p.risk?'<div style="font-size:12px;color:var(--muted,#9fadbc);margin-top:3px">Риск: '+esc(p.risk)+'</div>':'')+
+              (p.result?'<div style="font-size:12px;margin-top:4px;color:'+s[2]+';white-space:pre-wrap">Итог: '+esc(p.result)+'</div>':'')+
+              (p.status==='pending'?'<div style="display:flex;gap:8px;margin-top:6px"><button type="button" data-ai="'+p.id+'" data-ok="1" style="background:#2e7d57;border:1px solid #2e7d57;color:#fff;border-radius:6px;padding:5px 16px;cursor:pointer">Да</button><button type="button" data-ai="'+p.id+'" data-ok="0" style="background:transparent;border:1px solid #9fadbc;color:var(--txt);border-radius:6px;padding:5px 16px;cursor:pointer">Нет</button></div>':'')+
+              '</div></div></div>';
+          });
+          box.innerHTML=h+'</div>';
+          [].forEach.call(box.querySelectorAll('[data-ai]'), function(b){
+            b.onclick=function(){
+              b.disabled=true;
+              fetch(WORKER+'/ai-decide',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminToken: tok, id:+b.getAttribute('data-ai'), ok: b.getAttribute('data-ok')==='1' }) })
+                .then(function(r){ return r.json(); }).then(function(){ loadAi(tok); aiBadge(); })
+                .catch(function(e){ b.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
+            };
+          });
+        }).catch(function(){ box.innerHTML=''; });
+    }
     function run(){
       var body=document.getElementById('hlBody'); body.textContent='Проверяю…';
       var tok=''; try{ tok=localStorage.getItem('ms_board_token')||''; }catch(e){}
       fetch(WORKER+'/health',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminToken: tok }) })
         .then(function(r){ return r.json(); }).then(function(j){
           if(!j || !j.ok){ body.innerHTML='<div style="color:#f87168">'+esc((j&&j.error)||'проверка не выполнилась')+'</div>'; return; }
-          var ic={ ok:'✅', warn:'⚠️', bad:'❌' }, h='';
+          var ic={ ok:'✅', warn:'⚠️', bad:'❌' }, h='<div id="aiBox"></div>';
           // утренняя самопроверка (каждый день ~09:00): «глазами каждого работника»
           var st=j.selftest;
           h+='<div style="border:1px solid var(--line,#3a414a);border-radius:8px;padding:10px 12px;margin-bottom:12px">'+
@@ -800,6 +832,7 @@
               er.map(function(e){ return '<tr style="border-top:1px solid var(--line,#3a414a)"><td style="padding:5px 4px;white-space:nowrap">'+esc((function(){ try{ return new Date(String(e.last_at).replace(' ','T')+'Z').toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(x){ return e.day; } })())+'</td><td>'+esc(String(e.module).replace('.html',''))+'</td><td>'+esc(KIND[e.kind]||e.kind)+'<div style="color:var(--muted,#9fadbc)">'+esc(e.msg)+'</div></td><td>'+esc(e.worker||'')+'</td><td style="text-align:right">'+(+e.n||1)+'</td></tr>'; }).join('')+'</table>';
           }
           body.innerHTML=h;
+          loadAi(tok);
           var sb=document.getElementById('hlSelf');
           if(sb) sb.onclick=function(){
             sb.disabled=true; sb.textContent='Проверяю… (до минуты)';
@@ -1124,6 +1157,18 @@
     document.getElementById('app').style.display = el.getAttribute('data-per') ? '' : 'none';
     var fn=el.__msOpen; if(fn) fn.call(el);
   }
+
+  // число предложений ИИ, ждущих решения — на вкладке «Настройки»
+  function aiBadge(){
+    var t=document.getElementById('settingsBtn'); if(!t) return;
+    var tok=''; try{ tok=localStorage.getItem('ms_board_token')||''; }catch(e){}
+    fetch(WORKER+'/ai-proposals',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminToken: tok }) })
+      .then(function(r){ return r.json(); }).then(function(j){
+        var n=((j&&j.items)||[]).filter(function(p){ return p.status==='pending'; }).length;
+        t.textContent=n?('Настройки 🤖'+n):'Настройки';
+      }).catch(function(){});
+  }
+  setTimeout(aiBadge, 1500);
   // НАСТРОЙКИ: Своя доска + Здоровье системы + Резервные копии — на одной странице
   function openSettings(){
     var page=document.createElement('div');
