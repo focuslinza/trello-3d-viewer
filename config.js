@@ -53,6 +53,28 @@
   window.addEventListener('error', function (e) { report('error', (e && e.message || '') + ' @' + (e && e.lineno || '')); });
   window.addEventListener('unhandledrejection', function (e) { var r = e && e.reason; report('error', 'promise: ' + (r && r.message || r)); });
 
+  // ПОЛОСКА «НЕТ СВЯЗИ» (18.11.2026, одобрено Асхатом): пропал интернет — вверху окна жёлтая
+  // полоска, чтобы человек понимал, что происходит. Пропадает сама при первом удачном ответе,
+  // при возврате сети или через 20 с. Только показ, запросы не меняет.
+  var offTimer = null;
+  function offBar(show) {
+    try {
+      var el = document.getElementById('ms-offline-bar');
+      if (!show) { if (el) el.style.display = 'none'; if (offTimer) { clearTimeout(offTimer); offTimer = null; } return; }
+      if (!document.body) return;
+      if (!el) {
+        el = document.createElement('div'); el.id = 'ms-offline-bar'; el.textContent = 'Нет связи, повторяю…';
+        el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#f5c542;color:#2b2200;font:600 13px/1.2 system-ui,sans-serif;text-align:center;padding:6px 8px;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.25)';
+        document.body.appendChild(el);
+      }
+      el.style.display = 'block';
+      if (offTimer) clearTimeout(offTimer);
+      offTimer = setTimeout(function () { offBar(false); }, 20000);
+    } catch (e) {}
+  }
+  window.addEventListener('offline', function () { offBar(true); });
+  window.addEventListener('online', function () { offBar(false); });
+
   // запросы к серверу: обрыв или 5xx — в отчёт (только для нашего сервера)
   if (origFetch && !window.__msCfgFetch) {
     window.__msCfgFetch = 1;
@@ -104,8 +126,8 @@
       })(2) : wf(input, init);
       if (!ours || u.indexOf('/client-error') >= 0) return p;
       var path = u.replace(window.WORKER_URL, '').split('?')[0];
-      return p.then(function (r) { if (r && r.status >= 500) report('http', path + ' → HTTP ' + r.status); return r; },
-        function (e) { report('http', path + ' → нет связи: ' + (e && e.message || e)); throw e; });
+      return p.then(function (r) { if (r) offBar(false); if (r && r.status >= 500) report('http', path + ' → HTTP ' + r.status); return r; },
+        function (e) { if (!(e && e.name === 'AbortError') || navigator.onLine === false) offBar(true); report('http', path + ' → нет связи: ' + (e && e.message || e)); throw e; });
     };
   }
 

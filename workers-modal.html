@@ -658,7 +658,7 @@
       if (card.__pos[0] && card.__pos[0].salaryOverride>0) card.querySelector('.sal').value = card.__pos[0].salaryOverride;
       else if (card.__pos.length) card.querySelector('.sal').value = '';
       renderPos(card); applyDerived(card);
-      card.querySelector('.save').addEventListener('click', function(){ saveRow(card); });
+      card.querySelector('.save').addEventListener('click', function(){ saveRow(card).catch(function(){}); }); // подсказки проверки («нет оклада», «введите имя») уже на экране — в журнал сбоев не пишем
       var pr=card.querySelector('.preset');
       if(pr) pr.addEventListener('click', function(ev){
         ev.preventDefault();
@@ -708,7 +708,7 @@
       var rst=card.querySelector('.restore');
       if(rst) rst.addEventListener('click', function(){
         card.setAttribute('data-active','1');
-        saveRow(card);
+        saveRow(card).catch(function(){});
       });
       return card;
     }

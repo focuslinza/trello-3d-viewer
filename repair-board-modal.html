@@ -574,7 +574,7 @@
           msg.textContent='Сохранение…';
           post('/repair-update',{ id:CUR.id, title:t2 })
           .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?');
-            msg.textContent='Сохранено ✓'; setTimeout(function(){ openCard(CUR.id); load(); }, 400);
+            msg.textContent='Сохранено ✓'; setTimeout(function(){ openCard(CUR.id); loadAll(); }, 400);
           })
           .catch(function(e2){ msg.textContent='Ошибка: '+(e2&&e2.message||e2); });
         };
