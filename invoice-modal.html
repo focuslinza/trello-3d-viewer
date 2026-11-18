@@ -10,7 +10,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
   <script src="./invoice-doc.js?v=3"></script>
-  <script src="./kp-doc.js?v=1"></script>
+  <script src="./kp-doc.js?v=2"></script>
   <script src="./calc-engine.js?v=23"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc;
@@ -1231,7 +1231,7 @@
   // Поставщик и покупатель — как выбрано в окне, строки и цены — как в счёте (с налогом
   // компании). На заказ — одно действующее КП; новое — только с удалением старого.
   // ========================================================================
-  var KP_TERMS = { term:'1 неделя', delivery:'Самовывоз', payment:'100%', warranty:'1 год (12 мес)', days:10 };
+  var KP_TERMS = { term:'1 неделя', delivery:'Самовывоз', payment:'100%', warranty:'1 год (12 мес)', days:1 };   // КП действует 1 день по умолчанию (решение Асхата, 18.11.2026)
   function askKpTerms(){
     return new Promise(function(done){
       var co = companyById(selectedCompanyId) || {};

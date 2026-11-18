@@ -22,7 +22,8 @@
     var sn=shortName(sup);
     var total=items.reduce(function(s,it){ return s+Math.round((+it.price||0)*(+it.qty||1)); },0);
     var qtyTotal=items.reduce(function(s,it){ return s+(+it.qty||0); },0);
-    var head=[{ text:sn, bold:true, fontSize:11 }, { text:supAddr(sup), fontSize:9, margin:[0,2,0,0] }];
+    // наличные (решение Асхата, 18.11.2026): слово «Наличные» как название компании не пишем
+    var head=sup.cash ? [{ text:supAddr(sup), fontSize:9 }] : [{ text:sn, bold:true, fontSize:11 }, { text:supAddr(sup), fontSize:9, margin:[0,2,0,0] }];
     if(sup.bin) head.push({ text:'БИН '+sup.bin+(sup.kbe?'   |   КБе '+sup.kbe:''), fontSize:9, margin:[0,2,0,0] });
     var body=[[th('№'), th('Наименование товара / работ'), th('Ед. изм.'), th('Кол-во'), th('Цена, тг'), th('Сумма, тг')]];
     items.forEach(function(it,i){
@@ -46,12 +47,12 @@
     if(!sup.cash){
       req.push({ text: sn+(sup.bin?'  |  БИН: '+sup.bin:'')+(sup.kbe?'  |  КБе: '+sup.kbe:''), margin:[0,2,0,0] });
       if(sup.bank) req.push({ text: String(sup.bank).replace(/"/g,'«').replace(/«([^«]*)«/,'«$1»')+(sup.iban?'  |  ИИК: '+sup.iban:'')+(sup.bik?'  |  БИК: '+sup.bik:''), margin:[0,2,0,0] });
-    } else req.push({ text: sn+(sup.addr?'  |  '+sup.addr:''), margin:[0,2,0,0] });
+    } else if(sup.addr) req.push({ text: sup.addr, margin:[0,2,0,0] });
     var signer = /ТОО|ограниченной/i.test(sup.name||'') ? ('Директор '+sn) : sn;
     return {
       pageSize:'A4', pageMargins:[48,40,48,50],
       defaultStyle:{ font:'DejaVu', fontSize:10, lineHeight:1.15 },
-      footer:function(){ return { text: sn+'  •  Коммерческое предложение', alignment:'center', fontSize:7, color:'#555', margin:[0,18,0,0] }; },
+      footer:function(){ return { text: (sup.cash?'':sn+'  •  ')+'Коммерческое предложение', alignment:'center', fontSize:7, color:'#555', margin:[0,18,0,0] }; },
       content:[
         { stack:head },
         { canvas:[{ type:'line', x1:0, y1:4, x2:499, y2:4, lineWidth:1, lineColor:'#333' }], margin:[0,4,0,10] },
@@ -61,8 +62,7 @@
         who ? { text:[{text:'Кому: '}, {text:who}] } : '',
         org ? { text:[{text:'Организация: '}, {text:org, bold:true}] } : '',
         { text:'Тема: '+topic },
-        { text:'Уважаемые господа!', bold:true, margin:[0,4,0,0] },
-        { text: sn+' предлагает рассмотреть коммерческое предложение на изготовление изделий.' },
+        { text: (sup.cash ? 'Наша компания' : sn)+' предлагает рассмотреть коммерческое предложение на изготовление изделий.', margin:[0,4,0,0] },
         { text:'1. Состав и стоимость предложения', bold:true, margin:[0,4,0,4] },
         { table:{ headerRows:1, widths:[18,'*',38,40,62,62], body:body }, layout:{ hLineColor:LINE, vLineColor:LINE, paddingTop:function(){return 3;}, paddingBottom:function(){return 3;} } },
         { text:vatLine, margin:[0,3,0,8] },
@@ -71,8 +71,8 @@
         { text:'Окончательный объем, комплектация, стоимость и сроки согласовываются сторонами до заключения договора. Изменения технического задания могут повлечь пересмотр стоимости и сроков.', margin:[0,4,0,8] },
         { text:'3. Реквизиты поставщика', bold:true },
         { stack:req },
-        { text: signer+' ___________________ '+(sup.executor||''), margin:[0,14,0,0] },
-        { text:'М.П. (при наличии)' }
+        { text: (sup.cash ? '' : signer+' ')+'___________________ '+(sup.executor||''), margin:[0,14,0,0] },
+        sup.cash ? '' : { text:'М.П. (при наличии)' }
       ]
     };
   }
