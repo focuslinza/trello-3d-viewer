@@ -96,10 +96,14 @@
     #supNewBtn:hover, #sSend:hover { background:#1fbf5b !important; }
     #supNewBtn:active, #sSend:active { background:#1da851 !important; }
     #sSend:disabled { opacity:.6; }
-    /* заявка из заказа (цех) — плавно разгорается и гаснет ярко-красным, цикл 1 с */
+    /* заявка из заказа (цех) — плавно разгорается и гаснет ярко-красным, цикл 2 с */
     @keyframes supGlow { 0%,100% { box-shadow:0 0 0 1px rgba(255,40,40,.25), 0 0 0 rgba(255,30,30,0); background-color:var(--bg,#1d2125); }
                          50% { box-shadow:0 0 0 2px #ff2d2d, 0 0 22px 6px rgba(255,30,30,.85); background-color:#5a1414; } }
-    .kcard.glow { animation:supGlow 1s ease-in-out infinite; border-color:#ff4d4d !important; }
+    /* «В работе» дольше 3 рабочих дней — плавно сияет жёлтым, цикл 2 с */
+    @keyframes supGlowY { 0%,100% { box-shadow:0 0 0 1px rgba(226,178,3,.3), 0 0 0 rgba(226,178,3,0); }
+                          50% { box-shadow:0 0 0 2px #e2b203, 0 0 22px 6px rgba(226,178,3,.8); } }
+    .kcard.glowY { animation:supGlowY 2s ease-in-out infinite; border-color:#e2b203 !important; }
+    .kcard.glow { animation:supGlow 2s ease-in-out infinite; border-color:#ff4d4d !important; }
     @media (prefers-reduced-motion: reduce) { .kcard.glow { animation-duration:2s; } }
     /* быстрая заявка: только форма, без доски снабжения */
     html.quick #app, html.quick .bar { display:none !important; }
@@ -191,7 +195,7 @@
         if(!cards.length) h+='<div class="empty">Пусто</div>';
         cards.forEach(function(r){
           // заявка из карточки заказа, ещё не взята в работу — карточка «сияет» красным (16.11.2026)
-          h+='<div class="kcard'+(r.orderNumber&&r.status==='new'?' glow':'')+'" '+(canMove?'draggable="true"':'')+' data-id="'+r.id+'">';
+          h+='<div class="kcard'+(r.orderNumber&&r.status==='new'?' glow':'')+(r.stale?' glowY':'')+'" '+(canMove?'draggable="true"':'')+' data-id="'+r.id+'">';
           if(THUMBS[String(r.id)]){
             h+='<div style="margin:-9px -11px 8px;overflow:hidden;border-radius:9px 9px 0 0;background:#151a1e">'+
                '<img src="'+WORKER+'/receipt-get?id='+THUMBS[String(r.id)]+'" loading="lazy" alt="" '+
