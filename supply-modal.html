@@ -278,6 +278,31 @@
       if(file.size > 650000) return Promise.reject(new Error('Файл «'+file.name+'» слишком большой (макс ~650 КБ). Фото можно любое — оно сожмётся.'));
       return fileToB64(file).then(function(b64){ return { b64:b64, mime:file.type||'application/octet-stream', filename:file.name||'файл' }; });
     }
+    // ФАЙЛЫ НА ТЕЛЕФОНЕ (урок 18.11.2026, iPhone): поле выбора файла внутри надписи открывало меню
+    // выбора дважды. Теперь две отдельные кнопки — «Фото» (галерея/камера) и «Документ» (PDF, Word, Excel),
+    // скрытые поля вне надписей. Выбранное копится в PICKED[id].
+    var PICKED={};
+    function filePickHtml(id, title){
+      PICKED[id]=[];
+      return '<div class="fld"><label>📎 '+esc(title)+'</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+        '<label for="'+id+'_img" class="btn" style="cursor:pointer;margin:0">📷 Фото</label>'+
+        '<label for="'+id+'_doc" class="btn" style="cursor:pointer;margin:0">📄 Документ</label>'+
+        '<span class="muted" id="'+id+'_nm" style="font-size:12px">файл не выбран</span></div>'+
+        '<input type="file" id="'+id+'_img" accept="image/*" multiple style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">'+
+        '<input type="file" id="'+id+'_doc" accept="application/pdf,.pdf,.doc,.docx,.xls,.xlsx" multiple style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0"></div>';
+    }
+    function wireFilePick(id, onFiles){
+      ['_img','_doc'].forEach(function(k){
+        var inp=document.getElementById(id+k); if(!inp) return;
+        inp.onchange=function(){
+          var fs=[].slice.call(inp.files||[]); if(!fs.length) return;
+          PICKED[id]=(PICKED[id]||[]).concat(fs);
+          var nm=document.getElementById(id+'_nm'); if(nm) nm.textContent=PICKED[id].map(function(f){ return f.name; }).join(', ');
+          if(onFiles){ onFiles(fs); }
+          try{ inp.value=''; }catch(e){}
+        };
+      });
+    }
     function uploadFiles(reqId, files, msgEl){
       var chain=Promise.resolve();
       [].forEach.call(files, function(f,i){
@@ -344,7 +369,7 @@
       h+='<div class="fld"><label>Комментарий</label>'+(ORDER_TAG?'<div class="muted" style="margin-bottom:4px">📌 '+esc(ORDER_TAG)+' — добавится в комментарий сам</div>':'')+'<input type="text" id="sComment" placeholder="какие именно, для чего"></div>';
       h+='<div class="fld"><label>Ссылка (если нашли в магазине)</label><input type="text" id="sLink" placeholder="https://…"></div>';
       h+='<label class="fchk"><input type="checkbox" id="sUrgent"> 🔥 Срочно</label>';
-      h+='<label class="fchk">📎 Фото или документы <input type="file" id="sFiles" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" multiple></label>';
+      h+=filePickHtml('sFiles','Фото или документы');
       h+='<div class="muted" style="font-size:11.5px">Заказчик записывается автоматически: '+esc(ME.name||'вы')+'</div>';
       h+='<div class="popbar"><span class="muted" id="sMsg"></span><button class="btn" id="sCancel" type="button">Отмена</button><button class="btn primary" id="sSend" type="button">Отправить заявку</button></div>';
       h+='</div></div>';
@@ -367,6 +392,7 @@
         document.getElementById('sPick').value=''; document.getElementById('sName').focus();
       }
       [].forEach.call(document.querySelectorAll('.reqbtn'),function(b){ b.onclick=function(){ var k=this.getAttribute('data-k'); setNew(NEWCAT===k?'':k); }; });
+      wireFilePick('sFiles', null);
       document.getElementById('sCancel').onclick=closeSupOvl;
       document.getElementById('supOvl').onclick=function(e){ if(e.target===this) closeSupOvl(); };
       document.getElementById('sSend').onclick=function(){
@@ -382,7 +408,7 @@
             urgent:document.getElementById('sUrgent').checked?1:0, byMemberId:ME.id, byName:ME.name })})
         .then(function(r){return r.json();}).then(function(j){
           if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
-          var files=document.getElementById('sFiles').files;
+          var files=PICKED.sFiles||[];
           return files.length ? uploadFiles(j.id, files, msg) : null;
         }).then(function(){ if (QUICK) { quickClose(); return; } closeSupOvl(); loadAll(); })
         .catch(function(e){ btn.disabled=false; msg.textContent='Ошибка: '+(e&&e.message||e); msg.style.color='var(--red)'; });
@@ -401,7 +427,7 @@
       if(r.link) h+='<a href="'+esc(r.link)+'" target="_blank">ссылка на товар ↗</a><br>';
       if(r.note) h+='<span class="muted">Ответ снабжения: '+esc(r.note)+'</span>';
       h+='</div><div class="thumbs" id="supThumbs"></div>';
-      h+='<label class="fchk">📎 Добавить фото или документ <input type="file" id="supAddFile" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" multiple></label>';
+      h+=filePickHtml('supAddFile','Добавить фото или документ');
       if(canMng){
         h+='<div class="fld"><label>Заметка снабжения (где купили, цена / причина отказа)</label>'+
            '<div style="display:flex;gap:8px"><input type="text" id="supNote" value="'+esc(r.note||'')+'" style="flex:1">'+
@@ -427,12 +453,10 @@
                      : '<a href="'+u+'" target="_blank" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:8px 10px">📄 '+esc(f.filename||'файл')+'</a>';
         }).join('');
       }).catch(function(){});
-      document.getElementById('supAddFile').onchange=function(){
-        if(!this.files.length) return;
-        var inp=this;
-        uploadFiles(id, inp.files, null).then(function(){ openSupCard(id); loadAll(); })
-          .catch(function(e){ alert('Файл не добавился: '+(e&&e.message||e)); inp.value=''; });
-      };
+      wireFilePick('supAddFile', function(files){
+        uploadFiles(id, files, null).then(function(){ openSupCard(id); loadAll(); })
+          .catch(function(e){ alert('Файл не добавился: '+(e&&e.message||e)); });
+      });
       var ns=document.getElementById('supNoteSave');
       if(ns) ns.onclick=function(){
         fetch(WORKER+'/supply-set',{method:'POST',headers:{'Content-Type':'application/json'},
