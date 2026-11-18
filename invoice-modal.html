@@ -155,6 +155,9 @@
         Promise.race([ t.board('memberships'), new Promise(function(r){ setTimeout(function(){ r({ memberships: [] }); }, 3000); }) ]).catch(function(){ return { memberships: [] }; })
       ]).then(function(rr){
         var p = rr[0], b = rr[1]||{};
+        // КП — только учредитель и те, у кого в должности «Создаёт КП» (решение Асхата, 18.11.2026)
+        window.__KP_OK = !!(p && (p.canKp || p.isFounder));
+        try{ ['kpGen','kpList'].forEach(function(id){ var e=document.getElementById(id); if(e) e.style.display = window.__KP_OK ? '' : 'none'; }); }catch(e){}
         var isAdmin = ((b.memberships||[]).filter(function(x){ return x.idMember===MY_MEMBER_ID && x.memberType==='admin'; }).length>0);
         if (isAdmin) return true;
         if (!p) return false;   // связи нет — причина уже записана
@@ -1263,6 +1266,7 @@
   function kpFileName(data){ return 'КП_'+data.number+'_'+((data.buyer&&data.buyer.name)?String(data.buyer.name).replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30):'клиент')+'.pdf'; }
   function kpDownload(data){ if(!setupFonts()){ alert('Не удалось загрузить генератор PDF. Проверьте интернет.'); return; } pdfMake.createPdf(window.KP.buildKpDoc(data)).download(kpFileName(data)); }
   async function generateKp(){
+    if(!window.__KP_OK){ alert('Создавать КП может учредитель и те, у кого в должности отмечено «Создаёт КП».'); return; }
     var kb=document.getElementById('kpGen');
     if(!supplierKey){ alert('Выберите компанию-поставщика вверху окна — от неё зависят реквизиты и налог.'); return; }
     if(!setupFonts()){ alert('Не удалось загрузить генератор PDF (pdfMake). Проверьте интернет.'); return; }
