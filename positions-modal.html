@@ -174,7 +174,7 @@
         '</select> <span title="Скопирует его этапы, права и оклад">ⓘ</span></div>';
     }
     h+='<div class="lbl">Обязанности</div><textarea class="du" rows="2" placeholder="Что делает, за что отвечает">'+esc(p.duties)+'</textarea>';
-    h+='<div class="lbl">Доступ по должности (древо) <span style="text-transform:none;letter-spacing:0">· шаблон: <select class="tpl"><option value="">—</option>'+TEMPLATES.map(function(t,i){ return '<option value="'+i+'">'+esc(t.name)+'</option>'; }).join('')+'</select></span></div>'+treeHtml(p);
+    h+='<div class="lbl">Доступ по должности</div>'+treeHtml(p);   // «шаблон» убран — решение Асхата 18.11.2026
     // КОЛОНКИ ДОСКИ — ПО ДОЛЖНОСТИ (решение Асхата, 16.11.2026): вместо отдельной вкладки «Доступ»
     var curL=(p.perms&&p.perms._lists)||[];
     h+='<div class="lbl">Колонки доски, которые видит должность</div>'+
