@@ -207,11 +207,7 @@
   }
   function periodBar(){
     var h='<div class="filters">'+
-       '<div class="mnav">'+
-         '<div class="arw" id="mPrev" title="Предыдущий месяц">‹</div>'+
-         '<div class="mlbl'+(RANGE.presetKey==='month'?' on':'')+'" id="mLbl" title="Нажмите, чтобы показать этот месяц целиком">'+MONTHS_RU[NAVM.m]+' '+NAVM.y+'</div>'+
-         '<div class="arw'+(isThisMonth()?' off':'')+'" id="mNext" title="'+(isThisMonth()?'Это текущий месяц':'Следующий месяц')+'">›</div>'+
-       '</div>'+
+       // «‹ Месяц ›» убран (решение Асхата, 18.11.2026): период — только календари «от» и «до»
        '<input type="date" id="fromD" value="'+RANGE.from+'"><span class="muted">—</span>'+
        '<input type="date" id="toD" value="'+RANGE.to+'">'+
        '<span style="flex:1"></span>'+
