@@ -40,6 +40,11 @@
     var W = (window.WORKER_URL || '').replace(/\/$/, '');
     var Q = new URLSearchParams(location.search);
     var cardId = Q.get('cardId') || '', item = Q.get('item') || 'Изделие';
+    // ИМЯ ПАПКИ (решение Асхата, 19.11.2026): номер карточки + название изделия + дата скачивания,
+    // например «№3768 Стол 19.11.2026» — чтобы на станке было видно, от какого заказа файлы и когда взяты
+    var num = (Q.get('num') || '').replace(/[^0-9A-Za-zА-Яа-я-]/g, '');
+    var _d = new Date(), _z = function(n){ return (n < 10 ? '0' : '') + n; };
+    var folder = (num ? '№' + num + ' ' : '') + item + ' ' + _z(_d.getDate()) + '.' + _z(_d.getMonth() + 1) + '.' + _d.getFullYear();
     var files = []; try { files = JSON.parse(decodeURIComponent(location.hash.slice(1)) || '[]') || []; } catch (e) { files = []; }
     function safe(n){ return String(n || '').replace(/[\\\/:*?"<>|]+/g, '_').replace(/\s+$/, '').slice(0, 120) || 'Изделие'; }
     function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); }
@@ -49,7 +54,7 @@
     function url(f, save){ return W + '/download?' + new URLSearchParams({ cardId: cardId, attachmentId: f.id, fileName: f.fileName || f.name }).toString() + (save ? '&save=1&as=' + encodeURIComponent(saveName(f)) : ''); }
     var kind = (Q.get('kind') || '').toUpperCase();
     document.getElementById('ttl').textContent = (kind ? 'Все ' + kind + ' изделия «' : 'Файлы изделия «') + item + '»';
-    document.getElementById('sub').textContent = files.length + ' файл(ов) · папка «' + safe(item) + '»';
+    document.getElementById('sub').textContent = files.length + ' файл(ов) · папка «' + safe(folder) + '»';
     document.getElementById('list').innerHTML = files.map(function(f, i){ return '<li><span>' + esc(saveName(f)) + '</span><span class="st" id="st' + i + '">—</span></li>'; }).join('');
     function st(i, t, cls){ var e = document.getElementById('st' + i); if (e) { e.textContent = t; e.className = 'st' + (cls ? ' ' + cls : ''); } }
     function msg(t){ document.getElementById('msg').textContent = t; }
@@ -63,11 +68,11 @@
     function setRoot(h){ return idb().then(function(db){ return new Promise(function(res){ var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(h, 'root'); tx.oncomplete = function(){ res(); }; tx.onerror = function(){ res(); }; }); }).catch(function(){}); }
     function saveInto(root){
       btnGo.disabled = true; btnChg.style.display = 'none';
-      return root.getDirectoryHandle(safe(item), { create: true }).then(function(dir){
+      return root.getDirectoryHandle(safe(folder), { create: true }).then(function(dir){
         var i = 0, ok = 0;
         function next(){
           if (i >= files.length) { btnGo.disabled = false; btnGo.style.display = 'none'; btnChg.style.display = '';
-            msg('✓ Готово: ' + ok + ' из ' + files.length + ' — в папке «' + safe(item) + '» (внутри «' + root.name + '»). Окно можно закрыть.');
+            msg('✓ Готово: ' + ok + ' из ' + files.length + ' — в папке «' + safe(folder) + '» (внутри «' + root.name + '»). Окно можно закрыть.');
             if (ok === files.length) setTimeout(function(){ try { window.close(); } catch (e) {} }, 2500);
             return; }
           var k = i++, f = files[k]; st(k, 'скачиваю…');
@@ -76,7 +81,7 @@
             .then(function(){ ok++; st(k, '✓ сохранён', 'ok'); }, function(e){ st(k, 'ошибка: ' + (e && e.message || e), 'err'); })
             .then(next);
         }
-        msg('Создана папка «' + safe(item) + '» в «' + root.name + '», скачиваю…');
+        msg('Создана папка «' + safe(folder) + '» в «' + root.name + '», скачиваю…');
         return next();
       }).catch(function(e){ btnGo.disabled = false; msg('Не получилось: ' + (e && e.message || e)); });
     }
@@ -86,12 +91,12 @@
     function start(fromClick){
       return getRoot().then(function(root){
         if (!root) {
-          if (!fromClick) { btnGo.textContent = '📁 Выбрать, где создавать папки (один раз)'; msg('Первый раз: выберите место (например, Рабочий стол) — там будет создана папка «' + safe(item) + '» с файлами. Потом выбирать не придётся.'); return; }
+          if (!fromClick) { btnGo.textContent = '📁 Выбрать, где создавать папки (один раз)'; msg('Первый раз: выберите место (например, Рабочий стол) — там будет создана папка «' + safe(folder) + '» с файлами. Потом выбирать не придётся.'); return; }
           return pickRoot().then(saveInto);
         }
         return root.queryPermission({ mode: 'readwrite' }).then(function(p){
           if (p === 'granted') return saveInto(root);
-          if (!fromClick) { btnGo.textContent = '📁 Скачать в «' + root.name + '/' + safe(item) + '»'; btnChg.style.display = ''; msg('Нажмите — браузер один раз спросит разрешение на папку «' + root.name + '» (выберите «Разрешить при каждом посещении», тогда спрашивать больше не будет).'); return; }
+          if (!fromClick) { btnGo.textContent = '📁 Скачать в «' + root.name + '/' + safe(folder) + '»'; btnChg.style.display = ''; msg('Нажмите — браузер один раз спросит разрешение на папку «' + root.name + '» (выберите «Разрешить при каждом посещении», тогда спрашивать больше не будет).'); return; }
           return root.requestPermission({ mode: 'readwrite' }).then(function(p2){ if (p2 === 'granted') return saveInto(root); return pickRoot().then(saveInto); });
         });
       }).catch(function(e){ if (e && e.name === 'AbortError') { msg('Отменено.'); return; } msg('Не получилось: ' + (e && e.message || e)); });

@@ -60,6 +60,7 @@
 
     var ITEMS = [];          // [{id,name,qty,files:[attId]}] — изделия этой карточки
     var CARD_ID = null, FILES = [], METRICS = {};
+    var CARD_NUM = '';
     function itemOf(attId){ for (var i=0;i<ITEMS.length;i++) if ((ITEMS[i].files||[]).indexOf(attId)>=0) return ITEMS[i]; return null; }
 
     function openViewer(att, cardId, queue){
@@ -216,7 +217,7 @@
       if(!list.length){ setMsg('В изделии «'+it.name+'» нет файлов'); return; }
       var data=list.map(function(a){ return { id:a.id, name:a.name||a.fileName||'', fileName:a.fileName||a.name||'' }; });
       var u=new URL('./dl-files.html', location.href);
-      u.search='?cardId='+encodeURIComponent(CARD_ID)+'&item='+encodeURIComponent(it.name)+(kind?'&kind='+kind:'');
+      u.search='?cardId='+encodeURIComponent(CARD_ID)+'&item='+encodeURIComponent(it.name)+'&num='+encodeURIComponent(CARD_NUM)+(kind?'&kind='+kind:'');
       u.hash=encodeURIComponent(JSON.stringify(data));
       var w=window.open(u.toString(), '_blank');
       if(!w) setMsg('Браузер заблокировал окно — разрешите всплывающие окна для trello.com');
@@ -427,7 +428,8 @@
       // не перерисовываем, иначе файл на мгновение окажется «без изделия» (и может туда записаться)
       if (rendering || editing() || UPLOADING) return Promise.resolve();
       rendering=true;
-      return t.card('id','attachments','name').then(function(card){
+      return t.card('id','attachments','name','idShort').then(function(card){
+        CARD_NUM=(card.idShort!=null?String(card.idShort):'');
         CARD_ID=card.id; FILES=(card.attachments||[]); CARD_NAME=card.name||'';
         return loadMetrics(card.id).then(function(m){ METRICS=m; return autoPlace(); }).then(draw);
       }).catch(function(err){
