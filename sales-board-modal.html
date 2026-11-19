@@ -28,6 +28,10 @@
     @media (max-width:900px){ .board{grid-template-columns:repeat(2,1fr)} }
     @media (max-width:640px){ .board{grid-template-columns:1fr} }
     .col.auto{border-style:dashed}
+    /* КОЛОНКА ДО НИЗА ЭКРАНА, карточки листаются внутри (решение Асхата, 19.11.2026 — как на доске производства) */
+    .col{display:flex;flex-direction:column;min-height:0}
+    .colbody{overflow-y:auto;overflow-x:hidden;min-height:0;flex:1 1 auto;margin:0 -6px;padding:4px 6px 2px;overscroll-behavior:contain;scrollbar-width:thin}
+    .colbody::-webkit-scrollbar{width:8px}.colbody::-webkit-scrollbar-thumb{background:rgba(128,140,160,.45);border-radius:8px}
     /* полоса «Статус заказа» — та же, что в карточке на доске */
     .cp-steps{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid rgba(255,255,255,.12);border-radius:12px;overflow:hidden}
     .cp-steps .st{position:relative;padding:10px 10px;border-left:1px solid rgba(255,255,255,.08);cursor:pointer;min-height:64px;background:#22272b}
@@ -312,7 +316,8 @@
         var cards=v.filter(function(r){ return stageOf(r)===c.key; });
         var colSum=cards.reduce(function(s,r){ return s+((r.order&&r.order.total)||(+r.calc_price)||(+r.amount)||0); },0);
         h+='<div class="col'+(c.auto?' auto':'')+'" data-col="'+c.key+'"'+(c.tip?(' title="'+esc(c.tip)+'"'):'')+'><div class="colhd"><span class="t">'+c.title+'</span><span class="n">'+cards.length+(colSum>0?(' / '+money(colSum)+' ₸'):'')+'</span></div>';
-        if(c.key==='new') h+='<button class="btn primary" data-newin="1" type="button" style="width:100%;margin-bottom:8px">+ Лид</button>';
+        if(c.key==='new') h+='<button class="btn primary" data-newin="1" type="button" style="width:100%;margin-bottom:8px;flex:0 0 auto">+ Лид</button>';
+        h+='<div class="colbody">';
         if(!cards.length) h+='<div class="empty">Пусто</div>';
         cards.forEach(function(r){
           var o=r.order||null;
@@ -342,13 +347,30 @@
           if(c.key==='new') h+='<button class="mv" data-mv="'+esc(r.id)+'" data-to="talk" title="В «Переговоры»">›</button>';
           h+='</span></div></div>';
         });
-        h+='</div>';
+        h+='</div></div>';
       });
       h+='</div>';
+      // прокрутка каждой колонки переживает перерисовку
+      var keep={}; [].forEach.call(document.querySelectorAll('#board .col'), function(c){ var b=c.querySelector('.colbody'); if(b) keep[c.getAttribute('data-col')]=b.scrollTop; });
       document.getElementById('board').innerHTML=h;
+      fitCols();
+      [].forEach.call(document.querySelectorAll('#board .col'), function(c){ var b=c.querySelector('.colbody'), k=c.getAttribute('data-col'); if(b && keep[k]) b.scrollTop=keep[k]; });
       wireBoard();
     }
 
+    // высота колонок: от их верха до нижней панели; в узком окне (колонки в несколько рядов) — обычная прокрутка страницы
+    function fitCols(){
+      var cols=document.querySelectorAll('#board .col'); if(!cols.length) return;
+      var one = window.innerWidth>1350;
+      try{ document.getElementById('wrap').style.paddingBottom = one ? '0' : ''; }catch(e){}   // страница сама не листается — листаются колонки
+      var bar=document.querySelector('.bar'), barH=bar?bar.getBoundingClientRect().height:58;
+      [].forEach.call(cols, function(c){
+        if(!one){ c.style.maxHeight=''; return; }
+        var top=c.getBoundingClientRect().top + (window.pageYOffset||0);
+        c.style.maxHeight=Math.max(220, window.innerHeight - top - barH - 14)+'px';
+      });
+    }
+    window.addEventListener('resize', function(){ fitCols(); });
     function wireBoard(){
       [].forEach.call(document.querySelectorAll('[data-newin]'), function(b){ b.onclick=function(){ openEdit(null); }; });
       [].forEach.call(document.querySelectorAll('.kcard'), function(c){
