@@ -232,7 +232,10 @@
     bendRod:  {t:'BEND',mult:1,sec:'ГИБКА', lbl:'Гибка прута (кол.)'},
     roll:     {t:'BEND',mult:6,sec:'ГИБКА', lbl:'Вальцовка (кол.) — ×6 к гибу'},
     weldSS:   {t:'SS',mult:1,sec:'СВАРКА',lbl:'Сварка нерж (см)'},
-    weldBlack:{t:'BL',mult:1,sec:'СВАРКА',lbl:'Сварка черн (см)'}
+    weldBlack:{t:'BL',mult:1,sec:'СВАРКА',lbl:'Сварка черн (см)'},
+    // ставка за единицу из «Цен» (решение Асхата, 19.11.2026): без надбавок на остатки и расходники
+    designShleif:{t:'FLAT',mult:1,sec:'ДИЗАЙНЕРСКАЯ ШЛЕЙФОВКА',lbl:'Дизайнерская шлейфовка (м²)',coefRate:'designShleifRate',defRate:12000,noExtra:1},
+    engDesign:{t:'FLAT',mult:1,sec:'ПРОЕКТИРОВАНИЕ',lbl:'Инженерное проектирование (файл)',coefRate:'engDesignRate',defRate:2000,noExtra:1}
   };
 
   // inputs:
@@ -255,14 +258,14 @@
       var k=KIND[op.kind]; if(!k)return;
       var qty=+op.qty||0, th=+op.thickness||0;
       if(k.t==='FLAT'){ if(qty<=0) return; } else { if(qty<=0||th<=0) return; }
-      var rate = ((k.t==='FLAT') ? (+k.flatRate||0) : opRate(k.t,th,qty)*k.mult*rateMultFor(k.sec)) * WORK_K;
+      var rate = ((k.t==='FLAT') ? (k.coefRate?coef(k.coefRate,k.defRate):(+k.flatRate||0)) : opRate(k.t,th,qty)*k.mult*rateMultFor(k.sec)) * WORK_K;
       // спеццена для постоянных клиентов: заменяет ТОЛЬКО тариф за единицу,
       // остальная формула (остатки, расход, шлейф, инженерка) не меняется.
       // Обычная цена сохраняется рядом (standardUnit) — для анализа уступок.
       var stdRate = rate;
       if (op.customUnit != null && +op.customUnit > 0) rate = +op.customUnit;
       var base=rate*qty;
-      var opOst=opSecOst(k.sec,OP_OST), opRah=opSecRah(k.sec,OP_RAH);
+      var opOst=k.noExtra?0:opSecOst(k.sec,OP_OST), opRah=k.noExtra?0:opSecRah(k.sec,OP_RAH);
       var r7=base*(1+opOst)*(1+opRah);
       sumOps+=r7;
       if(k.t==='SS')weldSSsum+=r7; if(k.t==='BL')weldBlackSum+=r7; if(k.sec==='РЕЗКА')cutSum+=r7;
@@ -271,6 +274,14 @@
       if (rate !== stdRate) { opl.special = 1; opl.standardUnit = stdRate; }
       line.push(opl);
     });
+
+    // ИНЖЕНЕРНОЕ ПРОЕКТИРОВАНИЕ (решение Асхата, 19.11.2026): число файлов DXF/ZZX × ставка за файл;
+    // включается галочкой в «Параметрах заказа», в списке «добавить работу» его нет
+    if(inp.engDesign){
+      var edN=Math.max(0,Math.round(+inp.engDesignFiles||0)), edRate=coef('engDesignRate',2000);
+      if(edN>0&&edRate>0){ var edSum=edN*edRate; sumOps+=edSum;
+        line.push({group:'op',kind:'engDesign',section:'ПРОЕКТИРОВАНИЕ',name:'Инженерное проектирование (файлов: '+edN+')',thickness:0,qty:edN,unit:edRate,base:edSum,ostatki:0,rashod:0,lineTotal:edSum,worker:null}); }
+    }
 
     // шлейф = shleifRate × weld (sheet: 0.5 of each weld grade)
     var shleifRate=(inp.shleifRate!=null?+inp.shleifRate:coef('shleifRate',0.5));

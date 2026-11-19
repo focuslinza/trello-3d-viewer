@@ -6,7 +6,7 @@
   <title>Панель руководителя</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./calc-engine.js?v=23"></script>
+  <script src="./calc-engine.js?v=24"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; --amber:#c99a3a; }
@@ -337,6 +337,8 @@
     h+=coefField('Шлейфовка реза — надбавка клиенту','shleifCutRate', cv('shleifCutRate',20,1),'% от резки');
     h+=coefField('Шлейф / сборка — надбавка клиенту','shleifRate', cv('shleifRate',50,1),'% от сварки');
     h+=coefField('Электрохимобработка шва — надбавка клиенту (0 = выкл.)','electrochemRate', cv('electrochemRate',0,1),'% от сварки');
+    h+=coefField('Инженерное проектирование — за каждый файл DXF / ZZX','engDesignRate', cv('engDesignRate',2000),'₸ за файл');
+    h+=coefField('Дизайнерская шлейфовка — за площадь поверхности','designShleifRate', cv('designShleifRate',12000),'₸ за м²');
     h+=coefField('Монтаж (выезд) — надбавка клиенту','montazhPct', cv('montazhPct',100,1),'% от сварки + шлейфовок');
     h+=coefField('Монтаж — минимальная сумма клиенту (0 = выкл.)','montazhMin', cv('montazhMin',0),'₸');
     h+=coefField('Внеурочный выезд — часовая ставка (база расчёта)','mzOtClientRate', cv('mzOtClientRate',900),'₸/ч на человека');
