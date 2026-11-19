@@ -7,6 +7,9 @@
   <script src="./pay-dialog.js?v=16"></script>
   <script src="./config.js"></script>
   <style>
+    /* кнопки на синей шапке вложенного окна — всегда белым (дневная тема перекрашивала их в тёмный, 19.11.2026) */
+    button.onblue,html.ms-light button.onblue,html.day button.onblue{color:#fff!important;background:rgba(255,255,255,.14)!important;background-image:none!important;border:none!important;box-shadow:none!important}
+    button.onblue:hover{background:rgba(255,255,255,.26)!important;filter:none!important}
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
     html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
     #app{max-width:1100px;margin:0 auto;padding:16px 16px 70px}
@@ -133,9 +136,9 @@
     function openInvView(qs){
       var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:86;display:flex;flex-direction:column">'+
         '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
-        '<button id="invBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
+        '<button id="invBack" type="button" class="onblue" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
         '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт на оплату</div>'+
-        '<button id="invOvlClose" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
+        '<button id="invOvlClose" type="button" class="onblue" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
         '<iframe src="./invoice-view.html?'+qs+'&t='+Date.now()+'" style="flex:1;border:0;background:var(--bg,#1d2125)"></iframe></div>';
       document.getElementById('invOvlHost').innerHTML=h;
       document.getElementById('invOvlClose').onclick=closeInvView;
@@ -171,9 +174,9 @@
       if(!r) return;
       var h='<div style="position:fixed;inset:0;background:var(--bg,#1d2125);z-index:86;display:flex;flex-direction:column">'+
         '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
-        '<button id="rvBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
+        '<button id="rvBack" type="button" class="onblue" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
         '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Заявка '+esc(r.number)+'</div>'+
-        '<button id="rvX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
+        '<button id="rvX" type="button" class="onblue" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
         '<div style="padding:12px 18px;border-bottom:1px solid var(--line);background:var(--bg2)">'+
         '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Счета с этой заявкой</div>'+
         '<div id="rvInvs" class="muted">Загрузка…</div></div>'+
@@ -212,9 +215,9 @@
       var person = PERSONS[cardId] ? ' <span class="muted">('+esc(PERSONS[cardId])+')</span>' : '';
       var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:86;display:flex;flex-direction:column">'+
         '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
-        '<button id="ordBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
+        '<button id="ordBack" type="button" class="onblue" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
         '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Заказ №'+esc(r.number)+'</div>'+
-        '<button id="ordX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
+        '<button id="ordX" type="button" class="onblue" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
         '<div style="flex:1;overflow:auto;background:var(--bg,#1d2125);padding:18px 22px">'+
         '<h3 style="margin:0 0 4px">'+esc(r.name)+'</h3>'+
         '<div class="muted" style="margin-bottom:12px">'+esc(r.client||'без компании')+person+' · '+esc(r.date||'')+' · <b style="color:var(--txt)">'+money(r.total)+' ₸</b></div>'+
@@ -1067,9 +1070,9 @@
       if(rib) rib.onclick=function(){
         var h='<div style="position:fixed;inset:0;background:var(--bg,#1d2125);z-index:86;display:flex;flex-direction:column">'+
           '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;border:1pt solid #0a1733;box-sizing:border-box;box-shadow:0 3px 10px rgba(0,0,0,.55);flex:0 0 auto">'+
-          '<button id="riBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
+          '<button id="riBack" type="button" class="onblue" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px;border-radius:8px">← Назад в бухгалтерию</button>'+
           '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт на оплату по ремонтам</div>'+
-          '<button id="riX" type="button" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
+          '<button id="riX" type="button" class="onblue" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#fff;font-size:15px">✕</button></div>'+
           '<iframe src="./invoice-modal.html?embed=1&mode=repair&onlyRepair=1&memberId='+encodeURIComponent(ME.id||'')+'&t='+Date.now()+'" style="flex:1;border:0;width:100%;background:var(--bg,#1d2125)"></iframe></div>';
         document.getElementById('invOvlHost').innerHTML=h;
         var back=function(){ closeInvView(); load(); }; // вернувшись — перечитать статусы заявок
