@@ -259,6 +259,8 @@
     });
     var INV_ROWS=[], INV_TOTALS={}, INV_SHARE=0.5;
     var INV_KIND='all'; // all | prod | repair — раздел счетов: все / изготовление / по ремонту
+    // УДАЛЁННЫЕ СЧЕТА ПО УМОЛЧАНИЮ СКРЫТЫ (решение Асхата, 19.11.2026): в журнале только действующие; галочка возвращает архив
+    var INV_SHOW_ARCH=false;
     var REP_ROWS=[], REP_TOTALS={};
     var PAY=null, PAY_OPEN={};
     var INV_EDIT=null; // id счёта в режиме правки
@@ -980,9 +982,13 @@
       h+='<div style="display:flex;gap:8px;margin-bottom:10px">'+
          '<div class="tab'+(INV_KIND==='all'?' active':'')+'" data-ik="all">Все счета</div>'+
          '<div class="tab'+(INV_KIND==='prod'?' active':'')+'" data-ik="prod">Изготовление</div>'+
-         '<div class="tab'+(INV_KIND==='repair'?' active':'')+'" data-ik="repair">По ремонту</div></div>';
+         '<div class="tab'+(INV_KIND==='repair'?' active':'')+'" data-ik="repair">По ремонту</div>'+
+         (function(){ var n=(INV_ROWS||[]).filter(function(r){ return r.archived; }).length;
+           return n?('<label class="muted" style="margin-left:auto;display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px" title="Удалённые и аннулированные счета остаются в истории, в суммы не входят"><input type="checkbox" id="invShowArch"'+(INV_SHOW_ARCH?' checked':'')+'> показать удалённые счета ('+n+')</label>'):''; })()+
+         '</div>';
       var f=FILTER.toLowerCase();
       var rows=(INV_ROWS||[]).filter(function(r){
+        if(r.archived && !INV_SHOW_ARCH) return false;
         if(INV_KIND==='repair' && !(+r.repairs>0)) return false;
         if(INV_KIND==='prod' && (+r.repairs>0)) return false;
         if(!f) return true;
@@ -1039,6 +1045,7 @@
         busy(1); setTimeout(function(){ busy(-1); load(); }, 0);
       } }; });
       [].forEach.call(document.querySelectorAll('[data-ik]'), function(el){ el.onclick=function(){ INV_KIND=this.getAttribute('data-ik'); render(); bindCommon(); }; });
+      var isa=document.getElementById('invShowArch'); if(isa) isa.onchange=function(){ INV_SHOW_ARCH=this.checked; render(); bindCommon(); };
       [].forEach.call(document.querySelectorAll('.iarch'), function(el){
         el.onclick=function(){
           var id=this.getAttribute('data-id'), num=this.getAttribute('data-num'), on=this.getAttribute('data-on')==='1';
