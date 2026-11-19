@@ -8,6 +8,13 @@
   <script src="./config.js"></script>
   <script src="./pay-dialog.js?v=14"></script>
   <style>html,body{margin:0;background:#1d2125;color:#dbe4ec;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;min-height:100vh}</style>
+  <!-- ОДНО ОКНО, А НЕ «ОКНО В ОКНЕ» (решение Асхата, 19.11.2026): здесь форма оплаты занимает всё окно —
+       без своего затемнения, рамки и тени (они нужны только когда форма всплывает поверх другого окна) -->
+  <style>
+    html body .pdl-ov{position:static;background:none;padding:0;display:block;overflow:visible}
+    html body .pdl{max-width:none;width:auto;border:0;border-radius:0;box-shadow:none;background:transparent;padding:16px 20px 20px}
+    html body .pdl .x{display:none}
+  </style>
 </head>
 <body>
 <script>
