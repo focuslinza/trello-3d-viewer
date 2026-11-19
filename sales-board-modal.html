@@ -208,13 +208,13 @@
         h+=sect('Источники лидов', srcRows.length?tbl(srcRows):'<span class="muted">Источники пока не заполняются — выбирайте «Откуда пришёл» в лиде.</span>');
         var codeRows=Object.keys(j.byCode).sort(function(a,b){return j.byCode[b]-j.byCode[a];})
           .map(function(k){ return [esc(k), j.byCode[k]]; });
-        if(codeRows.length) h+=sect('Метки роликов / кампаний (лиды)', tbl(codeRows));
+        if(codeRows.length) h+=sect('Коды рекламы (лиды)', tbl(codeRows));
         var clickRows=(j.clicks||[]).map(function(c){ return [esc(c.code)+' <span class="muted">('+(c.kind==='tel'?'звонок':'WhatsApp')+')</span>', c.n]; });
         h+=sect('Клики по рекламным ссылкам', clickRows.length?tbl(clickRows):
           '<span class="muted">Кликов нет. Делайте для каждого ролика свою ссылку:<br>'+
           'WhatsApp: <code>'+esc(WORKER)+'/go?c=video17&t=wa&p=7701XXXXXXX</code><br>'+
           'Звонок: <code>'+esc(WORKER)+'/go?c=video17&t=tel&p=7701XXXXXXX</code><br>'+
-          'Клик посчитается, человек попадёт в WhatsApp с кодом ролика — вносите этот код в «Метку» лида.</span>');
+          'Клик посчитается, человек попадёт в WhatsApp с кодом ролика — вносите этот код в поле «Код рекламы» лида.</span>');
         var mgrRows=Object.keys(j.byManager).map(function(m){
           var x=j.byManager[m]; return [esc(m), x.leads+' лидов · '+x.won+' сделок · '+money(x.wonSum)+' ₸']; });
         if(mgrRows.length>1||(mgrRows.length===1&&Object.keys(j.byManager)[0]!=='—')) h+=sect('По менеджерам', tbl(mgrRows));
@@ -411,7 +411,7 @@
         '<div class="fld"><label>Телефон</label><input type="text" id="fPhone" value="'+esc(r?r.phone:'')+'"></div>'+
         '<div class="fld"><label>Откуда пришёл</label><select id="fSrc">'+SOURCES.map(function(s){
           return '<option value="'+s[0]+'"'+((r&&(r.source||'')===s[0])?' selected':'')+'>'+s[1]+'</option>'; }).join('')+'</select></div>'+
-        '<div class="fld"><label>Метка ролика / кампании</label><input type="text" id="fSrcCode" value="'+esc(r?(r.source_code||''):'')+'" placeholder="например: video17"></div>'+
+        '<div class="fld"><label title="Код рекламы, с которой пришёл клиент: у каждого ролика или объявления своя ссылка с кодом. В аналитике видно, какая реклама приводит клиентов. Не знаете — оставьте пустым">Код рекламы (необязательно)</label><input type="text" id="fSrcCode" value="'+esc(r?(r.source_code||''):'')+'" placeholder="например: video17"></div>'+
         '<div class="fld"><label>Потенциальная сумма, ₸</label><input type="number" id="fAmount" min="0" step="any" value="'+esc(r&&+r.amount>0?r.amount:'')+'"></div>'+
         '<div class="fld"><label>Следующий контакт</label><input type="date" id="fNext" value="'+esc(r&&r.next_at?r.next_at:'')+'"></div>'+
         '</div>'+
