@@ -143,6 +143,8 @@
         // ОБРАЗЕЦ ↔ ПАРТИЯ (решение Асхата, 09.2026): кнопка создаёт вторую карточку
         // и связывает её с образцом — ничего не нужно таскать по колонкам и выбирать руками
         function addSampleBtn(){
+          // на своей доске (mes.ttms.kz) кнопка «Сделать образец» стоит рядом с «Метки» (решение Асхата, 19.11.2026)
+          if (/^\/m\//.test(location.pathname)) return;
           fetch(WORKER+'/sample-link?cardId='+encodeURIComponent(CARD.id))
             .then(function(r){ return r.json(); })
             .then(function(j){
@@ -157,9 +159,8 @@
                 lbl.innerHTML='Образец. Партия по нему: карточка <b>#'+(j.batch.number||'')+'</b>';
                 row.appendChild(lbl); el.appendChild(row); return;
               }
-              lbl.textContent='Клиент одобрил образец?';
               var b=document.createElement('button'); b.className='btn'; b.type='button'; b.style.background='#8a6d00';
-              b.textContent='Партия по этому образцу';
+              b.textContent='Сделать образец';
               b.title='Создать отдельную карточку на партию: копия этой (вложения, чек-листы, клиент), расчёт переносится черновиком на 1 изделие — останется поменять количество. Карточки будут связаны.';
               b.addEventListener('click', function(){
                 if(!confirm('Создать карточку «Партия по образцу»? Она появится в колонке «Согласование», связь с этим образцом проставится автоматически.')) return;
@@ -171,9 +172,9 @@
                     alert('Создана карточка #'+(jj.number||'')+' в «Согласовании».'+(jj.hadCalc?' Расчёт образца перенесён черновиком — откройте калькулятор и поставьте количество партии.':' Расчёта у образца не было — посчитайте партию в калькуляторе.'));
                     location.reload();
                   })
-                  .catch(function(e){ b.disabled=false; b.textContent='Партия по этому образцу'; alert('Не удалось: '+(e&&e.message||e)); });
+                  .catch(function(e){ b.disabled=false; b.textContent='Сделать образец'; alert('Не удалось: '+(e&&e.message||e)); });
               });
-              row.appendChild(lbl); row.appendChild(b); el.appendChild(row);
+              row.style.justifyContent='flex-end'; row.appendChild(b); el.appendChild(row);
             }).catch(function(){});
         }
         function addInvoiceBtn(){
