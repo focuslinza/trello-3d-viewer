@@ -38,6 +38,7 @@
           background:var(--bg2);border:1px solid var(--line);color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
     .chip:hover{border-color:var(--blue)}
     .chip.on{background:#1c3329;color:var(--green);border-color:#2e5c44}
+    .chip.part{background:#3a2f14;color:#f5cd47;border-color:#7f5f01}
     .chip.busy{opacity:.5;pointer-events:none}
     .warn12{font-size:11.5px;color:var(--amber);margin:2px 0 6px}
     .tabbtn{border:1px solid var(--line);background:var(--bg2);color:var(--txt);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12.5px}
@@ -156,6 +157,17 @@
     }
     function ochip(o, field, label){
       var on=o[field];
+      // ОПЛАТА ЗАКАЗА ВНУТРИ СЧЁТА (19.11.2026): не просто «оплачен / нет», а доля — предоплата по счёту видна у каждого заказа
+      if(field==='paid' && !o.isRepair){
+        var ps=CUR && PSUM[String(CUR.number)], po=ps && ps.orders && ps.orders.filter(function(x){ return x.cardId===o.cardId; })[0];
+        if(po && po.total>0){
+          var got=po.paid, pc=Math.min(100,Math.round(got/po.total*100)), full=po.rest<=0.5 && po.pending<=0.5;
+          var tip='По счёту '+money(po.total)+' ₸ · оплачено '+money(got)+' ₸'+(po.pending>0?(' · ждёт подтверждения '+money(po.pending)+' ₸'):'')+(full?'':(' · остаток '+money(po.rest)+' ₸'))+'. Нажмите — оплаты этого заказа';
+          if(full) return '<span class="chip on" data-card="'+esc(o.cardId)+'" data-f="paid" title="'+tip+'">✓ оплачен</span>';
+          if(got>0||po.pending>0) return '<span class="chip part" data-card="'+esc(o.cardId)+'" data-f="paid" title="'+tip+'">оплата '+pc+'%'+(po.pending>0&&!(got>0)?' (ждёт)':'')+'</span>';
+          return '<span class="chip" data-card="'+esc(o.cardId)+'" data-f="paid" title="'+tip+'">не оплачен</span>';
+        }
+      }
       return '<span class="chip'+(on?' on':'')+'" data-card="'+esc(o.cardId)+'" data-f="'+field+'">'+(on?'✓ ':'')+label+'</span>';
     }
     function renderOrders(r){
@@ -218,7 +230,7 @@
           }
           if(field==='paid' && window.openPayDialog){
             this.classList.remove('busy');
-            openPayDialog({ cardId:cardId, title:(o.number?'№'+o.number+' ':'')+String(o.name||'').slice(0,40), onDone:function(s){ o.paid=!!s.paidFlag; render(); loadPayments&&loadPayments(); } });
+            openPayDialog({ cardId:cardId, title:(o.number?'№'+o.number+' ':'')+String(o.name||'').slice(0,40), onDone:function(s){ o.paid=!!s.paidFlag; render(); loadPayments&&loadPayments(); if(CUR) loadPaySum(CUR.number); } });
             return;
           }
           // те же вызовы, что во вкладке «Заказы»: «оплачен» идёт через /calc-paid
