@@ -389,7 +389,6 @@
     }
     window.addEventListener('resize', function(){ fitCols(); });
     function wireBoard(){
-      [].forEach.call(document.querySelectorAll('[data-purge]'), function(b){ b.onclick=function(ev){ ev.stopPropagation(); var r=findRow(this.getAttribute('data-purge')); if(r) purge(r); }; });
       [].forEach.call(document.querySelectorAll('[data-newin]'), function(b){ b.onclick=function(){ openEdit(null); }; });
       [].forEach.call(document.querySelectorAll('.kcard'), function(c){
         c.onclick=function(e){ if(e.target.classList.contains('mv'))return; openEdit(this.getAttribute('data-id')); };
@@ -403,7 +402,10 @@
           if(dragId!=null) moveTo(dragId, this.getAttribute('data-col')); dragId=null; };
       });
       [].forEach.call(document.querySelectorAll('.mv'), function(b){
-        b.onclick=function(e){ e.stopPropagation(); moveTo(this.getAttribute('data-mv'), this.getAttribute('data-to')); };
+        b.onclick=function(e){ e.stopPropagation();
+          // корзина в «Отказе» — та же маленькая кнопка, но действие своё (раньше её нажатие уходило в «переместить» и ничего не делало)
+          if(this.hasAttribute('data-purge')){ var r=findRow(this.getAttribute('data-purge')); if(r) purge(r); return; }
+          moveTo(this.getAttribute('data-mv'), this.getAttribute('data-to')); };
       });
     }
 
