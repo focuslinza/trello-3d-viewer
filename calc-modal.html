@@ -692,7 +692,7 @@
       var pw = document.getElementById('paidWarning');
       if(ctx.paid){
         pw.innerHTML = '<div class="paidWarn">⚠ Этот заказ уже отмечен <b>оплаченным</b>'+(ctx.paidAt?(' ('+String(ctx.paidAt).slice(0,10)+')'):'')+
-          '. Изменения здесь пересчитают и уже начисленный заработок работников по этому заказу задним числом. Меняйте, только если это исправление ошибки в данных, а не обычная правка.</div>';
+          '. Если изменить расчёт, сумма заказа разойдётся с выставленным счётом и внесённой оплатой. Меняйте, только если исправляете ошибку.</div>';
       } else { pw.innerHTML=''; }
       renderDxfHint();
     }
@@ -1016,6 +1016,10 @@
       return src.then(function(d){
         if(!d || !d.inputs) { return; }
         var i=d.inputs;
+        // ЧЕРНОВИК ИЗ ОБРАЗЦА (решение Асхата, 19.11.2026): строки перенесены с образца, суммы у партии ещё нет
+        if(i.draftFromSample){ try{ var dw=document.createElement('div'); dw.className='paidWarn';
+          dw.innerHTML='⚠ Это <b>копия расчёта образца'+(i.draftFromSample.number?' #'+i.draftFromSample.number:'')+'</b> (на 1 изделие'+(i.draftFromSample.total?', '+fmt(i.draftFromSample.total)+' ₸':'')+'). У партии <b>пока нет суммы</b>: поставьте количество партии, проверьте строки и нажмите «Сохранить».';
+          var pwb=document.getElementById('paidWarning'); pwb.parentNode.insertBefore(dw,pwb.nextSibling); }catch(e){} }
         (i.operations||[]).forEach(function(o){ opLines.appendChild(makeOpRow(o)); });
         (i.materials||[]).forEach(function(m){ matLines.appendChild(makeCatRow(MATG,m,'м²/м')); });
         (i.components||[]).forEach(function(c){ cmpLines.appendChild(makeCatRow(CMPG,c,'шт')); });

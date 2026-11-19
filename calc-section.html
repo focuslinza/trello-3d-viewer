@@ -119,7 +119,7 @@
         if (!CARD.id) return fromCard;
         return fetch(WORKER+'/calc-get?id='+encodeURIComponent(CARD.id)).then(function(r){ return r.json(); }).then(function(j){
           var row = j && j.ok && j.row;
-          if (row && row.total != null && !row.hidden) return { total: +row.total, taxRate: +row.tax_rate || 0, savedAt: row.updated_at };
+          if (row && +row.total > 0 && !row.hidden) return { total: +row.total, taxRate: +row.tax_rate || 0, savedAt: row.updated_at };   // сумма 0 — черновик (например, партия из образца): расчёт ещё не сохранён
           return fromCard;
         }).catch(function(){ return fromCard; });
       }).then(function(d){
