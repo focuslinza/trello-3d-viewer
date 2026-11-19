@@ -79,30 +79,25 @@
     .brk { display:flex; flex-direction:column; gap:2px; margin-top:6px; }
     .brk .r { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
     .brk .r b { color:var(--txt); font-weight:600; }
+      .tipi{cursor:help;font-weight:400;opacity:.65;text-transform:none;letter-spacing:0;margin-left:4px}.tipi:hover{opacity:1}
+    #cardTitle{cursor:default}
   </style>
 </head>
 <body>
 
   <div id="app">
     <h2 id="cardTitle">Калькулятор стоимости</h2>
-    <div class="sub" id="meta">v22 · загрузка…</div>
+    <div class="sub" id="meta" style="display:none">v22 · загрузка…</div>
     <div id="paidWarning"></div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-      <button class="pull" id="pullDxf" type="button">Загрузить из DXF</button>
-      <button class="resetBtn resetAutoBtn" id="resetAuto" type="button" title="Удалить только строки, пришедшие из DXF (резка и гибка) — ручные строки, материалы и компоненты остаются">↺ Сбросить DXF-расчёт</button>
-      <button class="resetBtn" id="resetAll" type="button" title="Удалить ВСЕ строки: и из DXF, и добавленные вручную — начать расчёт заново">↺ Сбросить весь расчёт</button>
+      <button class="pull" id="pullDxf" type="button" title="Подтянуть резку и гибку из файлов карточки (только из тех, что есть на ней сейчас).">Загрузить из DXF</button>
+      <button class="resetBtn resetAutoBtn" id="resetAuto" type="button" title="Удалить только строки из DXF (резка и гибка); материалы, компоненты, сварка, шлейфовка и допстроки останутся. Обычный порядок при замене файла: «Сбросить DXF-расчёт» → «Загрузить из DXF» → «Сохранить». Сброс ничего не меняет в базе, пока не нажата кнопка «Сохранить».">↺ Сбросить DXF-расчёт</button>
+      <button class="resetBtn" id="resetAll" type="button" title="Удалить все строки: и из DXF, и добавленные вручную. Чистый лист. Сброс ничего не меняет в базе, пока не нажата кнопка «Сохранить».">↺ Сбросить весь расчёт</button>
       <button class="btn" id="dxfPurge" type="button" style="display:none;border-color:#6b5a1e;color:#e8c07d" title="Удалить сохранённые расчёты по DXF-файлам, которых уже нет на карточке">🧹 Забыть старые DXF</button>
       <span class="hint" id="dxfHint"></span>
     </div>
-    <!-- Пояснение к кнопкам (решение Асхата, 09.2026): раньше разницу между сбросами
-         приходилось помнить, и инженеры теряли ручные строки -->
-    <div class="hint" style="margin:-6px 0 12px;line-height:1.5">
-      <b>Загрузить из DXF</b> — подтянуть резку и гибку из файлов карточки (только из тех, что есть на ней сейчас).<br>
-      <b>↺ Сбросить DXF-расчёт</b> — удалить <b>только строки из DXF</b> (резка и гибка); материалы, компоненты, сварка, шлейфовка и допстроки останутся. Обычный порядок при замене файла: «Сбросить DXF-расчёт» → «Загрузить из DXF» → «Сохранить».<br>
-      <b>↺ Сбросить весь расчёт</b> — удалить <b>все</b> строки: и из DXF, и добавленные вручную. Чистый лист.<br>
-      Сбросы ничего не меняют в базе, пока не нажата кнопка «Сохранить».
-    </div>
+    <!-- пояснения к кнопкам — во всплывающих подсказках при наведении (решение Асхата, 19.11.2026) -->
     <div id="dxfBreakdown"></div>
     <!-- ВЕРСИИ РАСЧЁТА (решение Асхата, 09.2026) -->
     <div class="hint" id="verLine" style="margin:4px 0 10px"></div>
@@ -111,7 +106,7 @@
     <!-- ПОДГОН ПОД ДОГОВОРНУЮ СУММУ (решение Асхата, 09.2026): раньше инженер вручную
          подбирал цены реза/гибки, чтобы попасть в согласованную с клиентом сумму -->
     <div class="sec" id="fitSec" style="display:none">
-      <h3>Подогнать под договорную сумму</h3>
+      <h3>Подогнать под договорную сумму <span class="tipi" title="Вводите конечную сумму, как она будет в счёте (с налогом выбранной компании): например, договорились на 650 000 ₸ через ТОО — так и пишите 650 000 и выбирайте «ТОО «TTMS»», налог вычтется сам. Меняются только цены работ (материалы идут по факту закупки). Если цена ниже тарифной — разница учитывается как уступка в отчёте «% Уступки»; клиенту в счёте скидка не показывается. Внизу под «итого» всегда видно, сколько выйдет в счёте через каждую компанию.">ⓘ</span></h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <label class="hint">Сумма клиенту <b>как в счёте, с налогом</b>, ₸ <input type="number" id="fitTarget" min="0" step="1000" style="width:150px" placeholder="например 450000"></label>
         <label class="hint" title="Через какую компанию пойдёт оплата — её процент уже входит в введённую сумму">через
@@ -127,7 +122,6 @@
         <span class="hint" id="fitMsg"></span>
       </div>
       <div class="hint" id="fitRates" style="margin-top:6px"></div>
-      <div class="hint" style="margin-top:6px">Вводите <b>конечную сумму, как она будет в счёте</b> (с налогом выбранной компании): например, договорились на 650 000 ₸ через ТОО — так и пишите 650 000 и выбирайте «ТОО «TTMS»», налог вычтется сам. Меняются только цены работ (материалы идут по факту закупки). Если цена ниже тарифной — разница учитывается как уступка в отчёте «% Уступки»; клиенту в счёте скидка не показывается. Внизу под «итого» всегда видно, сколько выйдет в счёте через каждую компанию.</div>
     </div>
 
     <div class="sec">
@@ -680,6 +674,7 @@
       if(ctx.objectName) meta.push('Объект: '+ctx.objectName);
       if(ctx.status) meta.push('Статус: '+ctx.status);
       document.getElementById('cardTitle').textContent = ctx.cardName||'Калькулятор стоимости';
+      setTimeout(function(){ try{ document.getElementById('cardTitle').title=document.getElementById('meta').textContent; }catch(e){} },0);
       document.getElementById('meta').textContent = MODE_REPAIR
         ? ((meta.join('  ·  ') || 'без компании') + '   ·   v22   ·   ремонт '+(ctx.cardNumber||('#'+REPAIR_ID)))
         : ((meta.join('  ·  ') || 'без компании')
@@ -759,10 +754,11 @@
         return;
       }
       var n=Object.keys(dxfMetrics).length;
+      try{ var pb=document.getElementById('pullDxf'); pb.title='Подтянуть резку и гибку из файлов карточки (только из тех, что есть на ней сейчас).'+(n?' Найдено DXF-расчётов: '+n+'.':''); }catch(e){}
       document.getElementById('dxfHint').textContent = ctx._diag
         ? ctx._diag
         : (n
-          ? ('найдено DXF-расчётов: '+n+' — нажмите «Загрузить из DXF»')
+          ? ''
           : 'Нет сохранённого DXF-расчёта на этой карточке. Сначала сохраните его в разделе «DXF / Раскрой» («Открыть / Расчёт» → толщина → «Сохранить расчёт»).');
     }
 
