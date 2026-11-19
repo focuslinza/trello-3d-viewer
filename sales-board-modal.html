@@ -278,7 +278,20 @@
       {key:'deal',title:'Сделка', auto:1, tip:'Поступила первая оплата. Показаны за 30 дней'},
       {key:'lost',title:'Отказ', tip:'Показаны за 30 дней'}
     ];
-    var AUTO=false;
+    var AUTO=false, CAN_PURGE=false;   // CAN_PURGE — удалять насовсем из «Отказа» может только учредитель (сервер проверяет сам)
+    function purge(r){
+      var o=r.order||{};
+      if(!confirm('УДАЛИТЬ НАСОВСЕМ «'+(r.title||'')+'»'+(o.number?(' (заказ #'+o.number+')'):'')+'?\n\nИсчезнут: лид'+(r.trello_card_id?', карточка заказа с историей и файлами, расчёт, его счёт и КП':'')+'.\nВосстановить будет нельзя. Номера счёта и карточки повторно не выдаются.')) return;
+      post('/sales-purge',{id:r.id}).then(function(j){
+        if(!j||!j.ok){ alert((j&&j.error)||'не удалось удалить'); return; }
+        var d=j.done||{}, ln=['Удалено.'];
+        if(d.invoices&&d.invoices.length) ln.push('Счёт №'+d.invoices.join(', №')+' удалён — если он внесён в 1С, уберите его и там.');
+        if(d.kp&&d.kp.length) ln.push('КП №'+d.kp.join(', №')+' удалено.');
+        if(d.keptInvoices&&d.keptInvoices.length) ln.push('Счёт №'+d.keptInvoices.join(', №')+' НЕ удалён: в нём есть другие заказы. Исправьте его в бухгалтерии.');
+        if(ln.length>1) alert(ln.join('\n'));
+        loadAll();
+      }).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+    }
     function stageOf(r){ return r.stage||r.status||'new'; }
     function colTitle(k){ var c=COLS.filter(function(x){return x.key===k;})[0]; return c?c.title:k; }
     function hint(tx){ var e=document.getElementById('hint'); if(!e) return; e.textContent=tx||''; clearTimeout(hint._t); if(tx) hint._t=setTimeout(function(){ e.textContent=''; },6000); }
@@ -295,7 +308,7 @@
         fetch(WORKER+'/sales-file-counts').then(function(r){return r.json();}).catch(function(){return {};}),
         t.member('id','fullName').catch(function(){return {};})
       ]).then(function(res){
-        ROWS=(res[0]&&res[0].rows)||[]; AUTO=!!(res[0]&&res[0].auto);
+        ROWS=(res[0]&&res[0].rows)||[]; AUTO=!!(res[0]&&res[0].auto); CAN_PURGE=!!(res[0]&&res[0].canPurge);
         COMPANIES=(res[1]&&res[1].companies)||[];
         FILE_COUNTS=(res[2]&&res[2].counts)||{};
         MYNAME=(res[3]&&res[3].fullName)||'';
@@ -348,6 +361,7 @@
           h+='</span><span>';
           if(c.key==='talk' && !r.trello_card_id) h+='<button class="mv" data-mv="'+esc(r.id)+'" data-to="new" title="В «Новые»">‹</button> ';
           if(c.key==='new') h+='<button class="mv" data-mv="'+esc(r.id)+'" data-to="talk" title="В «Переговоры»">›</button>';
+          if(c.key==='lost' && CAN_PURGE) h+='<button class="mv" data-purge="'+esc(r.id)+'" title="Удалить насовсем (только учредитель)" style="color:var(--red)">🗑</button>';
           h+='</span></div></div>';
         });
         h+='</div></div>';
@@ -375,6 +389,7 @@
     }
     window.addEventListener('resize', function(){ fitCols(); });
     function wireBoard(){
+      [].forEach.call(document.querySelectorAll('[data-purge]'), function(b){ b.onclick=function(ev){ ev.stopPropagation(); var r=findRow(this.getAttribute('data-purge')); if(r) purge(r); }; });
       [].forEach.call(document.querySelectorAll('[data-newin]'), function(b){ b.onclick=function(){ openEdit(null); }; });
       [].forEach.call(document.querySelectorAll('.kcard'), function(c){
         c.onclick=function(e){ if(e.target.classList.contains('mv'))return; openEdit(this.getAttribute('data-id')); };
