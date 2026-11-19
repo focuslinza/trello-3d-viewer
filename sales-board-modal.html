@@ -19,12 +19,13 @@
     .btn.primary{background:#274469;border-color:var(--blue);color:#cfe1ff;font-weight:600}
     .btn.green{background:#1c3329;border-color:#2e5c44;color:var(--green)}
     .btn.danger{border-color:#7a3a32;color:#e8a59d}
-    .board{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;align-items:start}
+    .board{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;align-items:start}
     .zone{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;border-bottom:2px solid var(--line);padding:0 4px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .zone.z1{grid-column:1 / span 2;border-color:var(--blue)}
-    .zone.z2{grid-column:3 / span 4;border-color:var(--green)}
-    .zone.z3{grid-column:7;border-color:var(--red)}
-    @media (max-width:1250px){ .board{grid-template-columns:repeat(2,1fr)} .zone{display:none} }
+    .zone.z2{grid-column:3 / span 5;border-color:var(--green)}
+    .zone.z3{grid-column:8;border-color:var(--red)}
+    @media (max-width:1350px){ .board{grid-template-columns:repeat(4,1fr)} .zone{display:none} }
+    @media (max-width:900px){ .board{grid-template-columns:repeat(2,1fr)} }
     @media (max-width:640px){ .board{grid-template-columns:1fr} }
     .col.auto{border-style:dashed}
     /* сияние — те же правила и цвета, что на доске заказов */
@@ -202,11 +203,11 @@
         h+='</div>';
         if(u){
           h+='<div class="muted" style="margin-top:6px">Обращение — лид или заказ, заведённый за период. Сделка — заказ, по которому в периоде поступила первая оплата.</div>';
-          h+=sect('Сейчас в воронке', tbl([['Новые','new'],['Переговоры','talk'],['На расчёте','calc'],['Согласование (КП у клиента)','kp'],['Ждём оплату','pay']].map(function(x){
+          h+=sect('Сейчас в воронке', tbl([['Новые','new'],['Переговоры','talk'],['На расчёте','calc'],['Расчёт сделан','ready'],['Согласование (КП у клиента)','kp'],['Ждём оплату','pay']].map(function(x){
             return [x[0], u.now[x[1]]+(u.nowSum[x[1]]>0?(' / '+money(u.nowSum[x[1]])+' ₸'):'')]; })));
         } else {
           h+=sect('Воронка (лиды, созданные в периоде)', tbl([
-            ['Новые', j.byStatus['new']],['Переговоры', j.byStatus['talk']],['На расчёте', j.byStatus['calc']],['Согласование', j.byStatus['kp']],
+            ['Новые', j.byStatus['new']],['Переговоры', j.byStatus['talk']],['На расчёте', j.byStatus['calc']],['Расчёт сделан', j.byStatus['ready']],['Согласование', j.byStatus['kp']],
             ['Ждём оплату', j.byStatus['pay']],['✅ Сделка', j.byStatus['deal']],['❌ Отказ', j.byStatus['lost']]]));
         }
         h+='<div id="anClients"></div>';
@@ -241,8 +242,9 @@
     var COLS=[
       {key:'new', title:'Новые'},
       {key:'talk', title:'Переговоры'},
-      {key:'calc', title:'На расчёте', auto:1, tip:'Карточка заказа в «Заявки» или «Расчёт»'},
-      {key:'kp',  title:'Согласование', auto:1, tip:'Расчёт готов, карточка в «Согласование» — КП у клиента'},
+      {key:'calc', title:'На расчёте', auto:1, tip:'Карточка заказа в «Заявки» — инженер считает'},
+      {key:'ready', title:'Расчёт сделан', auto:1, tip:'Карточка в «Расчет сделан» — инженеры посчитали, можно отправлять КП или счёт'},
+      {key:'kp',  title:'Согласование', auto:1, tip:'Карточка в «Согласование» — КП у клиента'},
       {key:'pay', title:'Ждём оплату', auto:1, tip:'Счёт выставлен, оплаты ещё не было'},
       {key:'deal',title:'Сделка', auto:1, tip:'Поступила первая оплата. Показаны за 30 дней'},
       {key:'lost',title:'Отказ', tip:'Показаны за 30 дней'}
@@ -292,7 +294,7 @@
         if(!cards.length) h+='<div class="empty">Пусто</div>';
         cards.forEach(function(r){
           var o=r.order||null;
-          var GT={green:'В «Расчёт» дольше 1 часа',yellow:'В «Согласовании» дольше 1 рабочего дня — напомните клиенту',red:'Ждём оплату дольше 3 рабочих дней — напомните клиенту'};
+          var GT={green:'Расчёт сделан больше часа — отправьте клиенту КП или счёт',yellow:'В «Согласовании» дольше 1 рабочего дня — напомните клиенту',red:'Ждём оплату дольше 3 рабочих дней — напомните клиенту'};
           h+='<div class="kcard'+(r.auto?' auto':'')+(r.glow?(' glow-'+esc(r.glow)):'')+'" draggable="true" data-id="'+esc(r.id)+'"'+(r.glow&&GT[r.glow]?(' title="'+GT[r.glow]+'"'):'')+'>';
           h+='<div class="nm">'+esc(r.title||'(без темы)')+'</div>';
           var sub=[];
@@ -387,7 +389,7 @@
       if(from==='lost'){ unrefuse(r); return; }
       if(r.trello_card_id || (colKey!=='new' && colKey!=='talk')){
         hint(r.trello_card_id ? ('Этап «'+colTitle(from)+'» меняется сам — по карточке заказа на доске.')
-          : (colKey==='calc' ? 'Откройте лид и нажмите «На расчёт» — карточка заказа появится на доске.' : ('В «'+colTitle(colKey)+'» лид попадёт сам, когда заказ дойдёт до этого этапа на доске.')));
+          : (colKey==='calc' ? 'Откройте лид и нажмите «На расчёт» — карточка появится на доске в «Заявки».' : ('В «'+colTitle(colKey)+'» лид попадёт сам, когда заказ дойдёт до этого этапа на доске.')));
         return;
       }
       var prev=r.status; r.status=colKey; r.stage=colKey; renderBoard();  // мгновенно на экране
@@ -525,7 +527,7 @@
               '<div class="muted" style="margin-top:5px">Инженер считает. Когда расчёт будет готов, цена появится здесь сама.</div>';
           } else {
             box.innerHTML='<div class="muted">Нужна цена от производства? Отправьте лид инженеру: '+
-              'на доске появится карточка заказа со всеми файлами лида, дальше этап пойдёт сам.</div>'+
+              'в колонке «Заявки» на доске появится карточка со всеми файлами лида, дальше этап пойдёт сам.</div>'+
               '<div style="margin-top:7px"><button class="btn primary" type="button" id="calcSend">📐 На расчёт</button>'+
               '<span class="msg" id="calcMsg"></span></div>';
           }
@@ -539,7 +541,7 @@
             if(miss.length){ document.getElementById('calcMsg').textContent='Сначала заполните: '+miss.join(', ');
               [['fCompName',!cn],['fContact',!ct],['fPhone',miss.indexOf('телефон')>=0]].forEach(function(x){ var el=document.getElementById(x[0]); if(el) el.style.outline=x[1]?'2px solid #e2483d':''; });
               return; }
-            if(!confirm('Отправить лид «'+(r.title||'')+'» на расчёт производству?\nНа доске появится карточка заказа с файлами лида.')) return;
+            if(!confirm('Отправить лид «'+(r.title||'')+'» на расчёт производству?\nВ колонке «Заявки» на доске появится карточка с файлами лида.')) return;
             sb.disabled=true;
             document.getElementById('calcMsg').textContent='Отправка…';
             // сначала сохраняем то, что введено в поля, потом отправляем
