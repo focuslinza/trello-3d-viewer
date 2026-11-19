@@ -1304,7 +1304,7 @@
       if(!j || j.cancelled) return;
       if(j.error){ alert(j.error); return; }
       data.number=j.number; kpDownload(data);
-      alert('КП №'+j.number+' создано. PDF скачан — отправьте его клиенту.');
+      alert('КП №'+j.number+' создано. PDF скачан — отправьте его клиенту.'+(j.moved?('\n\nКарточка заказа перенесена в «'+(j.listName||'Согласование')+'».'):''));
     }).catch(function(e){ kb.disabled=false; kb.textContent=k0; alert('Ошибка: '+(e&&e.message||e)); });
   }
   // история КП по отмеченным заказам (или по всем заказам клиента)
