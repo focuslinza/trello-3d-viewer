@@ -332,6 +332,7 @@
           if(sum>0) h+='<span class="price">'+money(sum)+' ₸</span> ';
           if(o && o.paid>0) h+='<span class="pill paid" title="Подтверждённые оплаты">оплачено '+money(o.paid)+'</span> ';
           if(FILE_COUNTS[String(r.id)]) h+='<span class="pill next">📎 '+FILE_COUNTS[String(r.id)]+'</span> ';
+          if(r.redo) h+='<span class="pill due" title="'+esc(r.redo)+'">⚠ выставить КП и счёт заново</span> ';
           if(r.next_at && c.key!=='deal' && c.key!=='lost'){
             var due = r.next_at<=today();
             h+='<span class="pill '+(due?'due':'next')+'">'+(due?'📞 пора: ':'')+esc(r.next_at.slice(5))+'</span>';
@@ -518,7 +519,8 @@
           h='<div class="ordbox"><b>Заказ'+(o.number?(' №'+esc(o.number)):'')+'</b>'+(o.list?(' · колонка «'+esc(o.list)+'»'):(s==='lost'?' · снят с доски':''))+
             (o.total>0?('<br>Сумма: <b>'+money(o.total)+' ₸</b>'+(o.paid>0?(' · оплачено <b style="color:var(--green)">'+money(o.paid)+' ₸</b>'+(o.total>o.paid?(' · остаток '+money(o.total-o.paid)+' ₸'):'')):' · оплат пока нет')):'<br>Инженер считает — цена появится здесь сама')+
             (r.calc_note?('<br>Комментарий цеха: '+esc(r.calc_note)):'')+
-            (s==='lost'&&r.lost_reason?('<br>Причина отказа: '+esc(r.lost_reason)):'')+'</div>';
+            (s==='lost'&&r.lost_reason?('<br>Причина отказа: '+esc(r.lost_reason)):'')+
+            (r.redo?('<div style="margin-top:6px;color:var(--red);font-weight:600">⚠ '+esc(r.redo)+'. Выставьте КП и счёт заново.</div>'):'')+'</div>';
         } else if(r && r.trello_card_id){
           h='<div class="ordbox"><b>Отправлено на расчёт</b><br>Карточка в колонке «Заявки» на доске. Когда инженер посчитает, цена появится здесь сама.</div>';
         } else if(r && s==='lost' && r.lost_reason){ h='<div class="ordbox">Причина отказа: '+esc(r.lost_reason)+'</div>'; }

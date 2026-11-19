@@ -1346,6 +1346,12 @@
         msg.textContent='Сохранено: версия '+(out.version||1)+
           (out.correction?(' · корректировка, поправок по зарплате: '+(out.correction.lines||0)+(out.correction.total?(' ('+(out.correction.total>0?'+':'')+Math.round(out.correction.total).toLocaleString('ru-RU')+' ₸)'):'')):'');
         btn.disabled=false;
+        // РАСЧЁТ ИЗМЕНИЛСЯ → прежние КП и счёт недействительны (решение Асхата, 19.11.2026)
+        try{ var dv=out.docsVoided; if(dv){ var ln=[];
+          if(dv.kp&&dv.kp.length) ln.push('КП №'+dv.kp.join(', №')+' — недействительно, ушло в историю.');
+          if(dv.invoices&&dv.invoices.length) ln.push('Счёт №'+dv.invoices.join(', №')+' — отменён, отметка «счёт выслан» снята.');
+          if(dv.keptPaid&&dv.keptPaid.length) ln.push('Счёт №'+dv.keptPaid.join(', №')+' НЕ отменён: по нему уже есть оплата. Разницу решите с бухгалтером.');
+          if(ln.length) alert('Сумма расчёта изменилась.\n\n'+ln.join('\n')+((dv.kp&&dv.kp.length)||(dv.invoices&&dv.invoices.length)?'\n\nКлиенту нужно выставить КП и счёт заново.':'')); } }catch(e){}
         setTimeout(function(){ t.closeModal(); }, out.correction?2500:900);
       }).catch(function(e){
         msg.className='msg err'; msg.textContent=(e&&e.cancel)?e.message:('Не сохранилось: '+(e&&e.message||'сеть'));
