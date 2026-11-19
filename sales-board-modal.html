@@ -27,6 +27,13 @@
     @media (max-width:1250px){ .board{grid-template-columns:repeat(2,1fr)} .zone{display:none} }
     @media (max-width:640px){ .board{grid-template-columns:1fr} }
     .col.auto{border-style:dashed}
+    /* сияние — те же правила и цвета, что на доске заказов */
+    @keyframes glowG{0%,100%{box-shadow:0 0 0 1px rgba(34,160,90,.35),0 0 0 rgba(34,160,90,0)}50%{box-shadow:0 0 0 2px #1f9d55,0 0 22px 6px rgba(31,157,85,.75)}}
+    @keyframes glowY{0%,100%{box-shadow:0 0 0 1px rgba(230,180,0,.35),0 0 0 rgba(230,180,0,0)}50%{box-shadow:0 0 0 2px #e2b203,0 0 22px 6px rgba(226,178,3,.8)}}
+    @keyframes glowR{0%,100%{box-shadow:0 0 0 1px rgba(220,40,40,.35),0 0 0 rgba(220,40,40,0)}50%{box-shadow:0 0 0 2px #e5372b,0 0 22px 6px rgba(229,55,43,.8)}}
+    .kcard.glow-green{animation:glowG 2s ease-in-out infinite}
+    .kcard.glow-yellow{animation:glowY 2s ease-in-out infinite}
+    .kcard.glow-red{animation:glowR 2s ease-in-out infinite}
     .kcard.auto{cursor:pointer}
     .pill.ord{background:#243447;color:#9dc1ff}
     .pill.paid{background:#1c3329;color:var(--green)}
@@ -285,7 +292,8 @@
         if(!cards.length) h+='<div class="empty">Пусто</div>';
         cards.forEach(function(r){
           var o=r.order||null;
-          h+='<div class="kcard'+(r.auto?' auto':'')+'" draggable="true" data-id="'+esc(r.id)+'">';
+          var GT={green:'В «Расчёт» дольше 1 часа',yellow:'В «Согласовании» дольше 1 рабочего дня — напомните клиенту',red:'Ждём оплату дольше 3 рабочих дней — напомните клиенту'};
+          h+='<div class="kcard'+(r.auto?' auto':'')+(r.glow?(' glow-'+esc(r.glow)):'')+'" draggable="true" data-id="'+esc(r.id)+'"'+(r.glow&&GT[r.glow]?(' title="'+GT[r.glow]+'"'):'')+'>';
           h+='<div class="nm">'+esc(r.title||'(без темы)')+'</div>';
           var sub=[];
           if(r.company_name) sub.push(esc(r.company_name));
