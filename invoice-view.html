@@ -446,5 +446,18 @@
       loadOrders();
     });
   </script>
+
+  <script>
+  // ССЫЛКИ НА КАРТОЧКУ ОТКРЫВАЮТ КАРТОЧКУ НА СВОЕЙ ДОСКЕ, а не Trello (19.11.2026, после переезда).
+  // Окно может быть вложено в другое окно — сообщение шлём самой доске (window.top).
+  document.addEventListener('click', function(ev){
+    var a = ev.target && ev.target.closest && ev.target.closest('a[href*="trello.com/c/"]'); if(!a) return;
+    var m = String(a.getAttribute('href')||'').match(/trello[.]com[/]c[/]([A-Za-z0-9_-]+)/); if(!m) return;
+    var inBoard = false; try { inBoard = window.top !== window && /(^|[.])ttms[.]kz$/.test(window.top.location.hostname); } catch(e) {}
+    if(!inBoard) return;
+    ev.preventDefault(); ev.stopPropagation();
+    try { window.top.postMessage({ ms:'card', id:m[1] }, '*'); } catch(e) {}
+  }, true);
+  </script>
 </body>
 </html>

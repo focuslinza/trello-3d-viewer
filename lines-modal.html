@@ -3503,7 +3503,7 @@ function load(days){
  });
 }
 var TP=null;try{if(window.parent!==window&&window.TrelloPowerUp)TP=window.TrelloPowerUp.iframe()}catch(e){}
-function showTrello(id){if(TP&&TP.showCard){TP.showCard(id).catch(()=>window.open('https://trello.com/c/'+id,'_blank'))}else window.open('https://trello.com/c/'+id,'_blank')}
+function showTrello(id){ try{ if(window.top!==window && /(^|[.])ttms[.]kz$/.test(window.top.location.hostname)){ window.top.postMessage({ms:'card',id:id},'*'); return; } }catch(e){} if(TP&&TP.showCard){TP.showCard(id).catch(()=>window.open('https://trello.com/c/'+id,'_blank'))}else window.open('https://trello.com/c/'+id,'_blank')}
 function main(){
 const BYN={};orders.forEach(o=>BYN[o.id]=o);
 const past=o=>o.closed&&NOW-o.end>=FADE;
@@ -3561,7 +3561,7 @@ function openCard(n){
   hist+=`<i style="background:${C[st]}"></i><span>${st}${back?' <span style="color:#993C1D">· возврат: изменение заказа</span>':''}<br><span style="color:var(--text-muted)">${ft(a)} · ${o.whoAt&&o.whoAt[a]||''}</span></span><span style="color:var(--text-secondary)">${rd(work(a,b))}</span>`});
  if(o.closed)hist+=`<i style="background:#3B6D11"></i><span>акт подписан<br><span style="color:var(--text-muted)">${ft(o.end)} · бухгалтер</span></span><span></span>`;
  const pays=o.payments.length?o.payments.map(p=>`<div style="display:flex;justify-content:space-between"><span>${ft(p[0])} · ${p[2]} · ${o.co}</span><span>${money(p[1])}</span></div>`).join(''):'<div style="color:var(--text-muted)">оплат нет</div>';
- const btns=`<a href="https://trello.com/c/${o.id}" target="_blank" rel="noopener"><button>Открыть карточку в Trello</button></a>`;
+ const btns=`<a href="https://trello.com/c/${o.id}" target="_blank" rel="noopener"><button>Открыть карточку</button></a>`;
  card.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><div><div style="font-size:12px;color:var(--text-secondary)">Заказ №${o.n}</div><div style="font-size:18px;font-weight:500">${o.t}</div></div><button id="cls" aria-label="Закрыть" style="padding:2px 9px">✕</button></div>
  <div style="margin-top:8px"><span class="chip" style="background:${o.closed?'#F1EFE8':C[last]+'26'};color:${o.closed?'#444441':'var(--text-primary)'}">${stage}</span><span class="chip" style="background:${moneySt[1]};color:${moneySt[2]}">${moneySt[0]}</span><span class="chip" style="background:#F1EFE8;color:#444441">${docs}</span></div>
  <div class="kv"><span>Клиент</span><span>${o.client}</span><span>Наша компания</span><span>${o.co}</span><span>Сумма</span><span>${money(o.sum)}${paid<o.sum?' · долг '+money(o.sum-paid):''}</span><span>Поступил</span><span>${ft(o.start)}</span><span>Срок сдачи</span><span>${dl}</span><span>В работе</span><span>${rd(work(o.start,o.end))} (календарно ${dur(o.end-o.start)})</span></div>
@@ -3605,4 +3605,17 @@ document.getElementById('today').onclick=home;
 render();home();
 }
 load(60).then(main).catch(e=>{document.getElementById('sc').innerHTML='<div style="padding:20px;color:#f28b82">Не удалось загрузить: '+esc(e&&e.message||e)+'</div>'});
-</script></div></body></html>
+</script></div>
+  <script>
+  // ССЫЛКИ НА КАРТОЧКУ ОТКРЫВАЮТ КАРТОЧКУ НА СВОЕЙ ДОСКЕ, а не Trello (19.11.2026, после переезда).
+  // Окно может быть вложено в другое окно — сообщение шлём самой доске (window.top).
+  document.addEventListener('click', function(ev){
+    var a = ev.target && ev.target.closest && ev.target.closest('a[href*="trello.com/c/"]'); if(!a) return;
+    var m = String(a.getAttribute('href')||'').match(/trello[.]com[/]c[/]([A-Za-z0-9_-]+)/); if(!m) return;
+    var inBoard = false; try { inBoard = window.top !== window && /(^|[.])ttms[.]kz$/.test(window.top.location.hostname); } catch(e) {}
+    if(!inBoard) return;
+    ev.preventDefault(); ev.stopPropagation();
+    try { window.top.postMessage({ ms:'card', id:m[1] }, '*'); } catch(e) {}
+  }, true);
+  </script>
+</body></html>

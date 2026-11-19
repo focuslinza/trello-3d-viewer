@@ -467,6 +467,8 @@
   function openCard(cardId){
     var o=ALL_ORDERS.filter(function(x){return x.cardId===cardId;})[0]||{};
     if(o.isRepair) return; // у ремонта нет карточки Trello
+    // своя доска: карточка открывается поверх, без Trello (19.11.2026)
+    try{ if(window.top!==window && /(^|[.])ttms[.]kz$/.test(window.top.location.hostname)){ window.top.postMessage({ms:'card',id:cardId},'*'); return; } }catch(e){}
     var url=o.link || ('https://trello.com/c/'+cardId);
     window.open(url, '_blank', 'noopener,width=1100,height=850');
   }
@@ -1424,5 +1426,18 @@
     })
     .catch(function(e){ boot('Ошибка загрузки: '+(e&&e.message||e)); });
 </script>
+
+  <script>
+  // ССЫЛКИ НА КАРТОЧКУ ОТКРЫВАЮТ КАРТОЧКУ НА СВОЕЙ ДОСКЕ, а не Trello (19.11.2026, после переезда).
+  // Окно может быть вложено в другое окно — сообщение шлём самой доске (window.top).
+  document.addEventListener('click', function(ev){
+    var a = ev.target && ev.target.closest && ev.target.closest('a[href*="trello.com/c/"]'); if(!a) return;
+    var m = String(a.getAttribute('href')||'').match(/trello[.]com[/]c[/]([A-Za-z0-9_-]+)/); if(!m) return;
+    var inBoard = false; try { inBoard = window.top !== window && /(^|[.])ttms[.]kz$/.test(window.top.location.hostname); } catch(e) {}
+    if(!inBoard) return;
+    ev.preventDefault(); ev.stopPropagation();
+    try { window.top.postMessage({ ms:'card', id:m[1] }, '*'); } catch(e) {}
+  }, true);
+  </script>
 </body>
 </html>
