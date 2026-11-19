@@ -135,13 +135,17 @@
     document.addEventListener('keydown', onKey);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
     function draw() {
-      var h = '<h3>Оплата заказа' + (opts.title ? ' · ' + esc(opts.title) : '') + '</h3>' +
-        '<div class="sub">Укажите, сколько оплатили, когда, каким способом и куда.</div>' +
+      // ЯСНО, ЗА ЧТО ОПЛАТА (решение Асхата, 19.11.2026): один заказ / счёт с одним заказом / счёт с несколькими
+      var multi = S.invoiceNumber && S.invoiceOrders > 1;
+      var h = '<h3>Оплата одного заказа' + (opts.title ? ' · ' + esc(opts.title) : '') + '</h3>' +
+        '<div class="sub">' + (S.invoiceNumber ? (multi ? 'Заказ входит в счёт № ' + esc(S.invoiceNumber) + ' вместе с другими (' + S.invoiceOrders + ' заказов в счёте). Здесь оплата зачтётся <b>только этому заказу</b>.'
+            : 'Счёт № ' + esc(S.invoiceNumber) + ' — в нём только этот заказ, оплата заказа и есть оплата счёта.') : 'Счёт по заказу ещё не выставлен — сумма берётся из расчёта.') + '</div>' +
+        (multi ? '<div style="margin:-4px 0 10px"><button class="b" id="pdToInv" type="button" style="border-color:#1f845a;color:#4bce97">₸ Внести оплату по всему счёту № ' + esc(S.invoiceNumber) + '</button></div>' : '') +
         '<div class="kp"><div><span>' + (S.byInvoice ? 'Сумма по счёту' : 'Сумма заказа') + '</span><b>' + money(S.total) + ' ₸</b>' + (S.byInvoice ? '<div style="font-size:11.5px;color:#9fadbc">с налогом · расчёт ' + money(S.calcTotal) + ' ₸</div>' : '') + '</div>' +
         '<div><span>Оплачено (подтв.)</span><b style="color:#4bce97">' + money(S.paidSum) + ' ₸</b>' + (S.pendingSum > 0 ? '<div style="font-size:11.5px;color:#e8c07d">+ ' + money(S.pendingSum) + ' ₸ ждёт подтв.</div>' : '') + '</div>' +
         '<div><span>Остаток</span><b style="color:' + (S.rest > 0 ? '#e8c07d' : '#4bce97') + '">' + money(S.rest) + ' ₸</b></div></div>';
       // В РАБОТУ — ТОЛЬКО ПРИ ОПЛАТЕ ОТ 50% (решение Асхата, 07.11.2026)
-      if (S.total > 0) {
+      if (S.total > 0 && !S.pastGate) {
         var _min = 0.5, _paid = (S.payments || []).length ? S.paidSum : (S.paidFlag ? S.total : 0), _pct = Math.round(_paid / S.total * 100);
         var _need = Math.max(0, Math.ceil(S.total * _min - _paid));
         h += _need > 0
@@ -184,6 +188,8 @@
             : 'После этой оплаты: <b style="color:#4bce97">оплачен полностью</b>.');
       }
       a.oninput = after; after(); a.focus(); a.select();
+      var toInv = ov.querySelector('#pdToInv');
+      if (toInv) toInv.onclick = function () { close(); window.openInvoicePay({ number: S.invoiceNumber, cardId: cardId, onDone: opts.onDone }); };
       [].forEach.call(ov.querySelectorAll('[data-m]'), function (el) {
         el.onclick = function () {
           method = el.getAttribute('data-m');
@@ -289,8 +295,8 @@
         document.body.appendChild(t); setTimeout(function () { t.remove(); }, warn ? 6000 : 3500);
       }
       function draw() {
-        var h = '<h3>Оплата по счёту № ' + esc(S.number) + (opts.title ? ' · ' + esc(opts.title) : '') + '</h3>' +
-          '<div class="sub">В счёте ' + S.orders.length + ' заказов. Внесите сумму платежа — она сама разделится между заказами по их остаткам.</div>' +
+        var h = '<h3>Оплата всего счёта № ' + esc(S.number) + ' · ' + S.orders.length + ' заказов' + (opts.title ? ' · ' + esc(opts.title) : '') + '</h3>' +
+          '<div class="sub">Внесите сумму платежа одной цифрой — она сама разделится между заказами счёта по их остаткам. Оплата одного заказа отдельно — кнопка «⋯» в его строке.</div>' +
           '<div class="kp"><div><span>Сумма по счёту</span><b>' + money(S.total) + ' ₸</b></div>' +
           '<div><span>Оплачено (подтв.)</span><b style="color:#4bce97">' + money(S.paidSum) + ' ₸</b>' + (S.pendingSum > 0 ? '<div style="font-size:11.5px;color:#e8c07d">+ ' + money(S.pendingSum) + ' ₸ ждёт подтв.</div>' : '') + '</div>' +
           '<div><span>Остаток</span><b style="color:' + (S.rest > 0 ? '#e8c07d' : '#4bce97') + '">' + money(S.rest) + ' ₸</b></div></div>' +

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>Счёт на оплату</title>
-  <script src="./pay-dialog.js?v=15"></script>
+  <script src="./pay-dialog.js?v=16"></script>
   <script src="./config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
@@ -52,6 +52,7 @@
   <div class="bar">
     <button class="btn" id="invEdit" type="button" style="display:none;margin-right:auto" title="Исправить строки счёта (название, кол-во, цена) — номер НЕ меняется, старая версия сохраняется в истории">✎ Изменить счёт</button>
     <button class="btn" id="invSplit" type="button" style="display:none" title="Выделить выбранные строки в отдельный счёт со следующим номером">✂ Выделить в отдельный счёт</button>
+    <button class="btn" id="invPay" type="button" style="display:none;background:#1f845a;border-color:#1f845a;color:#fff" title="Внести оплату по всему счёту: сумма сама разделится между заказами счёта">₸ Оплата по счёту</button>
     <button class="btn" id="invResid" type="button" style="display:none" title="Выставить счёт на неоплаченный остаток по этому счёту — номер возьмётся из системы, счета не будут дублироваться">💠 Счёт на остаток</button>
     <button class="btn" id="invAnnul" type="button" style="display:none;color:#f28b82" title="Аннулировать счёт: не входит в суммы, заказы снова свободны, номер и история сохраняются">Аннулировать</button>
     <button class="btn" id="xls1c" type="button" style="display:none" title="Файл в формате счёта 1С — бухгалтер импортирует его в 1С:Бухгалтерию">📗 Excel для 1С</button>
@@ -65,7 +66,21 @@
     function money(v){ return (window.INVOICE&&window.INVOICE.money)?window.INVOICE.money(v):(Math.round(+v||0)).toLocaleString('ru-RU'); }
     function parse(s,d){ try{ var v=JSON.parse(s); return v==null?d:v; }catch(e){ return d; } }
 
+    // ОПЛАТА ПО СЧЁТУ ЦЕЛИКОМ (решение Асхата, 19.11.2026): статус и кнопка считают оплаты всех заказов счёта
+    var PSUM = {};
+    function loadPaySum(num){
+      if(!num) return;
+      fetch(WORKER+'/invoice-payment?number='+encodeURIComponent(num)).then(function(r){return r.json();}).then(function(j){
+        if(j && j.ok){ PSUM[String(num)]=j; if(CUR && String(CUR.number)===String(num)) render(); }
+      }).catch(function(){});
+    }
     function statusPill(p){
+      var ps = CUR && PSUM[String(CUR.number)];
+      if(ps && ps.orders && ps.orders.length && ps.total>0){
+        var got=ps.paidSum, pc=Math.min(100,Math.round(got/ps.total*100)), full=ps.rest<=0.5 && ps.pendingSum<=0.5;
+        return '<span class="pill '+(full?'g':(got>0||ps.pendingSum>0)?'a':'r')+'">'+(full?'оплачен полностью':(got>0?'частично оплачен':'не оплачен'))+' · поступило '+money(got)+' ₸ ('+pc+'%)'+
+          (ps.pendingSum>0?(' · ждёт подтверждения '+money(ps.pendingSum)+' ₸'):'')+(full?'':(' · остаток '+money(ps.rest)+' ₸'))+'</span>';
+      }
       if(!p) return '';
       var st=p.status, cls=st==='full'?'g':(st==='launched'||st==='partial')?'a':'r';
       var lbl=st==='full'?'оплачен полностью':st==='launched'?'аванс — в производстве':st==='partial'?'частично оплачен':'не оплачен';
@@ -124,6 +139,8 @@
       document.getElementById('xls1c').style.display='';
       var arch=(+r.archived===1);
       ['invEdit','invSplit','invAnnul','invResid'].forEach(function(id){ document.getElementById(id).style.display=arch?'none':''; });
+      document.getElementById('invPay').style.display=(arch||!invCardIds(r).length)?'none':'';
+      if(!arch && invCardIds(r).length && PSUM[String(r.number)]===undefined){ PSUM[String(r.number)]=null; loadPaySum(r.number); }
       if(parse(r.items_json,[]).length<2) document.getElementById('invSplit').style.display='none';
     }
 
@@ -419,6 +436,12 @@
           .then(function(j){ ov.remove(); alert('Готово: новый счёт №'+j.newNumber+' на '+money(j.movedTotal)+' ₸.\nСчёт №'+j.number+' теперь на '+money(j.keptTotal)+' ₸.\nНе забудьте скачать новые PDF обоих счетов.'); reloadAll(j.number); })
           .catch(function(e){ btn.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
       };
+    };
+    document.getElementById('invPay').onclick=function(){
+      if(!CUR) return;
+      if(!window.openInvoicePay){ alert('Окно оплаты не загрузилось — закройте и откройте счёт снова.'); return; }
+      var num=CUR.number, by=parse(CUR.buyer_json,{})||{};
+      window.openInvoicePay({ number:num, cardId:invCardIds(CUR)[0], title:(by.name||''), onDone:function(){ loadPaySum(num); loadOrders(); } });
     };
     document.getElementById('invResid').onclick=function(){
       var sum=prompt('Счёт на остаток по счёту №'+CUR.number+'.\nСумма остатка (оставьте как есть — посчитаем «сумма счёта минус поступления»):','');
