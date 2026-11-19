@@ -28,6 +28,28 @@
     @media (max-width:900px){ .board{grid-template-columns:repeat(2,1fr)} }
     @media (max-width:640px){ .board{grid-template-columns:1fr} }
     .col.auto{border-style:dashed}
+    /* полоса «Статус заказа» — та же, что в карточке на доске */
+    .cp-steps{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid rgba(255,255,255,.12);border-radius:12px;overflow:hidden}
+    .cp-steps .st{position:relative;padding:10px 10px;border-left:1px solid rgba(255,255,255,.08);cursor:pointer;min-height:64px;background:#22272b}
+    .cp-steps .st:first-child{border-left:0}
+    .cp-steps.with-rej{grid-template-columns:repeat(4,1fr) 92px}
+    .cp-steps .st-rej .st-d{display:none}.cp-steps .st-rej{display:flex;align-items:center}
+    .st.st-rej .st-t{color:#fd9891}.st.st-rej .st-dot{border-color:#fd9891;color:#fd9891;font-size:11px}
+    .st.st-rej:hover{background:#42221f}
+    .st.st-back .st-t{color:#9dc1ff}.st.st-back .st-dot{border-color:#9dc1ff;color:#9dc1ff}
+    .cp-steps .st:hover{filter:brightness(1.08)}
+    .cp-steps .st.busy{opacity:.5;pointer-events:none}
+    .st-t{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;color:#dfe5ec}
+    .st-d{font-size:11.5px;color:#9fadbc;margin-top:3px;line-height:1.35}
+    .st-dot{width:19px;height:19px;border-radius:50%;border:2px solid #5c6b7a;display:inline-flex;align-items:center;justify-content:center;font-size:11.5px;color:#fff;flex:0 0 auto}
+    .st.done{background:#1c3329}.st.done .st-dot{background:#22a06b;border-color:#22a06b}.st.done .st-t{color:#7ee2b8}
+    .st.part{background:#3a2f14}.st.part .st-dot{background:#c98a08;border-color:#c98a08}.st.part .st-t{color:#f5cd47}
+    .st.next{box-shadow:inset 0 0 0 2px #579dff;z-index:1}.st.next .st-dot{border-color:#579dff}
+    .st.lock{cursor:not-allowed}.st.lock:not(.done):not(.part) .st-t{color:#8c9bab}
+    .st.cross .st-t{text-decoration:line-through;color:#8c9bab}
+    .st-bar{height:6px;border-radius:9px;background:rgba(255,255,255,.12);margin-top:7px;overflow:hidden}.st-bar i{display:block;height:100%;background:#c98a08;border-radius:9px}
+    .st-b{height:24px;padding:0 8px;border-radius:7px;border:1px solid #3d5a8a;background:#274469;color:#cfe1ff;font-weight:600;font-size:11.5px;font-family:inherit;margin-top:6px;cursor:pointer;white-space:nowrap}
+    @media (max-width:560px){.cp-steps,.cp-steps.with-rej{grid-template-columns:1fr 1fr}.cp-steps .st:nth-child(n+3){border-top:1px solid rgba(255,255,255,.08)}.cp-steps .st:nth-child(odd){border-left:0}.cp-steps .st-rej{grid-column:1 / -1;min-height:0}}
     /* сияние — те же правила и цвета, что на доске заказов */
     @keyframes glowG{0%,100%{box-shadow:0 0 0 1px rgba(34,160,90,.35),0 0 0 rgba(34,160,90,0)}50%{box-shadow:0 0 0 2px #1f9d55,0 0 22px 6px rgba(31,157,85,.75)}}
     @keyframes glowY{0%,100%{box-shadow:0 0 0 1px rgba(230,180,0,.35),0 0 0 rgba(230,180,0,0)}50%{box-shadow:0 0 0 2px #e2b203,0 0 22px 6px rgba(226,178,3,.8)}}
@@ -61,7 +83,7 @@
     .mv{background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:12px;padding:1px 7px;cursor:pointer}
     .mv:hover{border-color:var(--blue);color:#cfe1ff}
     .ovl{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 12px;z-index:85;overflow:auto}
-    .pop{background:var(--bg2);border:1px solid var(--line);border-radius:14px;max-width:640px;width:100%;padding:18px 20px 20px}
+    .pop{background:var(--bg2);border:1px solid var(--line);border-radius:14px;max-width:720px;width:100%;padding:18px 20px 20px}
     .pop h3{margin:0 0 2px;font-size:16px}
     .pop .popbar{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
     .fld{display:flex;flex-direction:column;gap:4px;margin-top:10px}
@@ -402,19 +424,17 @@
     function openEdit(id){
       var r=id?findRow(id):null;
       if(r && r.virtual){ hint('Открываем заказ…'); adopt(r).then(function(x){ hint(''); openEdit(x.id); }).catch(function(e){ hint('Не удалось открыть: '+(e&&e.message||e)); }); return; }
-      var o=r&&r.order, stg=r?stageOf(r):'new';
       var compOpts='<option value="">— не из базы —</option>'+COMPANIES.map(function(c){
         return '<option value="'+esc(c.id)+'"'+((r&&r.company_id===c.id)?' selected':'')+'>'+esc(c.name||c.id)+'</option>';
       }).join('');
       var host=document.getElementById('ovlHost');
+      // ОКНО ЛИДА (решение Асхата, 19.11.2026): без «Сохранить» и «Закрыть» — всё сохраняется само,
+      // закрывается кликом мимо окна или Esc. Внизу справа — одно главное действие: «На расчёт»
+      // (после расчёта — «КП / Счёт на оплату»). Отказ — в полосе «Статус заказа», как в карточке на доске.
       host.innerHTML='<div class="ovl" id="ovl"><div class="pop">'+
-        '<h3>'+(r?('Лид · '+esc(colTitle(stg))):'Новый лид')+'</h3>'+
-        (o?('<div class="ordbox"><b>Заказ'+(o.number?(' №'+esc(o.number)):'')+'</b>'+(o.list?(' · колонка «'+esc(o.list)+'»'):(stg==='lost'?' · снят с доски':''))+
-          (o.total>0?('<br>Сумма: <b>'+money(o.total)+' ₸</b>'+(o.paid>0?(' · оплачено <b style="color:var(--green)">'+money(o.paid)+' ₸</b>'+(o.total>o.paid?(' · остаток '+money(o.total-o.paid)+' ₸'):'')):' · оплат пока нет')):'<br>Расчёта ещё нет')+
-          (stg==='lost'&&r.lost_reason?('<br>Причина отказа: '+esc(r.lost_reason)):'')+
-          '<div class="muted" style="margin-top:4px">Этап меняется сам, когда заказ двигается на доске.</div>'+
-          ((o.total>0 && stg!=='calc' && stg!=='lost')?'<div style="margin-top:8px"><button class="btn primary" id="pDocs" type="button" title="Откроется окно, где создаётся коммерческое предложение и счёт на оплату по этому заказу">📄 КП / Счёт на оплату</button></div>':'')+
-          '</div>'):'')+
+        '<h3 id="pH"></h3>'+
+        '<div id="ordHost"></div>'+
+        '<div class="fld" id="stFld" style="display:none"><label>Статус заказа</label><div class="cp-steps" id="stSteps"></div></div>'+
         '<div class="fld"><label>Тема / что продаём *</label><input type="text" id="fTitle" value="'+esc(r?r.title:'')+'" placeholder="Например: сетки для яйцебитки, 40 шт"></div>'+
         '<div class="grid2">'+
         '<div class="fld"><label>Клиент из базы</label><select id="fComp">'+compOpts+'</select></div>'+
@@ -428,29 +448,157 @@
         '<div class="fld"><label>Следующий контакт</label><input type="date" id="fNext" value="'+esc(r&&r.next_at?r.next_at:'')+'"></div>'+
         '</div>'+
         '<div class="fld"><label>Заметка</label><textarea id="fNote" rows="3">'+esc(r?r.note:'')+'</textarea></div>'+
-        (r?('<div class="fld"><label>Расчёт производства</label><div id="calcBox" class="muted">Загрузка…</div></div>'+
-          '<div class="fld"><label>Файлы (фото, PDF, чертежи)</label>'+
+        '<div id="leadExtra" style="display:none"><div class="fld"><label>Файлы (фото, PDF, чертежи)</label>'+
           '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
           '<button class="btn" id="fCam" type="button">📷 Камера</button>'+
           '<button class="btn" id="fPick" type="button">📎 Галерея / файл</button>'+
           '<span class="msg" id="fMsg"></span></div>'+
           '<input type="file" id="fCamIn" accept="image/*" capture="environment" style="display:none">'+
           '<input type="file" id="fPickIn" multiple accept="image/*,.pdf,.dxf,.dwg,.step,.stp,.igs,.iges,.xls,.xlsx,.doc,.docx,.csv,.txt" style="display:none">'+
-          '<div class="thumbs" id="fThumbs"><span class="muted">Загрузка…</span></div></div>')
-         :('<div class="muted" style="margin-top:10px">Файлы можно прикрепить после первого сохранения лида.</div>'))+
-        '<div class="popbar">'+
-        (r&&stg!=='deal'?('<button class="btn'+(stg==='lost'?'':' danger')+'" id="pRef" type="button" style="margin-right:auto">'+(stg==='lost'?'Вернуть из отказа':'Отказ')+'</button>'):'<span style="margin-right:auto"></span>')+
-        '<span class="msg" id="pMsg"></span>'+
-        '<button class="btn" id="pClose" type="button">Закрыть</button>'+
-        '<button class="btn green" id="pSave" type="button">Сохранить</button>'+
+          '<div class="thumbs" id="fThumbs"><span class="muted">Загрузка…</span></div></div></div>'+
+        '<div class="muted" id="newHint" style="margin-top:10px;display:none">Введите тему — лид сохранится сам. После этого можно прикрепить файлы и отправить на расчёт.</div>'+
+        '<div class="popbar" style="align-items:center">'+
+        '<span class="msg" id="pMsg" style="margin:0 auto 0 0;color:var(--muted)"></span>'+
+        '<span class="msg" id="calcMsg" style="color:var(--amber)"></span>'+
+        '<button class="btn primary" id="pDocs" type="button" style="display:none" title="Окно, где создаётся коммерческое предложение и счёт на оплату по этому заказу">📄 КП / Счёт на оплату</button>'+
+        '<button class="btn primary" id="calcSend" type="button" style="display:none" title="В колонке «Заявки» на доске появится карточка со всеми файлами лида — инженер посчитает, дальше этап пойдёт сам">📐 На расчёт</button>'+
         '</div></div></div>';
+      function $(i){ return document.getElementById(i); }
+      function pmsg(tx){ var e=$('pMsg'); if(e) e.textContent=tx||''; }
+      function stg(){ return r?stageOf(r):'new'; }
       // выбор из базы подставляет название; ручное название живёт отдельно
-      document.getElementById('fComp').onchange=function(){
-        var c=COMPANIES.filter(function(x){return x.id===document.getElementById('fComp').value;})[0];
-        if(c) document.getElementById('fCompName').value=c.name||'';
+      $('fComp').onchange=function(){
+        var c=COMPANIES.filter(function(x){return x.id===$('fComp').value;})[0];
+        if(c) $('fCompName').value=c.name||'';
+        dirty();
       };
+      // ---------- автосохранение ----------
+      function collect(){
+        return { id:(r?r.id:undefined), title:$('fTitle').value.trim(), companyId:$('fComp').value, companyName:$('fCompName').value.trim(),
+          contact:$('fContact').value.trim(), phone:$('fPhone').value.trim(), amount:+$('fAmount').value||0, source:$('fSrc').value,
+          sourceCode:$('fSrcCode').value.trim(), note:$('fNote').value, status:(r?(r.status||'new'):'new'), nextAt:$('fNext').value||null, byName:MYNAME };
+      }
+      var saveT=null, isDirty=false, chain=Promise.resolve(), closed=false, changed=false;
+      function dirty(){ isDirty=true; pmsg(''); clearTimeout(saveT); saveT=setTimeout(flush,700); }
+      function flush(){
+        clearTimeout(saveT);
+        if(!isDirty) return chain;
+        var b=collect();
+        if(!b.title){ if(!closed) pmsg(r?'Тема не может быть пустой — не сохранено':''); return chain; }
+        isDirty=false; if(!closed) pmsg('Сохраняю…');
+        chain=chain.then(function(){ b.id=(r?r.id:undefined); return post('/sales-save',b); }).then(function(j){
+          if(!j||j.error){ isDirty=true; if(!closed) pmsg('Не сохранилось: '+((j&&j.error)||'нет связи')); return; }
+          changed=true;
+          var f={ title:b.title, company_id:b.companyId, company_name:b.companyName, contact:b.contact, phone:b.phone, amount:b.amount, source:b.source, source_code:b.sourceCode, note:b.note, next_at:b.nextAt };
+          if(!r){ r=f; r.id=j.id; r.status='new'; r.stage='new'; ROWS.unshift(r); if(!closed) initLead(); }
+          else for(var k in f) r[k]=f[k];
+          if(!closed){ pmsg('Сохранено ✓'); paintHead(); }
+        }).catch(function(){ isDirty=true; if(!closed) pmsg('Не сохранилось — нет связи'); });
+        return chain;
+      }
+      ['fTitle','fCompName','fContact','fPhone','fSrcCode','fAmount','fNote'].forEach(function(i){ $(i).addEventListener('input',dirty); });
+      ['fSrc','fNext'].forEach(function(i){ $(i).addEventListener('change',dirty); });
+      var stTimer=null;
+      function close(){
+        if(closed) return; closed=true; clearInterval(stTimer); document.removeEventListener('keydown',onKey);
+        var pr=flush(); host.innerHTML='';
+        Promise.resolve(pr).then(function(){ if(changed) loadAll(); else renderBoard(); });
+      }
+      function onKey(e){ if(e.key==='Escape') close(); }
+      document.addEventListener('keydown',onKey);
+      // закрываем только если и нажали, и отпустили мимо окна (иначе выделение текста мышью закрывало бы лид)
+      var downOut=false;
+      $('ovl').onmousedown=function(e){ downOut=(e.target===this); };
+      $('ovl').onclick=function(e){ if(e.target===this && downOut) close(); };
+
+      function paintHead(){
+        $('pH').textContent = r?('Лид · '+colTitle(stg())):'Новый лид';
+        var o=r&&r.order, s=stg(), h='';
+        if(o){
+          h='<div class="ordbox"><b>Заказ'+(o.number?(' №'+esc(o.number)):'')+'</b>'+(o.list?(' · колонка «'+esc(o.list)+'»'):(s==='lost'?' · снят с доски':''))+
+            (o.total>0?('<br>Сумма: <b>'+money(o.total)+' ₸</b>'+(o.paid>0?(' · оплачено <b style="color:var(--green)">'+money(o.paid)+' ₸</b>'+(o.total>o.paid?(' · остаток '+money(o.total-o.paid)+' ₸'):'')):' · оплат пока нет')):'<br>Инженер считает — цена появится здесь сама')+
+            (r.calc_note?('<br>Комментарий цеха: '+esc(r.calc_note)):'')+
+            (s==='lost'&&r.lost_reason?('<br>Причина отказа: '+esc(r.lost_reason)):'')+'</div>';
+        } else if(r && r.trello_card_id){
+          h='<div class="ordbox"><b>Отправлено на расчёт</b><br>Карточка в колонке «Заявки» на доске. Когда инженер посчитает, цена появится здесь сама.</div>';
+        } else if(r && s==='lost' && r.lost_reason){ h='<div class="ordbox">Причина отказа: '+esc(r.lost_reason)+'</div>'; }
+        $('ordHost').innerHTML=h;
+        $('newHint').style.display = r?'none':'';
+        $('leadExtra').style.display = r?'':'none';
+        $('calcSend').style.display = (r && !r.trello_card_id && s!=='lost')?'':'none';
+        $('pDocs').style.display = (r && r.trello_card_id && o && o.total>0 && s!=='calc' && s!=='lost')?'':'none';
+      }
+      // ---------- статус заказа: та же полоса, что в карточке на доске ----------
+      function stCell(k,cls,title,desc,extra){ return '<div class="st '+cls+'" data-k="'+k+'"'+(extra||'')+'><div class="st-t"><span class="st-dot">'+(/done/.test(cls)?'✓':(/part/.test(cls)?'½':(k==='rej'?'✕':(k==='back'?'↩':''))))+'</span>'+esc(title)+'</div><div class="st-d">'+desc+'</div></div>'; }
+      function rejCell(){
+        var s=stg();
+        if(s==='deal') return '';
+        if(s==='lost') return '<div class="st st-rej st-back" data-k="back" title="Вернуть лид из отказа'+(r.trello_card_id?' — карточка заказа вернётся на доску':'')+'"><div class="st-t"><span class="st-dot">↩</span>Вернуть</div><div class="st-d"></div></div>';
+        return '<div class="st st-rej" data-k="rej" title="Отказ клиента: лид уходит в «Отказ»'+(r.trello_card_id?', заказ — из бухгалтерии, счетов и с доски':'')+'"><div class="st-t"><span class="st-dot">✕</span>Отказ</div><div class="st-d">клиент отказался</div></div>';
+      }
+      function paintSt(j){
+        if(closed||!r||!$('stSteps')) return;
+        function dm(x){ var m=String(x||'').match(/^\d{4}-(\d\d)-(\d\d)/); return m?m[2]+'.'+m[1]:String(x||''); }
+        function who(i){ return i?(esc(dm(i.at))+(i.by?' · '+esc(i.by):'')):''; }
+        var h='', steps=[], has=!!(j&&j.ok&&!j.hidden);
+        if(has){
+          var R=j.rights||{}, full=j.total>0&&j.rest<=0.5, pct=j.total>0?Math.min(full?100:99,Math.round(j.paidSum/j.total*100)):0;
+          steps=[
+            {k:'invoiceSent', t:'Счёт выслан', on:j.invoiceSent, d:j.invoiceSent?(who(j.sentInfo)||'отмечено'):'ещё не выслан', can:R.mark, btn:j.invoiceSent?'':'Отметить'},
+            {k:'pay', t:full?'Оплачено 100%':(j.paidSum>0?'Оплата '+pct+'%':(j.legacyPaid?'Оплачен (без суммы)':'Оплата')), on:full, part:!full&&(j.paidSum>0||j.pendingSum>0||j.legacyPaid),
+              d:j.total>0?(full?money(j.paidSum)+' ₸':(j.paidSum>0?money(j.paidSum)+' из '+money(j.total)+' ₸ · остаток '+money(j.rest)+' ₸':(j.legacyPaid?'отмечен раньше, не подтверждён':'не оплачено · '+money(j.total)+' ₸'))+(j.pendingSum>0?' · ждёт подтверждения '+money(j.pendingSum)+' ₸':'')):'нет расчёта',
+              can:j.total>0&&(R.pay||R.mark), why:'У вас нет права вносить оплату', bar:(!full&&j.paidSum>0)?pct:null, btn:full?'':(R.pay?'Внести':'Внести на подтверждение')},
+            {k:'delivered', t:'Сдали', on:j.delivered, d:j.delivered?(who(j.deliveredInfo)||dm(j.deliveredAt)||'отмечено'):'ещё не сдан', can:R.mark, btn:j.delivered?'':'Отметить'},
+            {k:'actSigned', t:j.noAct?'Акт не нужен':'Акт', on:j.actSigned, cross:j.noAct, d:j.actSigned?(who(j.actInfo)||'подписан'):(j.noAct?'оплата наличными':(R.act?(j.delivered?'ещё не подписан':'после «сдали»'):'ставит бухгалтер')), can:R.act&&j.delivered&&!j.noAct, btn:j.actSigned?'':'Отметить'}
+          ];
+        } else {
+          // заказа на доске ещё нет (или нет права видеть деньги): шаги показаны, но закрыты
+          var why=r.trello_card_id?'Этот шаг вам недоступен':'Шаг откроется, когда лид уйдёт на расчёт и появится заказ';
+          steps=[['invoiceSent','Счёт выслан'],['pay','Оплата'],['delivered','Сдали'],['actSigned','Акт']].map(function(x){ return {k:x[0],t:x[1],d:r.trello_card_id?'':'после расчёта',can:false,why:why}; });
+        }
+        if(stg()==='lost') steps.forEach(function(s){ s.can=false; s.why='Лид в отказе'; });
+        var nextSet=false;
+        steps.forEach(function(s){
+          var cls='st'+(s.on?' done':'')+(s.part?' part':'')+(s.cross?' cross':'');
+          if(!s.on&&!s.cross&&s.can&&!nextSet){ cls+=' next'; nextSet=true; }
+          if(!s.can) cls+=' lock';
+          h+='<div class="'+cls+'" data-k="'+s.k+'"'+(s.can?'':' title="'+esc(s.why||'Этот шаг вам сейчас недоступен')+'"')+'><div class="st-t"><span class="st-dot">'+(s.on?'✓':(s.part?'½':''))+'</span>'+esc(s.t)+'</div><div class="st-d">'+(s.d||'')+'</div>'+
+            (s.bar!=null?'<div class="st-bar"><i style="width:'+s.bar+'%"></i></div>':'')+
+            (s.can&&s.btn&&/next/.test(cls)?'<button type="button" class="st-b">'+s.btn+'</button>':'')+'</div>';
+        });
+        var rj=rejCell(); h+=rj;
+        var bx=$('stSteps'); bx.classList.toggle('with-rej',!!rj); bx.innerHTML=h; $('stFld').style.display='';
+        [].forEach.call(bx.querySelectorAll('.st'),function(el){
+          if(el.classList.contains('lock')) return;
+          el.onclick=function(){
+            var k=el.getAttribute('data-k');
+            if(k==='rej'||k==='back'){ var x=r; Promise.resolve(flush()).then(function(){ closed=true; clearInterval(stTimer); document.removeEventListener('keydown',onKey); host.innerHTML=''; if(k==='rej') refuse(x); else unrefuse(x); }); return; }
+            if(k==='pay'){ t.modal({ url:'./pay-modal.html?t='+Date.now(), title:'Оплата заказа'+(r.order&&r.order.number?(' №'+r.order.number):''), accentColor:'#1f6ce8', height:640, args:{ cardId:r.trello_card_id, title:String(r.title||'').slice(0,60) } }); return; }
+            var st=steps.filter(function(x){return x.k===k;})[0], nv=!st.on;
+            var q=nv?({invoiceSent:'Отметить, что счёт выслан клиенту?',delivered:'Отметить заказ сданным клиенту?',actSigned:'Отметить, что акт подписан?'})[k]
+                    :({invoiceSent:'Снять отметку «счёт выслан»?',delivered:'Снять отметку «сдали»? Начисления по заказу могут измениться.',actSigned:'Снять отметку «акт»?'})[k];
+            if(!confirm(q)) return;
+            el.classList.add('busy'); changed=true;
+            loadSt({cardId:r.trello_card_id,field:k,value:nv?1:0});
+          };
+        });
+      }
+      var stLast='';
+      function loadSt(body){
+        if(!r) return Promise.resolve();
+        if(!r.trello_card_id){ paintSt(null); return Promise.resolve(); }
+        var o=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};
+        return fetch(WORKER+'/card-status'+(body?'':'?cardId='+encodeURIComponent(r.trello_card_id)),o).then(function(x){return x.json();}).then(function(j){
+          if(j&&j.error){ if(body){ alert(j.error); return loadSt(); } paintSt(null); return; }
+          var sig=JSON.stringify(j); if(!body && sig===stLast) return; stLast=sig;
+          if(j && j.ok && !j.hidden && r.order){ if(Math.round(j.paidSum)!==r.order.paid) changed=true; r.order.paid=Math.round(j.paidSum||0); if(j.total>0) r.order.total=Math.round(j.total); paintHead(); }
+          paintSt(j);
+        }).catch(function(){ if(!stLast) paintSt(null); });
+      }
       // ---------- файлы лида ----------
-      if(r){
+      function initLead(){
+        paintHead(); loadSt();
+        clearInterval(stTimer); stTimer=setInterval(function(){ if(!closed && r && r.trello_card_id && !document.hidden) loadSt(); },5000);   // оплата вносится в соседнем окне — полоса подхватит сама
         var IMG_RE=/^image\//;
         function fmsg(s){ var e=document.getElementById('fMsg'); if(e) e.textContent=s||''; }
         function loadFiles(){
@@ -516,92 +664,39 @@
           chain.then(function(){ fmsg('Готово ✓'); loadFiles(); renderBoard(); setTimeout(function(){fmsg('');},1500); })
                .catch(function(e){ fmsg('Ошибка: '+e.message); loadFiles(); });
         }
-        // ---------- расчёт производства ----------
-        function renderCalcBox(){
-          var box=document.getElementById('calcBox'); if(!box) return;
-          if(r.calc_status==='ready'){
-            box.innerHTML='<span class="pill calcok" style="font-size:13px">💰 Расчёт готов: '+money(r.calc_price)+' ₸</span>'+
-              (r.calc_note?('<div class="muted" style="margin-top:5px">Комментарий цеха: '+esc(r.calc_note)+'</div>'):'')+
-              '<div class="muted" style="margin-top:5px">Эту цену можно отправлять клиенту. Файлы — ниже в лиде.</div>'+
-              '';
-          } else if(r.trello_card_id){
-            box.innerHTML='<span class="pill calc" style="font-size:13px">⏳ Отправлено на расчёт</span>'+
-              '<div class="muted" style="margin-top:5px">Инженер считает. Когда расчёт будет готов, цена появится здесь сама.</div>';
-          } else {
-            box.innerHTML='<div class="muted">Нужна цена от производства? Отправьте лид инженеру: '+
-              'в колонке «Заявки» на доске появится карточка со всеми файлами лида, дальше этап пойдёт сам.</div>'+
-              '<div style="margin-top:7px"><button class="btn primary" type="button" id="calcSend">📐 На расчёт</button>'+
-              '<span class="msg" id="calcMsg"></span></div>';
-          }
-          var op=document.getElementById('calcOpen');
-          if(op) op.onclick=function(){ window.open(r.trello_card_url,'_blank'); };
-          var sb=document.getElementById('calcSend');
-          if(sb) sb.onclick=function(){
-            // без компании и контактного лица с телефоном — не отправляем (решение Асхата, 12.11.2026)
-            var _cs=document.getElementById('fComp'), cn=document.getElementById('fCompName').value.trim()||((_cs&&_cs.value&&_cs.selectedIndex>=0)?_cs.options[_cs.selectedIndex].text.trim():''), ct=document.getElementById('fContact').value.trim(), ph=document.getElementById('fPhone').value.trim();
-            var miss=[]; if(!cn) miss.push('компания'); if(!ct) miss.push('контактное лицо'); if(ph.replace(/\D/g,'').length<10) miss.push('телефон');
-            if(miss.length){ document.getElementById('calcMsg').textContent='Сначала заполните: '+miss.join(', ');
-              [['fCompName',!cn],['fContact',!ct],['fPhone',miss.indexOf('телефон')>=0]].forEach(function(x){ var el=document.getElementById(x[0]); if(el) el.style.outline=x[1]?'2px solid #e2483d':''; });
-              return; }
-            if(!confirm('Отправить лид «'+(r.title||'')+'» на расчёт производству?\nВ колонке «Заявки» на доске появится карточка с файлами лида.')) return;
-            sb.disabled=true;
-            document.getElementById('calcMsg').textContent='Отправка…';
-            // сначала сохраняем то, что введено в поля, потом отправляем
-            var body={ id:r.id, title:document.getElementById('fTitle').value.trim()||r.title, companyId:document.getElementById('fComp').value, companyName:cn, contact:ct, phone:ph,
-              amount:+document.getElementById('fAmount').value||0, source:document.getElementById('fSrc').value, sourceCode:document.getElementById('fSrcCode').value.trim(),
-              note:document.getElementById('fNote').value, status:(r.status||'new'), nextAt:document.getElementById('fNext').value||null, byName:MYNAME };
-            post('/sales-save',body).then(function(sv){ if(sv&&sv.error) return sv; r.company_name=cn; r.contact=ct; r.phone=ph; return post('/sales-to-calc',{id:r.id, byName:MYNAME}); }).then(function(j){
-              if(j.error){ sb.disabled=false; document.getElementById('calcMsg').textContent=j.error; return; }
-              r.trello_card_id=j.cardId; r.trello_card_url=j.cardUrl||''; r.calc_status='sent'; r.stage='calc'; r.status='calc';
-              if(j.attachErrors && j.attachErrors.length) alert('Карточка создана, но часть файлов не прикрепилась:\n'+j.attachErrors.join('\n'));
-              renderCalcBox(); renderBoard(); loadAll();
-            }).catch(function(e){ sb.disabled=false; document.getElementById('calcMsg').textContent='Ошибка сети: '+e.message; });
-          };
-        }
-        renderCalcBox();
-        document.getElementById('fCam').onclick=function(){ document.getElementById('fCamIn').click(); };
-        document.getElementById('fPick').onclick=function(){ document.getElementById('fPickIn').click(); };
-        document.getElementById('fCamIn').onchange=function(){ uploadFiles(this.files); this.value=''; };
-        document.getElementById('fPickIn').onchange=function(){ uploadFiles(this.files); this.value=''; };
+        $('fCam').onclick=function(){ $('fCamIn').click(); };
+        $('fPick').onclick=function(){ $('fPickIn').click(); };
+        $('fCamIn').onchange=function(){ uploadFiles(this.files); this.value=''; };
+        $('fPickIn').onchange=function(){ uploadFiles(this.files); this.value=''; };
         loadFiles();
       }
-      document.getElementById('pClose').onclick=function(){ host.innerHTML=''; };
-      document.getElementById('ovl').onclick=function(e){ if(e.target===this) host.innerHTML=''; };
       // КП и СЧЁТ ПРЯМО ИЗ ПРОДАЖ (решение Асхата, 19.11.2026): менеджеру не нужно идти на доску производства.
       // Открывается то же окно, что и в карточке заказа; права («Создаёт КП», «Выставляет счета») проверяет оно само.
-      var pDocs=document.getElementById('pDocs');
-      if(pDocs) pDocs.onclick=function(){
+      $('pDocs').onclick=function(){
         t.modal({ url:'./invoice-modal.html?t='+Date.now(), title:'Счёт на оплату', accentColor:'#1f6ce8', fullscreen:true, args:{ cardId:r.trello_card_id, boardId:'' } });
       };
-      var pRef=document.getElementById('pRef');
-      if(pRef) pRef.onclick=function(){ host.innerHTML=''; if(stg==='lost') unrefuse(r); else refuse(r); };
-      var pArch=document.getElementById('pArch'); if(pArch) pArch.onclick=function(){
-        if(!confirm('Убрать лид «'+(r.title||'')+'» в архив?')) return;
-        post('/sales-archive',{id:r.id,archived:1}).then(function(j){
-          if(j.error){ alert(j.error); return; }
-          host.innerHTML=''; loadAll();
-        });
+      // ---------- на расчёт ----------
+      $('calcSend').onclick=function(){
+        var sb=this, cm=$('calcMsg');
+        // без компании и контактного лица с телефоном — не отправляем (решение Асхата, 12.11.2026)
+        var _cs=$('fComp'), cn=$('fCompName').value.trim()||((_cs&&_cs.value&&_cs.selectedIndex>=0)?_cs.options[_cs.selectedIndex].text.trim():''), ct=$('fContact').value.trim(), ph=$('fPhone').value.trim();
+        var miss=[]; if(!cn) miss.push('компания'); if(!ct) miss.push('контактное лицо'); if(ph.replace(/\D/g,'').length<10) miss.push('телефон');
+        [['fCompName',!cn],['fContact',!ct],['fPhone',miss.indexOf('телефон')>=0]].forEach(function(x){ var el=$(x[0]); if(el) el.style.outline=x[1]?'2px solid #e2483d':''; });
+        if(miss.length){ cm.textContent='Сначала заполните: '+miss.join(', '); return; }
+        if(!confirm('Отправить лид «'+(r.title||'')+'» на расчёт производству?\nВ колонке «Заявки» на доске появится карточка с файлами лида.')) return;
+        sb.disabled=true; cm.textContent='Отправка…';
+        if(!$('fCompName').value.trim()) $('fCompName').value=cn;
+        isDirty=true;
+        Promise.resolve(flush()).then(function(){ if(isDirty) throw new Error('лид не сохранился'); return post('/sales-to-calc',{id:r.id, byName:MYNAME}); }).then(function(j){
+          if(j.error){ sb.disabled=false; cm.textContent=j.error; return; }
+          cm.textContent=''; changed=true;
+          r.trello_card_id=j.cardId; r.trello_card_url=j.cardUrl||''; r.calc_status='sent'; r.stage='calc'; r.status='calc';
+          if(j.attachErrors && j.attachErrors.length) alert('Карточка создана, но часть файлов не прикрепилась:\n'+j.attachErrors.join('\n'));
+          paintHead(); loadSt(); renderBoard();
+          loadAll().then(function(){ var x=findRow(r.id); if(x && !closed){ r=x; paintHead(); loadSt(); } });
+        }).catch(function(e){ sb.disabled=false; cm.textContent='Ошибка: '+e.message; });
       };
-      document.getElementById('pSave').onclick=function(){
-        var title=document.getElementById('fTitle').value.trim();
-        if(!title){ document.getElementById('pMsg').textContent='Укажите тему'; return; }
-        var body={ id:(r?r.id:undefined), title:title,
-          companyId:document.getElementById('fComp').value,
-          companyName:document.getElementById('fCompName').value.trim(),
-          contact:document.getElementById('fContact').value.trim(),
-          phone:document.getElementById('fPhone').value.trim(),
-          amount:+document.getElementById('fAmount').value||0,
-          source:document.getElementById('fSrc').value,
-          sourceCode:document.getElementById('fSrcCode').value.trim(),
-          note:document.getElementById('fNote').value,
-          status:(r?(r.status||'new'):'new'),
-          nextAt:document.getElementById('fNext').value||null, byName:MYNAME };
-        document.getElementById('pMsg').textContent='Сохранение…';
-        post('/sales-save',body).then(function(j){
-          if(j.error){ document.getElementById('pMsg').textContent=j.error; return; }
-          host.innerHTML=''; loadAll();
-        });
-      };
+      if(r) initLead(); else { paintHead(); $('fTitle').focus(); }
     }
 
     document.getElementById('newBtn').onclick=function(){ openEdit(null); };

@@ -136,7 +136,7 @@
           left.textContent='Расчёт ещё не сделан.';
         }
         var btn=document.createElement('button'); btn.className='btn'; btn.type='button';
-        btn.textContent = (d && d.total!=null) ? 'Открыть расчёт' : 'Открыть калькулятор';
+        btn.textContent = 'Открыть калькулятор';   // одно название всегда (19.11.2026): раньше при сохранённом расчёте кнопка звалась «Открыть расчёт» — путало
         btn.addEventListener('click', openCalc);
         row.appendChild(left); row.appendChild(btn); el.appendChild(row);
         // director: earnings; director OR allowed worker: invoice
@@ -188,33 +188,13 @@
           // от итоговой суммы (решение Асхата, 08.2026)
         }
         // связь с лидом продаж: если карточка создана кнопкой «На расчёт»,
-        // начальник цеха видит здесь кнопку «Расчёт готов» — цена уедет продажнику
+        // КНОПКИ «РАСЧЁТ ГОТОВ» БОЛЬШЕ НЕТ (решение Асхата, 19.11.2026): сохранённый расчёт и колонка
+        // «Расчет сделан» — это и есть готовый расчёт; цена и этап уходят в «Продажи» сами.
         function addSalesBtn(lead, me){
           var row5=document.createElement('div'); row5.className='row'; row5.style.marginTop='8px';
           var lbl5=document.createElement('div'); lbl5.className='muted';
-          var sb=document.createElement('button'); sb.className='btn'; sb.type='button'; sb.style.background='#a54800';
-          if (lead.calc_status==='ready'){
-            lbl5.textContent='Лид продаж «'+(lead.title||'')+'»: цена '+fmt(lead.calc_price)+' ₸ уже у продажника';
-            sb.textContent='Обновить цену';
-          } else {
-            lbl5.textContent='Заказ пришёл из отдела продаж («'+(lead.title||'')+'»)';
-            sb.textContent='✅ Расчёт готов';
-          }
-          sb.addEventListener('click', function(){
-            var note = prompt('Комментарий для продажника (срок, условия). Можно оставить пустым:', '');
-            if (note === null) return; // передумал
-            sb.disabled = true; sb.textContent = 'Отправка…';
-            fetch(WORKER+'/sales-calc-ready', { method:'POST', headers:{'Content-Type':'application/json'},
-              body: JSON.stringify({ cardId: CARD.id, memberId: (me&&me.id)||'', note: note||'' }) })
-            .then(function(x){ return x.json(); })
-            .then(function(j){
-              if (j.error){ alert(j.error); sb.disabled=false; sb.textContent='✅ Расчёт готов'; return; }
-              lbl5.textContent='Цена '+fmt(j.price)+' ₸ отправлена продажнику ✓';
-              sb.textContent='Обновить цену'; sb.disabled=false;
-            })
-            .catch(function(e){ alert('Ошибка сети: '+e.message); sb.disabled=false; sb.textContent='✅ Расчёт готов'; });
-          });
-          row5.appendChild(lbl5); row5.appendChild(sb); el.appendChild(row5);
+          lbl5.textContent='Заказ из отдела продаж («'+(lead.title||'')+'»). Сохраните расчёт и перенесите карточку в «Расчет сделан» — цена появится в продажах сама.';
+          row5.appendChild(lbl5); el.appendChild(row5);
         }
         function checkSalesLink(allowed, me){
           if (!allowed || !CARD.id) return Promise.resolve();
