@@ -427,7 +427,6 @@
           '<div class="thumbs" id="fThumbs"><span class="muted">Загрузка…</span></div></div>')
          :('<div class="muted" style="margin-top:10px">Файлы можно прикрепить после первого сохранения лида.</div>'))+
         '<div class="popbar">'+
-        (r?'<button class="btn danger" id="pArch" type="button">В архив</button>':'')+
         (r&&stg!=='deal'?('<button class="btn'+(stg==='lost'?'':' danger')+'" id="pRef" type="button" style="margin-right:auto">'+(stg==='lost'?'Вернуть из отказа':'Отказ')+'</button>'):'<span style="margin-right:auto"></span>')+
         '<span class="msg" id="pMsg"></span>'+
         '<button class="btn" id="pClose" type="button">Закрыть</button>'+
@@ -558,7 +557,7 @@
       document.getElementById('ovl').onclick=function(e){ if(e.target===this) host.innerHTML=''; };
       var pRef=document.getElementById('pRef');
       if(pRef) pRef.onclick=function(){ host.innerHTML=''; if(stg==='lost') unrefuse(r); else refuse(r); };
-      if(r) document.getElementById('pArch').onclick=function(){
+      var pArch=document.getElementById('pArch'); if(pArch) pArch.onclick=function(){
         if(!confirm('Убрать лид «'+(r.title||'')+'» в архив?')) return;
         post('/sales-archive',{id:r.id,archived:1}).then(function(j){
           if(j.error){ alert(j.error); return; }
