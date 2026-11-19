@@ -177,6 +177,28 @@
               row.style.justifyContent='flex-end'; row.appendChild(b); el.appendChild(row);
             }).catch(function(){});
         }
+        // ДОП. СЧЁТ (решение Асхата, 19.11.2026): расчёт изменили после оплаты — оплаченный счёт не трогаем
+        // (номер зафиксирован), на разницу выставляется отдельный доп. счёт
+        function addExtraInvoice(){
+          fetch(WORKER+'/invoice-extra?cardId='+encodeURIComponent(CARD.id)).then(function(r){ return r.json(); }).then(function(j){
+            var x=j&&j.extra; if(!x || !(x.due>0)) return;
+            var rw=document.createElement('div'); rw.className='row'; rw.style.marginTop='8px';
+            var lb=document.createElement('div'); lb.style.color='#c9372c'; lb.style.fontWeight='600';
+            lb.textContent='Расчёт изменён после оплаты: к счёту №'+x.base+' нужна доплата '+Math.round(x.due).toLocaleString('ru-RU')+' ₸';
+            var bt=document.createElement('button'); bt.className='btn'; bt.type='button'; bt.style.background='#c9372c'; bt.textContent='Выставить доп. счёт';
+            bt.addEventListener('click', function(){
+              if(!confirm('Выставить доп. счёт на '+Math.round(x.due).toLocaleString('ru-RU')+' ₸ к счёту №'+x.base+'?\nОплаченный счёт №'+x.base+' остаётся без изменений.')) return;
+              bt.disabled=true; bt.textContent='Создаю…';
+              fetch(WORKER+'/invoice-extra',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:CARD.id }) }).then(function(r){ return r.json(); }).then(function(o){
+                if(!o||!o.ok) throw new Error((o&&o.error)||'сервер не подтвердил');
+                alert('Доп. счёт №'+o.number+' на '+Math.round(o.amount).toLocaleString('ru-RU')+' ₸ создан. В 1С вносите этот же номер. Сейчас он откроется — скачайте PDF и отправьте клиенту.');
+                rw.remove();
+                t.modal({ url:'./invoice-view.html?number='+encodeURIComponent(o.number)+'&t='+Date.now(), title:'Счёт №'+o.number, accentColor:'#1f845a', fullscreen:true });
+              }).catch(function(e){ bt.disabled=false; bt.textContent='Выставить доп. счёт'; alert('Не удалось: '+(e&&e.message||e)); });
+            });
+            rw.appendChild(lb); rw.appendChild(bt); el.appendChild(rw);
+          }).catch(function(){});
+        }
         function addInvoiceBtn(){
           var row3=document.createElement('div'); row3.className='row'; row3.style.marginTop='8px';
           var lbl3=document.createElement('div'); lbl3.className='muted'; lbl3.textContent='Счёт на оплату (можно объединить несколько заказов клиента)';
@@ -184,6 +206,7 @@
           ib.textContent='Счёт на оплату';
           ib.addEventListener('click', openInvoice);
           row3.appendChild(lbl3); row3.appendChild(ib); el.appendChild(row3);
+          addExtraInvoice();
           // «Счета (PDF)» переехали внутрь окна «Счёт на оплату» — кнопка справа
           // от итоговой суммы (решение Асхата, 08.2026)
         }

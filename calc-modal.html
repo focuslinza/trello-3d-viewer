@@ -1350,7 +1350,10 @@
         try{ var dv=out.docsVoided; if(dv){ var ln=[];
           if(dv.kp&&dv.kp.length) ln.push('КП №'+dv.kp.join(', №')+' — недействительно, ушло в историю.');
           if(dv.invoices&&dv.invoices.length) ln.push('Счёт №'+dv.invoices.join(', №')+' — отменён, отметка «счёт выслан» снята.');
-          if(dv.keptPaid&&dv.keptPaid.length) ln.push('Счёт №'+dv.keptPaid.join(', №')+' НЕ отменён: по нему уже есть оплата. Разницу решите с бухгалтером.');
+          if(dv.keptPaid&&dv.keptPaid.length){ var ex=dv.extra, m=function(v){ return Math.round(Math.abs(v)).toLocaleString('ru-RU')+' ₸'; };
+            ln.push('Счёт №'+dv.keptPaid.join(', №')+' уже оплачен — он остаётся без изменений.'+
+              (ex&&ex.due>0?('\nНа разницу нужен ДОП. СЧЁТ на '+m(ex.due)+': кнопка «Выставить доп. счёт» в карточке заказа и в «Продажах».')
+               :(ex&&ex.due<0?('\nСумма заказа уменьшилась на '+m(ex.due)+' — возврат или зачёт решает бухгалтер.'):''))); }
           if(ln.length) alert('Сумма расчёта изменилась.\n\n'+ln.join('\n')+((dv.kp&&dv.kp.length)||(dv.invoices&&dv.invoices.length)?'\n\nКлиенту нужно выставить КП и счёт заново.':'')); } }catch(e){}
         setTimeout(function(){ t.closeModal(); }, out.correction?2500:900);
       }).catch(function(e){

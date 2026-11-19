@@ -332,7 +332,7 @@
           if(sum>0) h+='<span class="price">'+money(sum)+' ₸</span> ';
           if(o && o.paid>0) h+='<span class="pill paid" title="Подтверждённые оплаты">оплачено '+money(o.paid)+'</span> ';
           if(FILE_COUNTS[String(r.id)]) h+='<span class="pill next">📎 '+FILE_COUNTS[String(r.id)]+'</span> ';
-          if(r.redo) h+='<span class="pill due" title="'+esc(r.redo)+'">⚠ выставить КП и счёт заново</span> ';
+          if(r.redo) h+='<span class="pill due" title="'+esc(r.redo)+'">⚠ '+(/доп\. счёт/.test(r.redo)?'нужен доп. счёт':'выставить КП и счёт заново')+'</span> ';
           if(r.next_at && c.key!=='deal' && c.key!=='lost'){
             var due = r.next_at<=today();
             h+='<span class="pill '+(due?'due':'next')+'">'+(due?'📞 пора: ':'')+esc(r.next_at.slice(5))+'</span>';
@@ -520,11 +520,22 @@
             (o.total>0?('<br>Сумма: <b>'+money(o.total)+' ₸</b>'+(o.paid>0?(' · оплачено <b style="color:var(--green)">'+money(o.paid)+' ₸</b>'+(o.total>o.paid?(' · остаток '+money(o.total-o.paid)+' ₸'):'')):' · оплат пока нет')):'<br>Инженер считает — цена появится здесь сама')+
             (r.calc_note?('<br>Комментарий цеха: '+esc(r.calc_note)):'')+
             (s==='lost'&&r.lost_reason?('<br>Причина отказа: '+esc(r.lost_reason)):'')+
-            (r.redo?('<div style="margin-top:6px;color:var(--red);font-weight:600">⚠ '+esc(r.redo)+'. Выставьте КП и счёт заново.</div>'):'')+'</div>';
+            (r.redo?('<div style="margin-top:6px;color:var(--red);font-weight:600">⚠ '+esc(r.redo)+(/доп\. счёт/.test(r.redo)?'.':'. Выставьте КП и счёт заново.')+'</div>'+
+              (/доп\. счёт/.test(r.redo)?'<div style="margin-top:6px"><button class="btn danger" id="pExtra" type="button">Выставить доп. счёт</button></div>':'')):'')+'</div>';
         } else if(r && r.trello_card_id){
           h='<div class="ordbox"><b>Отправлено на расчёт</b><br>Карточка в колонке «Заявки» на доске. Когда инженер посчитает, цена появится здесь сама.</div>';
         } else if(r && s==='lost' && r.lost_reason){ h='<div class="ordbox">Причина отказа: '+esc(r.lost_reason)+'</div>'; }
         $('ordHost').innerHTML=h;
+        var pe=$('pExtra'); if(pe) pe.onclick=function(){
+          if(!confirm('Выставить доп. счёт на разницу? Оплаченный счёт остаётся без изменений.')) return;
+          pe.disabled=true;
+          post('/invoice-extra',{cardId:r.trello_card_id}).then(function(o){
+            if(!o||!o.ok){ pe.disabled=false; alert((o&&o.error)||'не удалось'); return; }
+            alert('Доп. счёт №'+o.number+' на '+money(o.amount)+' ₸ создан. В 1С вносите этот же номер. Сейчас он откроется — скачайте PDF и отправьте клиенту.');
+            r.redo=''; changed=true; paintHead(); loadSt();
+            t.modal({ url:'./invoice-view.html?number='+encodeURIComponent(o.number)+'&t='+Date.now(), title:'Счёт №'+o.number, accentColor:'#1f845a', fullscreen:true });
+          }).catch(function(e){ pe.disabled=false; alert('Не удалось: '+(e&&e.message||e)); });
+        };
         $('newHint').style.display = r?'none':'';
         $('leadExtra').style.display = r?'':'none';
         $('calcSend').style.display = (r && !r.trello_card_id && s!=='lost')?'':'none';
