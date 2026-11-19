@@ -153,12 +153,12 @@
         var td='padding:6px 8px;border-bottom:1px solid var(--line);', r='text-align:right;white-space:nowrap;';
         var h='<div class="muted" style="margin-bottom:6px">Заказы, заведённые за период. Сделка — по заказу есть оплата. Нажмите на клиента, чтобы увидеть его заказы.</div>'+
           '<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px"><tr class="muted">'+
-          '<td style="'+td+'">Клиент</td><td style="'+td+r+'">Заказов</td><td style="'+td+r+'">На сумму</td><td style="'+td+r+'">Сделок</td><td style="'+td+r+'">Оплачено</td><td style="'+td+r+'">В работе</td><td style="'+td+r+'">Не дошли</td><td style="'+td+r+'">Последний</td></tr>';
+          '<td style="'+td+'">Клиент</td><td style="'+td+r+'">Заказов</td><td style="'+td+r+'">Заказано на сумму</td><td style="'+td+r+'">Сделок</td><td style="'+td+r+'">Оплачено</td><td style="'+td+r+'">В работе</td><td style="'+td+r+'">Отказались</td><td style="'+td+r+'">Последний</td></tr>';
         CL.forEach(function(c,i){
           h+='<tr data-cl="'+i+'" style="cursor:pointer"><td style="'+td+'font-weight:600">'+esc(c.name)+'</td><td style="'+td+r+'">'+c.orders+'</td><td style="'+td+r+'">'+money(c.sum)+' ₸</td>'+
             '<td style="'+td+r+'">'+c.deals+'</td><td style="'+td+r+'color:var(--green);font-weight:700">'+money(c.paid)+' ₸</td>'+
-            '<td style="'+td+r+'">'+(c.open?(c.open+' · '+money(c.openSum)+' ₸'):'—')+'</td>'+
-            '<td style="'+td+r+(c.lost?'color:var(--red)':'')+'">'+(c.lost?(c.lost+' · '+money(c.lostSum)+' ₸'):'—')+'</td><td style="'+td+r+'">'+dmy(c.last)+'</td></tr>'+
+            '<td style="'+td+r+'">'+(c.open?(c.open+' / '+money(c.openSum)+' ₸'):'—')+'</td>'+
+            '<td style="'+td+r+(c.lost?'color:var(--red)':'')+'">'+(c.lost?(c.lost+' / '+money(c.lostSum)+' ₸'):'—')+'</td><td style="'+td+r+'">'+dmy(c.last)+'</td></tr>'+
             '<tr id="clx'+i+'" style="display:none"><td colspan="8" style="padding:4px 8px 12px 20px;border-bottom:1px solid var(--line)"></td></tr>';
         });
         h+='</table></div>';
@@ -168,7 +168,7 @@
           if(x.style.display!=='none'){ x.style.display='none'; return; }
           x.firstChild.innerHTML=c.list.map(function(o){
             var st = o.st==='deal' ? '<span style="color:var(--green)">сделка'+(o.payDate?(' · первая оплата '+dmy(o.payDate)):'')+' · оплачено '+money(o.paid)+' ₸</span>'
-              : o.st==='lost' ? '<span style="color:var(--red)">не дошёл до сделки'+(o.lostAt?(' · отказ '+dmy(o.lostAt)):'')+(o.reason?(' · '+esc(o.reason)):'')+'</span>'
+              : o.st==='lost' ? '<span style="color:var(--red)">отказ'+(o.lostAt?(' '+dmy(o.lostAt)):'')+(o.reason?(' · '+esc(o.reason)):'')+'</span>'
               : '<span class="muted">в работе, оплаты нет</span>';
             return '<div style="padding:3px 0">'+dmy(o.date)+' · '+(o.number?('<b>#'+esc(o.number)+'</b> '):'')+esc(String(o.name||'').slice(0,70))+' · <b>'+money(o.total)+' ₸</b> · '+st+'</div>';
           }).join('');
