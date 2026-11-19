@@ -412,7 +412,9 @@
         (o?('<div class="ordbox"><b>Заказ'+(o.number?(' №'+esc(o.number)):'')+'</b>'+(o.list?(' · колонка «'+esc(o.list)+'»'):(stg==='lost'?' · снят с доски':''))+
           (o.total>0?('<br>Сумма: <b>'+money(o.total)+' ₸</b>'+(o.paid>0?(' · оплачено <b style="color:var(--green)">'+money(o.paid)+' ₸</b>'+(o.total>o.paid?(' · остаток '+money(o.total-o.paid)+' ₸'):'')):' · оплат пока нет')):'<br>Расчёта ещё нет')+
           (stg==='lost'&&r.lost_reason?('<br>Причина отказа: '+esc(r.lost_reason)):'')+
-          '<div class="muted" style="margin-top:4px">Этап меняется сам, когда заказ двигается на доске.</div></div>'):'')+
+          '<div class="muted" style="margin-top:4px">Этап меняется сам, когда заказ двигается на доске.</div>'+
+          ((o.total>0 && stg!=='calc' && stg!=='lost')?'<div style="margin-top:8px"><button class="btn primary" id="pDocs" type="button" title="Откроется окно, где создаётся коммерческое предложение и счёт на оплату по этому заказу">📄 КП / Счёт на оплату</button></div>':'')+
+          '</div>'):'')+
         '<div class="fld"><label>Тема / что продаём *</label><input type="text" id="fTitle" value="'+esc(r?r.title:'')+'" placeholder="Например: сетки для яйцебитки, 40 шт"></div>'+
         '<div class="grid2">'+
         '<div class="fld"><label>Клиент из базы</label><select id="fComp">'+compOpts+'</select></div>'+
@@ -565,6 +567,12 @@
       }
       document.getElementById('pClose').onclick=function(){ host.innerHTML=''; };
       document.getElementById('ovl').onclick=function(e){ if(e.target===this) host.innerHTML=''; };
+      // КП и СЧЁТ ПРЯМО ИЗ ПРОДАЖ (решение Асхата, 19.11.2026): менеджеру не нужно идти на доску производства.
+      // Открывается то же окно, что и в карточке заказа; права («Создаёт КП», «Выставляет счета») проверяет оно само.
+      var pDocs=document.getElementById('pDocs');
+      if(pDocs) pDocs.onclick=function(){
+        t.modal({ url:'./invoice-modal.html?t='+Date.now(), title:'Счёт на оплату', accentColor:'#1f6ce8', fullscreen:true, args:{ cardId:r.trello_card_id, boardId:'' } });
+      };
       var pRef=document.getElementById('pRef');
       if(pRef) pRef.onclick=function(){ host.innerHTML=''; if(stg==='lost') unrefuse(r); else refuse(r); };
       var pArch=document.getElementById('pArch'); if(pArch) pArch.onclick=function(){
