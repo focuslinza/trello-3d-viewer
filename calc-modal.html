@@ -81,6 +81,13 @@
     .brk .r b { color:var(--txt); font-weight:600; }
       .tipi{cursor:help;font-weight:400;opacity:.65;text-transform:none;letter-spacing:0;margin-left:4px}.tipi:hover{opacity:1}
     #cardTitle{cursor:default;margin-bottom:14px}
+    .whoSec{padding:12px 14px}
+    .whoRow{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px;align-items:end}
+    .whoF{display:flex;flex-direction:column;gap:4px;min-width:0}
+    .whoF label{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700}
+    .whoF input,.whoF select{width:100%;height:36px;box-sizing:border-box;margin:0 !important;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt);font-size:14px;padding:0 10px}
+    .whoF.need input,.whoF.need select{border-color:#c98a08 !important;box-shadow:0 0 0 3px rgba(201,138,8,.18)}
+    @media (max-width:700px){.whoRow{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -89,6 +96,16 @@
     <h2 id="cardTitle">Калькулятор стоимости</h2>
     <div class="sub" id="meta" style="display:none">v22 · загрузка…</div>
     <div id="paidWarning"></div>
+    <!-- ЗАКАЗЧИК И НАША КОМПАНИЯ ПРЯМО В КАЛЬКУЛЯТОРЕ (решение Асхата, 19.11.2026): раньше без компании расчёт
+         не сохранялся — приходилось выходить, выбирать компанию в карточке и считать заново -->
+    <div class="sec whoSec" id="whoSec" style="display:none">
+      <div class="whoRow">
+        <div class="whoF"><label>Заказчик</label><input id="coInp" list="coList" autocomplete="off" placeholder="начните вводить название…"><datalist id="coList"></datalist></div>
+        <div class="whoF" id="ctFld"><label>Контакт заказчика</label><select id="ctSel"><option value="">— выберите —</option></select></div>
+        <div class="whoF" id="ourFld"><label>Оплата через (наша компания)</label></div>
+      </div>
+      <div class="hint" id="whoMsg" style="margin-top:6px;display:none"></div>
+    </div>
 
     <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
       <button class="pull" id="pullDxf" type="button" title="Подтянуть резку и гибку из файлов карточки (только из тех, что есть на ней сейчас).">Загрузить из DXF</button>
@@ -109,7 +126,7 @@
       <h3>Подогнать под договорную сумму <span class="tipi" title="Вводите конечную сумму, как она будет в счёте (с налогом выбранной компании): например, договорились на 650 000 ₸ через ТОО — так и пишите 650 000 и выбирайте «ТОО «TTMS»», налог вычтется сам. Меняются только цены работ (материалы идут по факту закупки). Если цена ниже тарифной — разница учитывается как уступка в отчёте «% Уступки»; клиенту в счёте скидка не показывается. Внизу под «итого» всегда видно, сколько выйдет в счёте через каждую компанию.">ⓘ</span></h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <label class="hint">Сумма клиенту <b>как в счёте, с налогом</b>, ₸ <input type="number" id="fitTarget" min="0" step="1000" style="width:150px" placeholder="например 450000"></label>
-        <label class="hint" title="Через какую компанию пойдёт оплата — её процент уже входит в введённую сумму">через
+        <label class="hint" id="fitSupHome" title="Через какую компанию пойдёт оплата — её процент уже входит в введённую сумму">через
           <select id="fitSup" style="margin-left:4px">
             <option value="" selected>— выберите компанию —</option>
             <option value="1">наличные / Kaspi (0%)</option>
@@ -428,6 +445,7 @@
         electrochem:document.getElementById('electrochem').checked,
         // инженерное проектирование: файлов DXF/ZZX × ставка (в ремонте не применяется)
         engDesign:!MODE_REPAIR && document.getElementById('engDesign').checked,
+        supVia:(document.getElementById('fitSup')||{}).value||'',
         engDesignFiles:Object.keys(dxfMetrics||{}).length,
         montazh:document.getElementById('mzOn').checked?1:0,
         mzOtHours:+document.getElementById('mzOtH').value||0,
@@ -1048,6 +1066,7 @@
         // включено по умолчанию везде, в том числе в расчётах, сохранённых раньше (решение Асхата, 19.11.2026);
         // выключено только там, где галочку сняли сами
         document.getElementById('engDesign').checked = (i.engDesign !== false);
+        try{ var fsR=document.getElementById('fitSup'); if(i.supVia && fsR.querySelector('option[value="'+i.supVia+'"]')) fsR.value=i.supVia; }catch(e){}
 
       }).catch(function(){});
     }
@@ -1145,9 +1164,67 @@
                 '. Компанию выбирать не нужно: сумма этой детали сама прибавится к сумме ремонта. Компания и налог ставятся в разделе «Ремонт» при выставлении счёта.'; }
             return REPAIR_PART; }).catch(function(){ return null; })
       : Promise.resolve(null);
+    // ---- заказчик, контакт и наша компания в калькуляторе ----
+    var WHO={list:null,co:null};
+    function whoMsg(tx){ var e=document.getElementById('whoMsg'); if(!e) return; e.style.display=tx?'':'none'; e.textContent=tx||''; }
+    function whoPaintContacts(selId){
+      var f=document.getElementById('ctFld'), sel=document.getElementById('ctSel'), co=WHO.co;
+      var isPerson=co&&((co.type||co.kind)==='person'), cs=(co&&co.contacts)||[];
+      f.style.display=(co&&!isPerson)?'':'none';
+      sel.innerHTML='<option value="">— выберите —</option>'+cs.map(function(c){ return '<option value="'+escHtml(c.id)+'"'+(c.id===selId?' selected':'')+'>'+escHtml((c.name||'Без имени')+(c.role?' · '+c.role:''))+'</option>'; }).join('');
+      f.classList.toggle('need', !!(co&&!isPerson&&!sel.value));
+      document.getElementById('coInp').parentNode.classList.toggle('need', !co);
+      if(co&&!isPerson&&!cs.length) whoMsg('У компании «'+(co.name||'')+'» нет контактов — добавьте контакт в карточке: «Компания и контакты → Управление».');
+    }
+    function whoSetCompany(co){
+      WHO.co=co||null; whoMsg('');
+      ctx.companyId=co?co.id:null; ctx.companyName=co?(co.name||''):'';
+      var cs=(co&&co.contacts)||[], auto=(cs.length===1)?cs[0].id:'';
+      WHO.pending=Promise.all([t.set('card','shared','companyId',co?co.id:null), t.set('card','shared','cardContacts',auto?[auto]:[])]).catch(function(){});
+      fetch(WORKER+'/calc-relink',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(co?{cardId:(ctx.cardId||t.arg('cardId')),companyId:co.id,companyName:co.name||''}:{cardId:(ctx.cardId||t.arg('cardId')),companyId:null,companyName:'',clear:1})}).catch(function(){});
+      whoPaintContacts(auto); whoSyncName();
+    }
+    function whoSyncName(){
+      try{ var co=WHO.co, sel=document.getElementById('ctSel'), cn='';
+        if(co){ (co.contacts||[]).forEach(function(c){ if(c.id===sel.value) cn=c.name||''; }); }
+        var isPerson=co&&((co.type||co.kind)==='person');
+        fetch(WORKER+'/card-client-name',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cardId:(ctx.cardId||t.arg('cardId')),company:co?co.name:'',contact:isPerson?'':cn})})
+          .then(function(r){return r.json();}).then(function(j){ if(j&&j.name){ ctx.cardName=j.name; document.getElementById('cardTitle').textContent=j.name; } }).catch(function(){});
+      }catch(e){}
+    }
+    function whoInit(){
+      var CID=t.arg('cardId'); if(MODE_REPAIR||!CID) return;
+      // «наша компания»: тот же выбор, что раньше стоял в блоке подгонки («через …») — теперь наверху
+      try{ var fs=document.getElementById('fitSup'), home=document.getElementById('fitSupHome'); fs.style.marginLeft='0';
+        document.getElementById('ourFld').appendChild(fs); if(home) home.style.display='none'; }catch(e){}
+      repairPartP.then(function(rp){
+        if(rp) return;   // деталь для ремонта: компания ставится в ремонте
+        document.getElementById('whoSec').style.display='';
+        Promise.all([fetch(WORKER+'/companies-list').then(function(r){return r.json();}), t.get('card','shared','companyId',null), t.get('card','shared','cardContacts',[])]).then(function(rs){
+          WHO.list=(rs[0]&&rs[0].companies)||[];
+          document.getElementById('coList').innerHTML=WHO.list.map(function(c){ return '<option value="'+escHtml(c.name||'')+'">'; }).join('');
+          var co=WHO.list.filter(function(c){ return c.id===rs[1]; })[0]||null; WHO.co=co;
+          document.getElementById('coInp').value=co?(co.name||''):'';
+          whoPaintContacts(((Array.isArray(rs[2])?rs[2]:[])[0])||'');
+        }).catch(function(){ whoMsg('Не удалось загрузить справочник компаний — проверьте связь.'); });
+      });
+      var inp=document.getElementById('coInp');
+      function pick(){
+        if(!WHO.list) return; var v=inp.value.trim().toLowerCase();
+        if(!v){ if(WHO.co) whoSetCompany(null); return; }
+        var co=WHO.list.filter(function(c){ return String(c.name||'').trim().toLowerCase()===v; })[0];
+        if(!co){ whoMsg('Такой компании нет в справочнике. Выберите из списка или заведите её в карточке: «Компания и контакты → Управление».'); return; }
+        if(!WHO.co||WHO.co.id!==co.id) whoSetCompany(co);
+      }
+      inp.addEventListener('change',pick); inp.addEventListener('blur',pick);
+      document.getElementById('ctSel').addEventListener('change',function(){
+        WHO.pending=Promise.resolve(t.set('card','shared','cardContacts',this.value?[this.value]:[])).catch(function(){});
+        document.getElementById('ctFld').classList.toggle('need',!this.value); whoSyncName(); });
+    }
+    try{ whoInit(); }catch(e){}
     function checkClientBeforeSave(){
       if (MODE_REPAIR || !ctx.cardId) return Promise.resolve(null);
-      return repairPartP.then(function(rp){ if(rp) return null; return checkClientReal(); });
+      return repairPartP.then(function(rp){ if(rp) return null; return Promise.resolve(WHO.pending).then(checkClientReal); });
     }
     function checkClientReal(){
       return Promise.all([
@@ -1157,11 +1234,12 @@
         var cd=(rs[0]&&rs[0].cardData)||{};
         var list=(rs[1]&&rs[1].companies)||[];
         var co=cd.companyId ? list.filter(function(x){return x.id===cd.companyId;})[0] : null;
-        if(!co) return 'Не выбрана компания-клиент. Закройте калькулятор, на карточке откройте «Компания и контакты», выберите компанию и ответственного человека, затем сохраните расчёт снова.';
+        if(!co) return 'Не выбран заказчик — выберите его вверху калькулятора, в поле «Заказчик».';
+        if(false) return 'Не выбрана компания-клиент. Закройте калькулятор, на карточке откройте «Компания и контакты», выберите компанию и ответственного человека, затем сохраните расчёт снова.';
         ctx.companyId=co.id; ctx.companyName=co.name||ctx.companyName;
         var isPerson=((co.type||co.kind)==='person');
         var contacts=(cd.cardContacts||[]).filter(Boolean);
-        if(!isPerson && !contacts.length) return 'Не выбран ответственный человек клиента ('+(co.name||'компания')+'). На карточке в «Компания и контакты» отметьте контакт (кто заказал), затем сохраните расчёт снова.';
+        if(!isPerson && !contacts.length) return 'Не выбран ответственный человек клиента ('+(co.name||'компания')+'). Выберите его вверху калькулятора, в поле «Контакт заказчика».';
         return null;
       }, function(){ return null; }); // нет связи — не мешаем работе, сервер сохранит как раньше
     }
