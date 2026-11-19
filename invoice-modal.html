@@ -369,6 +369,9 @@
   // ВСЕ заказы выбранного клиента — сверх общих «последних 500» (урок 09.2026:
   // у активного заказчика старые заказы выпадали из верхушки списка по дате,
   // и в счёте их «не было», хотя в базе они есть). Слияние по cardId.
+  // ДЕТАЛИ ДЛЯ РЕМОНТА В СЧЁТ НА ПРОИЗВОДСТВО НЕ ПОПАДАЮТ (решение Асхата, 19.11.2026): их стоимость входит
+  // в ремонт, и счёт выставляется в ремонтах. Признак — название «Для ремонта Р-…» (так их создаёт система).
+  function isRepairPartName(n){ return /для\s+ремонта\s+[рp]-?\d/i.test(String(n||'')); }
   var LOADED_FOR = {};
   function loadOrdersForCompany(cid){
     if(!cid || LOADED_FOR[cid]) return Promise.resolve(false);
@@ -377,7 +380,7 @@
       var have={}; ALL_ORDERS.forEach(function(o){ have[o.cardId]=1; });
       var added=0;
       ((j&&j.rows)||[]).forEach(function(row){
-        if(have[row.id]) return;
+        if(have[row.id] || isRepairPartName(row.card_name)) return;
         ALL_ORDERS.push({ cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
           invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, noAct:!!row.noAct, cashOnly:!!row.cashOnly, partial:!!row.partial, unconfirmed:!!row.unconfirmed, paidSum:+row.paidSum||0, rest:+row.rest||0, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'', sampleOf:row.sample_card_id||'', mainOf:row.main_card_id||'' });
         added++;
@@ -387,7 +390,7 @@
   }
   function loadAllOrders(){
     var pOrders = fetch(WORKER+'/calc-list?limit=500').then(function(r){return r.json();}).then(function(j){
-      return ((j&&j.rows)||[]).map(function(row){
+      return ((j&&j.rows)||[]).filter(function(row){ return !isRepairPartName(row.card_name); }).map(function(row){
         // taxIncluded: старые заказы считались С НАЛОГОМ внутри суммы — к ним
         // множитель поставщика применять нельзя, иначе налог начислится дважды
         return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
