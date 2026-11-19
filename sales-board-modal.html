@@ -312,7 +312,7 @@
         var cards=v.filter(function(r){ return stageOf(r)===c.key; });
         var colSum=cards.reduce(function(s,r){ return s+((r.order&&r.order.total)||(+r.calc_price)||(+r.amount)||0); },0);
         h+='<div class="col'+(c.auto?' auto':'')+'" data-col="'+c.key+'"'+(c.tip?(' title="'+esc(c.tip)+'"'):'')+'><div class="colhd"><span class="t">'+c.title+'</span><span class="n">'+cards.length+(colSum>0?(' / '+money(colSum)+' ₸'):'')+'</span></div>';
-        if(c.key==='new') h+='<button class="btn" data-newin="1" type="button" style="width:100%;margin-bottom:8px">+ Лид</button>';
+        if(c.key==='new') h+='<button class="btn primary" data-newin="1" type="button" style="width:100%;margin-bottom:8px">+ Лид</button>';
         if(!cards.length) h+='<div class="empty">Пусто</div>';
         cards.forEach(function(r){
           var o=r.order||null;
