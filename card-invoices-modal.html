@@ -9,7 +9,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
   <script src="./invoice-doc.js?v=3"></script>
-  <script src="./pay-dialog.js?v=14"></script>
+  <script src="./pay-dialog.js?v=15"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; }
     *{box-sizing:border-box}
@@ -210,7 +210,10 @@
     [].forEach.call(document.querySelectorAll('.pay'), function(b){ b.onclick=function(){
       var row=ROWS[+this.getAttribute('data-i')];
       if(!window.openPayDialog){ alert('Окно оплаты не загрузилось — закройте и откройте снова.'); return; }
-      window.openPayDialog({ cardId: cardId, title: 'по счёту № '+row.number+((row.buyer&&row.buyer.name)?(' · '+row.buyer.name):''), onDone: function(){ load(); } });
+      // счёт на несколько заказов — оплата вносится по счёту целиком и сама делится между заказами (19.11.2026)
+      var ttl=(row.buyer&&row.buyer.name)?row.buyer.name:'';
+      if(window.openInvoicePay) window.openInvoicePay({ number: row.number, cardId: cardId, title: ttl, onDone: function(){ load(); } });
+      else window.openPayDialog({ cardId: cardId, title: 'по счёту № '+row.number+(ttl?(' · '+ttl):''), onDone: function(){ load(); } });
     }; });
   }
   // ПРАВКА СЧЁТА ПРЯМО ИЗ КАРТОЧКИ (решение Асхата, 05.11.2026): то же окно счёта, что

@@ -266,4 +266,83 @@
       ov.querySelector('#pdC').onclick = close;
     });
   };
+  // ============================================================
+  //  ОПЛАТА ПО СЧЁТУ НА НЕСКОЛЬКО ЗАКАЗОВ (решение Асхата, 19.11.2026): сумма вносится один раз
+  //  по счёту и сама делится между его заказами. Счёт с одним заказом — прежнее окно заказа.
+  //  openInvoicePay({ number, cardId, title, onDone })
+  window.openInvoicePay = function (opts) {
+    css(); ttInit();
+    fetch(W() + '/invoice-payment?number=' + encodeURIComponent(opts.number), { headers: hdr() }).then(function (r) { return r.json(); }).then(function (S) {
+      if (!S || !S.ok || !S.orders || S.orders.length < 2) { window.openPayDialog({ cardId: opts.cardId || (S && S.orders && S.orders[0] && S.orders[0].cardId), title: opts.title, onDone: opts.onDone }); return; }
+      invDlg(S);
+    }).catch(function () { window.openPayDialog({ cardId: opts.cardId, title: opts.title, onDone: opts.onDone }); });
+    function invDlg(S) {
+      var method = '', busy = false;
+      var ov = document.createElement('div'); ov.className = 'pdl-ov'; ov.innerHTML = '<div class="pdl"></div>'; document.body.appendChild(ov);
+      function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+      function onKey(e) { if (e.key === 'Escape') close(); }
+      document.addEventListener('keydown', onKey);
+      ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+      function toast(msg, warn) {
+        var t = document.createElement('div'); t.textContent = msg;
+        t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100000;padding:10px 18px;border-radius:8px;font:600 14px system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);background:' + (warn ? '#533f04;color:#f5cd47' : '#1c3329;color:#4bce97') + ';border:1px solid ' + (warn ? '#7f5f01' : '#2e5c44');
+        document.body.appendChild(t); setTimeout(function () { t.remove(); }, warn ? 6000 : 3500);
+      }
+      function draw() {
+        var h = '<h3>Оплата по счёту № ' + esc(S.number) + (opts.title ? ' · ' + esc(opts.title) : '') + '</h3>' +
+          '<div class="sub">В счёте ' + S.orders.length + ' заказов. Внесите сумму платежа — она сама разделится между заказами по их остаткам.</div>' +
+          '<div class="kp"><div><span>Сумма по счёту</span><b>' + money(S.total) + ' ₸</b></div>' +
+          '<div><span>Оплачено (подтв.)</span><b style="color:#4bce97">' + money(S.paidSum) + ' ₸</b>' + (S.pendingSum > 0 ? '<div style="font-size:11.5px;color:#e8c07d">+ ' + money(S.pendingSum) + ' ₸ ждёт подтв.</div>' : '') + '</div>' +
+          '<div><span>Остаток</span><b style="color:' + (S.rest > 0 ? '#e8c07d' : '#4bce97') + '">' + money(S.rest) + ' ₸</b></div></div>' +
+          '<table><tr style="color:var(--muted,#9fadbc)"><td>Заказ</td><td style="text-align:right">По счёту</td><td style="text-align:right">Оплачено</td><td style="text-align:right">Остаток</td><td></td></tr>' +
+          S.orders.map(function (o) {
+            return '<tr><td>' + (o.number ? '<b>#' + esc(o.number) + '</b> ' : '') + esc(String(o.name || '').slice(0, 46)) + '</td><td style="text-align:right;white-space:nowrap">' + money(o.total) + '</td><td style="text-align:right;white-space:nowrap;color:#4bce97">' + money(o.paid + o.pending) + '</td><td style="text-align:right;white-space:nowrap">' + money(o.rest) + '</td>' +
+              '<td style="text-align:right"><button class="x" type="button" data-one="' + esc(o.cardId) + '" title="Оплаты этого заказа: посмотреть, отменить, внести отдельно">⋯</button></td></tr>';
+          }).join('') + '</table>';
+        if (!(S.rest > 0)) {
+          h += '<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#1c3329;color:#4bce97;font-size:13px">✓ Счёт оплачен полностью.</div><div class="bar2"><button class="b" id="ipC" type="button">Закрыть</button></div>';
+          ov.firstChild.innerHTML = h; ov.querySelector('#ipC').onclick = close; wireOne(); return;
+        }
+        h += '<div class="row2"><div><div class="lbl">Сумма платежа, ₸ *</div><input type="number" id="ipA" min="0" step="any" value="' + Math.round(S.rest * 100) / 100 + '"></div>' +
+          '<div><div class="lbl">Дата оплаты</div><input type="date" id="ipD" value="' + today() + '"></div></div>' +
+          '<div class="lbl">Способ и куда *</div><div class="ms">' + METHODS.map(function (m) { return '<span data-m="' + m[0] + '" class="' + (method === m[0] ? 'on' : '') + '">' + esc(m[1]) + '</span>'; }).join('') + '</div>' +
+          '<div id="ipPw" style="display:' + (method === 'person' ? '' : 'none') + '"><div class="lbl">Кому перевели *</div><input type="text" id="ipP" placeholder="Например: Асхат (Kaspi)"></div>' +
+          '<div class="lbl">Примечание</div><input type="text" id="ipN" placeholder="необязательно">' +
+          '<div class="after" id="ipAfter"></div>' +
+          '<div class="bar2"><span class="err" id="ipE"></span><button class="b" id="ipC" type="button">Закрыть</button><button class="b pr" id="ipOk" type="button">Внести оплату по счёту</button></div>';
+        ov.firstChild.innerHTML = h;
+        var a = ov.querySelector('#ipA');
+        function after() {
+          var v = +a.value || 0, r = Math.round((S.rest - v) * 100) / 100, el = ov.querySelector('#ipAfter');
+          if (!(v > 0)) { el.innerHTML = '<span style="color:var(--muted,#9fadbc)">Введите сумму платежа.</span>'; return; }
+          el.innerHTML = r > 0.5 ? 'После этой оплаты по счёту останется <b style="color:#e8c07d">' + money(r) + ' ₸</b>.' : (r < -0.5 ? '<b style="color:#f87168">Сумма больше остатка по счёту на ' + money(-r) + ' ₸</b> — уменьшите.' : 'После этой оплаты счёт <b style="color:#4bce97">оплачен полностью</b>.');
+        }
+        a.oninput = after; after(); a.focus(); a.select();
+        [].forEach.call(ov.querySelectorAll('[data-m]'), function (el) { el.onclick = function () { method = el.getAttribute('data-m'); [].forEach.call(ov.querySelectorAll('[data-m]'), function (x) { x.classList.toggle('on', x === el); }); ov.querySelector('#ipPw').style.display = method === 'person' ? '' : 'none'; }; });
+        ov.querySelector('#ipC').onclick = close; wireOne();
+        ov.querySelector('#ipOk').onclick = function () {
+          var e = ov.querySelector('#ipE'), v = +a.value || 0, person = (ov.querySelector('#ipP').value || '').trim(), ok = this;
+          if (busy) return;
+          if (!(v > 0)) { e.textContent = 'Укажите сумму'; a.focus(); return; }
+          if (!method) { e.textContent = 'Выберите способ оплаты'; return; }
+          if (method === 'person' && !person) { e.textContent = 'Укажите, кому перевели'; return; }
+          busy = true; ok.disabled = true; e.style.color = ''; e.textContent = 'Сохраняю…';
+          fetch(W() + '/invoice-payment', { method: 'POST', headers: hdr(), body: JSON.stringify({ number: S.number, amount: v, method: method, person: person, date: ov.querySelector('#ipD').value, note: ov.querySelector('#ipN').value }) })
+            .then(function (r) { return r.json(); }).then(function (j) {
+              busy = false;
+              if (!j || !j.ok) throw new Error((j && j.error) || 'сервер не подтвердил');
+              if (opts.onDone) try { opts.onDone(j); } catch (x) {}
+              close(); toast(j.pendingConfirm ? 'Оплата по счёту внесена — ждёт подтверждения учредителя или бухгалтера' : ('✓ Оплата ' + money(v) + ' ₸ по счёту №' + S.number + ' внесена и разнесена по ' + j.parts.length + ' заказам'), j.pendingConfirm);
+            }).catch(function (x) { busy = false; ok.disabled = false; e.textContent = 'Ошибка: ' + (x && x.message || x); });
+        };
+      }
+      function wireOne() {
+        [].forEach.call(ov.querySelectorAll('[data-one]'), function (b) { b.onclick = function () {
+          var id = b.getAttribute('data-one'), o = S.orders.filter(function (x) { return x.cardId === id; })[0];
+          close(); window.openPayDialog({ cardId: id, title: (o && o.number ? '№' + o.number + ' ' : '') + String((o && o.name) || '').slice(0, 40), onDone: opts.onDone });
+        }; });
+      }
+      draw();
+    }
+  };
 })();
