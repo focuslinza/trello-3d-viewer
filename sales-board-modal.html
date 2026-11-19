@@ -9,7 +9,7 @@
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --bg3:#282e33; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; --purple:#c9a8ff; }
     html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
-    #wrap{padding:14px 14px 64px;max-width:1400px;margin:0 auto}
+    #wrap{padding:14px 14px 64px;max-width:1760px;margin:0 auto}
     h2{margin:0;font-size:18px}
     .muted{color:var(--muted);font-size:12.5px}
     .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
@@ -19,9 +19,19 @@
     .btn.primary{background:#274469;border-color:var(--blue);color:#cfe1ff;font-weight:600}
     .btn.green{background:#1c3329;border-color:#2e5c44;color:var(--green)}
     .btn.danger{border-color:#7a3a32;color:#e8a59d}
-    .board{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:start}
-    @media (max-width:1100px){ .board{grid-template-columns:repeat(2,1fr)} }
+    .board{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;align-items:start}
+    .zone{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;border-bottom:2px solid var(--line);padding:0 4px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .zone.z1{grid-column:1 / span 2;border-color:var(--blue)}
+    .zone.z2{grid-column:3 / span 4;border-color:var(--green)}
+    .zone.z3{grid-column:7;border-color:var(--red)}
+    @media (max-width:1250px){ .board{grid-template-columns:repeat(2,1fr)} .zone{display:none} }
     @media (max-width:640px){ .board{grid-template-columns:1fr} }
+    .col.auto{border-style:dashed}
+    .kcard.auto{cursor:pointer}
+    .pill.ord{background:#243447;color:#9dc1ff}
+    .pill.paid{background:#1c3329;color:var(--green)}
+    .ordbox{background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-top:10px;font-size:13px;line-height:1.5}
+    #hint{display:block;min-height:18px;margin:0 0 8px;color:var(--amber);font-size:12.5px}
     .col{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:10px;min-height:120px}
     .col.dragover{border-color:var(--blue);background:#232c3a}
     .colhd{display:flex;justify-content:space-between;align-items:center;margin:2px 4px 10px}
@@ -76,13 +86,14 @@
       <input type="text" id="q" placeholder="Поиск: клиент, тема, контакт, телефон…" style="flex:1;min-width:180px">
       <button class="btn primary" id="newBtn" type="button">+ Новый лид</button>
     </div>
+    <span id="hint"></span>
     <div id="board"><div class="empty">Загрузка…</div></div>
   </div>
   <div id="anView" style="display:none;padding:14px 14px 70px;max-width:1100px;margin:0 auto"></div>
   <div id="crmView" style="display:none;position:fixed;left:0;right:0;top:0;bottom:58px"></div>
   <div class="bar">
     <div class="tabs" id="barTabs">
-      <div class="tab active" data-sv="board" title="Карточки двигаются вручную: перетащите или стрелками ‹ ›">Воронка</div>
+      <div class="tab active" data-sv="board" title="Менеджер ведёт клиента до расчёта, дальше этап меняется сам — по карточке заказа на доске">Воронка</div>
       <div class="tab" data-sv="an" title="Лиды, источники, конверсия, клики по ссылкам роликов">📊 Аналитика</div>
       <div class="tab" data-sv="crm" title="База клиентов (CRM)">👥 Клиенты</div>
     </div>
@@ -129,6 +140,42 @@
       return '<tr><td style="padding:4px 6px;border-bottom:1px solid var(--line)">'+r[0]+'</td>'+
              '<td style="padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">'+r[1]+'</td></tr>'; }).join('')+'</table>'; }
     function sect(t,inner){ return '<div style="margin-top:14px"><div style="font-weight:700;margin-bottom:6px">'+t+'</div>'+inner+'</div>'; }
+    // ---------- по клиентам: сколько заказов, когда, на какую сумму, сколько оплачено и что не дошло до сделки ----------
+    var CL=[];
+    function dmy(d){ return d&&d.length>=10 ? (d.slice(8,10)+'.'+d.slice(5,7)+'.'+d.slice(2,4)) : '—'; }
+    function loadClients(f,tt){
+      var box=document.getElementById('anClients'); if(!box) return;
+      box.innerHTML=sect('По клиентам','<span class="muted">Загрузка…</span>');
+      fetch(WORKER+'/sales-clients?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(tt)).then(function(r){return r.json();}).then(function(j){
+        if(j.error){ box.innerHTML=sect('По клиентам',esc(j.error)); return; }
+        CL=j.clients||[];
+        if(!CL.length){ box.innerHTML=sect('По клиентам','<span class="muted">За период заказов нет.</span>'); return; }
+        var td='padding:6px 8px;border-bottom:1px solid var(--line);', r='text-align:right;white-space:nowrap;';
+        var h='<div class="muted" style="margin-bottom:6px">Заказы, заведённые за период. Сделка — по заказу есть оплата. Нажмите на клиента, чтобы увидеть его заказы.</div>'+
+          '<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px"><tr class="muted">'+
+          '<td style="'+td+'">Клиент</td><td style="'+td+r+'">Заказов</td><td style="'+td+r+'">На сумму</td><td style="'+td+r+'">Сделок</td><td style="'+td+r+'">Оплачено</td><td style="'+td+r+'">В работе</td><td style="'+td+r+'">Не дошли</td><td style="'+td+r+'">Последний</td></tr>';
+        CL.forEach(function(c,i){
+          h+='<tr data-cl="'+i+'" style="cursor:pointer"><td style="'+td+'font-weight:600">'+esc(c.name)+'</td><td style="'+td+r+'">'+c.orders+'</td><td style="'+td+r+'">'+money(c.sum)+' ₸</td>'+
+            '<td style="'+td+r+'">'+c.deals+'</td><td style="'+td+r+'color:var(--green);font-weight:700">'+money(c.paid)+' ₸</td>'+
+            '<td style="'+td+r+'">'+(c.open?(c.open+' · '+money(c.openSum)+' ₸'):'—')+'</td>'+
+            '<td style="'+td+r+(c.lost?'color:var(--red)':'')+'">'+(c.lost?(c.lost+' · '+money(c.lostSum)+' ₸'):'—')+'</td><td style="'+td+r+'">'+dmy(c.last)+'</td></tr>'+
+            '<tr id="clx'+i+'" style="display:none"><td colspan="8" style="padding:4px 8px 12px 20px;border-bottom:1px solid var(--line)"></td></tr>';
+        });
+        h+='</table></div>';
+        box.innerHTML=sect('По клиентам',h);
+        [].forEach.call(box.querySelectorAll('[data-cl]'), function(tr){ tr.onclick=function(){
+          var i=+this.getAttribute('data-cl'), x=document.getElementById('clx'+i), c=CL[i];
+          if(x.style.display!=='none'){ x.style.display='none'; return; }
+          x.firstChild.innerHTML=c.list.map(function(o){
+            var st = o.st==='deal' ? '<span style="color:var(--green)">сделка'+(o.payDate?(' · первая оплата '+dmy(o.payDate)):'')+' · оплачено '+money(o.paid)+' ₸</span>'
+              : o.st==='lost' ? '<span style="color:var(--red)">не дошёл до сделки'+(o.lostAt?(' · отказ '+dmy(o.lostAt)):'')+(o.reason?(' · '+esc(o.reason)):'')+'</span>'
+              : '<span class="muted">в работе, оплаты нет</span>';
+            return '<div style="padding:3px 0">'+dmy(o.date)+' · '+(o.number?('<b>#'+esc(o.number)+'</b> '):'')+esc(String(o.name||'').slice(0,70))+' · <b>'+money(o.total)+' ₸</b> · '+st+'</div>';
+          }).join('');
+          x.style.display='';
+        }; });
+      }).catch(function(e){ box.innerHTML=sect('По клиентам','Ошибка: '+esc(e.message)); });
+    }
     function loadAnalytics(){
       var f=document.getElementById('anFrom').value, tt=document.getElementById('anTo').value;
       document.getElementById('anMsg').textContent='Загрузка…';
@@ -136,19 +183,26 @@
       .then(function(r){return r.json();}).then(function(j){
         document.getElementById('anMsg').textContent='';
         if(j.error){ document.getElementById('anBody').textContent=j.error; return; }
-        var h='<div style="display:flex;gap:10px;flex-wrap:wrap">'+
-          kpi(j.leadsTotal,'лидов создано')+
-          kpi(j.won,'сделок')+
-          kpi(j.conversion+'%','конверсия в сделку')+
-          kpi(money(j.wonSum)+' ₸','сумма сделок')+
-          (j.avgDaysToWin!=null?kpi(j.avgDaysToWin,'дней до сделки'):'')+
-          kpi(j.sentCalc+' / '+j.readyCalc,'на расчёт / готово')+
-          kpi(j.site.count,'заказов с сайта')+
-          kpi(money(j.site.sum)+' ₸','сумма с сайта')+
-        '</div>';
-        h+=sect('Воронка (лиды, созданные в периоде)', tbl([
-          ['Новые', j.byStatus['new']],['Переговоры', j.byStatus['talk']],['КП отправлено', j.byStatus['kp']],
-          ['✅ Сделка', j.byStatus['deal']],['❌ Отказ', j.byStatus['lost']]]));
+        var u=j.uni, h='<div style="display:flex;gap:10px;flex-wrap:wrap">';
+        if(u){
+          h+=kpi(u.requests,'обращений за период')+kpi(u.deals,'сделок (первая оплата)')+kpi(u.conversion+'%','конверсия: сделки из сделок и отказов')+
+            kpi(money(u.dealsSum)+' ₸','сумма сделок')+kpi(money(u.paidSum)+' ₸','по ним уже оплачено')+kpi(u.lost,'отказов');
+        } else {
+          h+=kpi(j.leadsTotal,'лидов создано')+kpi(j.won,'сделок')+kpi(j.conversion+'%','конверсия в сделку')+kpi(money(j.wonSum)+' ₸','сумма сделок');
+        }
+        if(j.avgDaysToWin!=null) h+=kpi(j.avgDaysToWin,'дней до сделки');
+        if(j.site.count>0) h+=kpi(j.site.count,'заказов с сайта')+kpi(money(j.site.sum)+' ₸','сумма с сайта');
+        h+='</div>';
+        if(u){
+          h+='<div class="muted" style="margin-top:6px">Обращение — лид или заказ, заведённый за период. Сделка — заказ, по которому в периоде поступила первая оплата.</div>';
+          h+=sect('Сейчас в воронке', tbl([['Новые','new'],['Переговоры','talk'],['На расчёте','calc'],['Согласование (КП у клиента)','kp'],['Ждём оплату','pay']].map(function(x){
+            return [x[0], u.now[x[1]]+(u.nowSum[x[1]]>0?(' · '+money(u.nowSum[x[1]])+' ₸'):'')]; })));
+        } else {
+          h+=sect('Воронка (лиды, созданные в периоде)', tbl([
+            ['Новые', j.byStatus['new']],['Переговоры', j.byStatus['talk']],['На расчёте', j.byStatus['calc']],['Согласование', j.byStatus['kp']],
+            ['Ждём оплату', j.byStatus['pay']],['✅ Сделка', j.byStatus['deal']],['❌ Отказ', j.byStatus['lost']]]));
+        }
+        h+='<div id="anClients"></div>';
         var srcRows=Object.keys(j.bySource).sort(function(a,b){return j.bySource[b]-j.bySource[a];})
           .map(function(k){ return [esc(srcLabel(k)||k), j.bySource[k]]; });
         h+=sect('Источники лидов', srcRows.length?tbl(srcRows):'<span class="muted">Источники пока не заполняются — выбирайте «Откуда пришёл» в лиде.</span>');
@@ -167,6 +221,7 @@
         var tagRows=Object.keys(j.site.byTag||{}).map(function(k){ return [esc(k), j.site.byTag[k]]; });
         if(j.site.count>0) h+=sect('Заказы с сайта по меткам', tbl(tagRows));
         document.getElementById('anBody').innerHTML=h;
+        loadClients(f,tt);
       }).catch(function(e){ document.getElementById('anMsg').textContent='Ошибка: '+e.message; });
     }
 
@@ -174,13 +229,21 @@
     var SOURCES=[['','— не указан —'],['whatsapp','WhatsApp'],['call','Звонок'],['site','Сайт metalshop.kz'],
       ['instagram','Instagram'],['tiktok','TikTok'],['2gis','2ГИС'],['referral','Рекомендация'],['other','Другое']];
     function srcLabel(k){ var f=SOURCES.filter(function(s){return s[0]===k;})[0]; return f?f[1]:(k||''); }
+    // ЕДИНАЯ ВОРОНКА (решение Асхата, 19.11.2026): менеджер двигает лид только между «Новые» и «Переговоры»
+    // и ставит «Отказ»; остальные этапы приходят с доски заказов сами (см. salesFunnel в worker.js)
     var COLS=[
-      {key:'new', title:'Новые лиды'},
+      {key:'new', title:'Новые'},
       {key:'talk', title:'Переговоры'},
-      {key:'kp',  title:'КП отправлено'},
-      {key:'deal',title:'Сделка'},
-      {key:'lost',title:'Отказ'}
+      {key:'calc', title:'На расчёте', auto:1, tip:'Карточка заказа в «Заявки» или «Расчёт»'},
+      {key:'kp',  title:'Согласование', auto:1, tip:'Расчёт готов, карточка в «Согласование» — КП у клиента'},
+      {key:'pay', title:'Ждём оплату', auto:1, tip:'Счёт выставлен, оплаты ещё не было'},
+      {key:'deal',title:'Сделка', auto:1, tip:'Поступила первая оплата. Показаны за 30 дней'},
+      {key:'lost',title:'Отказ', tip:'Показаны за 30 дней'}
     ];
+    var AUTO=false;
+    function stageOf(r){ return r.stage||r.status||'new'; }
+    function colTitle(k){ var c=COLS.filter(function(x){return x.key===k;})[0]; return c?c.title:k; }
+    function hint(tx){ var e=document.getElementById('hint'); if(!e) return; e.textContent=tx||''; clearTimeout(hint._t); if(tx) hint._t=setTimeout(function(){ e.textContent=''; },6000); }
 
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
@@ -188,13 +251,13 @@
     function today(){ return new Date().toISOString().slice(0,10); }
 
     function loadAll(){
-      Promise.all([
+      return Promise.all([
         fetch(WORKER+'/sales-list').then(function(r){return r.json();}).catch(function(){return {};}),
         fetch(WORKER+'/companies-list').then(function(r){return r.json();}).catch(function(){return {};}),
         fetch(WORKER+'/sales-file-counts').then(function(r){return r.json();}).catch(function(){return {};}),
         t.member('id','fullName').catch(function(){return {};})
       ]).then(function(res){
-        ROWS=(res[0]&&res[0].rows)||[];
+        ROWS=(res[0]&&res[0].rows)||[]; AUTO=!!(res[0]&&res[0].auto);
         COMPANIES=(res[1]&&res[1].companies)||[];
         FILE_COUNTS=(res[2]&&res[2].counts)||{};
         MYNAME=(res[3]&&res[3].fullName)||'';
@@ -212,34 +275,38 @@
 
     function renderBoard(){
       var v=visible();
-      var h='<div class="board">';
-      COLS.forEach(function(c,ci){
-        var cards=v.filter(function(r){ return (r.status||'new')===c.key; });
-        var colSum=cards.reduce(function(s,r){ return s+(+r.amount||0); },0);
-        h+='<div class="col" data-col="'+c.key+'"><div class="colhd"><span class="t">'+c.title+'</span><span class="n">'+cards.length+(colSum>0?(' · '+money(colSum)+' ₸'):'')+'</span></div>';
+      var h='<div class="board">'+
+        '<div class="zone z1">Ведёт менеджер</div><div class="zone z2">Идёт по доске заказов — этап меняется сам</div><div class="zone z3">&nbsp;</div>';
+      COLS.forEach(function(c){
+        var cards=v.filter(function(r){ return stageOf(r)===c.key; });
+        var colSum=cards.reduce(function(s,r){ return s+((r.order&&r.order.total)||(+r.calc_price)||(+r.amount)||0); },0);
+        h+='<div class="col'+(c.auto?' auto':'')+'" data-col="'+c.key+'"'+(c.tip?(' title="'+esc(c.tip)+'"'):'')+'><div class="colhd"><span class="t">'+c.title+'</span><span class="n">'+cards.length+(colSum>0?(' · '+money(colSum)+' ₸'):'')+'</span></div>';
         if(c.key==='new') h+='<button class="btn" data-newin="1" type="button" style="width:100%;margin-bottom:8px">+ Лид</button>';
         if(!cards.length) h+='<div class="empty">Пусто</div>';
         cards.forEach(function(r){
-          h+='<div class="kcard" draggable="true" data-id="'+esc(r.id)+'">';
-          h+='<div class="nm">'+esc(r.title||'(без темы)')+(c.key==='deal'?' <span class="pill won">✓</span>':'')+'</div>';
+          var o=r.order||null;
+          h+='<div class="kcard'+(r.auto?' auto':'')+'" draggable="true" data-id="'+esc(r.id)+'">';
+          h+='<div class="nm">'+esc(r.title||'(без темы)')+'</div>';
           var sub=[];
           if(r.company_name) sub.push(esc(r.company_name));
           if(r.contact) sub.push(esc(r.contact));
           if(r.phone) sub.push(esc(r.phone));
           if(r.source) sub.push('из: '+esc(srcLabel(r.source))+(r.source_code?(' ('+esc(r.source_code)+')'):''));
+          if(c.key==='lost' && r.lost_reason) sub.push('причина: '+esc(r.lost_reason));
           if(sub.length) h+='<div class="sub">'+sub.join(' · ')+'</div>';
           h+='<div class="row2"><span>';
-          if(+r.amount>0) h+='<span class="price">'+money(r.amount)+' ₸</span> ';
+          if(o && o.number) h+='<span class="pill ord" title="Заказ на доске'+(o.list?(': колонка «'+esc(o.list)+'»'):'')+'">#'+esc(o.number)+'</span> ';
+          var sum=(o&&o.total)||(r.calc_status==='ready'?+r.calc_price:0)||(+r.amount)||0;
+          if(sum>0) h+='<span class="price">'+money(sum)+' ₸</span> ';
+          if(o && o.paid>0) h+='<span class="pill paid" title="Подтверждённые оплаты">оплачено '+money(o.paid)+'</span> ';
           if(FILE_COUNTS[String(r.id)]) h+='<span class="pill next">📎 '+FILE_COUNTS[String(r.id)]+'</span> ';
-          if(r.calc_status==='ready') h+='<span class="pill calcok" title="Расчёт производства готов'+(r.calc_note?(': '+esc(r.calc_note)):'')+'">💰 '+money(r.calc_price)+' ₸</span> ';
-          else if(r.calc_status==='sent') h+='<span class="pill calc" title="Отправлено инженеру на расчёт">⏳ расчёт</span> ';
           if(r.next_at && c.key!=='deal' && c.key!=='lost'){
             var due = r.next_at<=today();
             h+='<span class="pill '+(due?'due':'next')+'">'+(due?'📞 пора: ':'')+esc(r.next_at.slice(5))+'</span>';
           }
           h+='</span><span>';
-          if(ci>0) h+='<button class="mv" data-mv="'+esc(r.id)+'" data-to="'+COLS[ci-1].key+'" title="В колонку «'+COLS[ci-1].title+'»">‹</button> ';
-          if(ci<COLS.length-1) h+='<button class="mv" data-mv="'+esc(r.id)+'" data-to="'+COLS[ci+1].key+'" title="В колонку «'+COLS[ci+1].title+'»">›</button>';
+          if(c.key==='talk' && !r.trello_card_id) h+='<button class="mv" data-mv="'+esc(r.id)+'" data-to="new" title="В «Новые»">‹</button> ';
+          if(c.key==='new') h+='<button class="mv" data-mv="'+esc(r.id)+'" data-to="talk" title="В «Переговоры»">›</button>';
           h+='</span></div></div>';
         });
         h+='</div>';
@@ -269,31 +336,73 @@
 
     function findRow(id){ return ROWS.filter(function(r){ return String(r.id)===String(id); })[0]; }
 
+    function saveBody(r,status,extra){
+      var b={ id:r.id, title:r.title, companyId:r.company_id, companyName:r.company_name, contact:r.contact, phone:r.phone, amount:r.amount,
+        note:r.note, source:r.source||'', sourceCode:r.source_code||'', status:status, nextAt:r.next_at, byName:MYNAME };
+      if(extra) for(var k in extra) b[k]=extra[k];
+      return b;
+    }
+    // заказ с доски без лида: первым действием становится обычным лидом
+    function adopt(r){
+      if(!r.virtual) return Promise.resolve(r);
+      return post('/sales-adopt',{cardId:r.trello_card_id, byName:MYNAME}).then(function(j){
+        if(!j||j.error) throw new Error((j&&j.error)||'не удалось');
+        return loadAll().then(function(){ var x=findRow(j.id); if(!x) throw new Error('лид не найден'); return x; });
+      });
+    }
+    // ОТКАЗ — одно действие и одна причина для лида и для заказа на доске
+    function refuse(r){
+      var reason=prompt('Отказ: «'+(r.title||'')+'». Причина (клиент отказался / дорого / ушёл к другим / дубль):','клиент отказался');
+      if(reason===null) return Promise.resolve();
+      return adopt(r).then(function(x){
+        var first = x.trello_card_id ? post('/calc-cancel',{cardId:x.trello_card_id, reason:reason, byName:MYNAME}) : Promise.resolve({ok:true});
+        return first.then(function(c){
+          if(c && c.error){ alert(c.error); return; }
+          return post('/sales-save', saveBody(x,'lost',{lostReason:reason})).then(function(j){ if(j&&j.error) alert('Не сохранилось: '+j.error); });
+        });
+      }).then(loadAll).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+    }
+    function unrefuse(r){
+      if(!confirm('Вернуть «'+(r.title||'')+'» из отказа?'+(r.trello_card_id?' Карточка заказа вернётся на доску.':''))) return Promise.resolve();
+      return adopt(r).then(function(x){
+        var first = x.trello_card_id ? post('/calc-cancel',{cardId:x.trello_card_id, undo:true, byName:MYNAME}) : Promise.resolve({ok:true});
+        return first.then(function(c){
+          if(c && c.error){ alert(c.error); return; }
+          return post('/sales-save', saveBody(x,'talk')).then(function(j){ if(j&&j.error) alert('Не сохранилось: '+j.error); });
+        });
+      }).then(loadAll).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+    }
     function moveTo(id, colKey){
-      var r=findRow(id); if(!r || (r.status||'new')===colKey) return;
-      var prev=r.status; r.status=colKey; renderBoard();  // мгновенно на экране
-      post('/sales-save',{ id:r.id, title:r.title, companyId:r.company_id, companyName:r.company_name,
-        contact:r.contact, phone:r.phone, amount:r.amount, note:r.note, status:colKey, nextAt:r.next_at, byName:MYNAME })
-      .then(function(j){
-        if(j.error){ r.status=prev; renderBoard(); alert('Не сохранилось: '+j.error); return; }
-        // отказ + есть карточка в Trello: предложим убрать её в архив, чтобы не висела в цеху
-        if(colKey==='lost' && r.trello_card_id && confirm('Лид ушёл в отказ. Заархивировать его карточку в Trello, чтобы она не мешала цеху?')){
-          post('/sales-card-archive',{id:r.id}).then(function(x){
-            if(x && x.warning) alert(x.warning);
-          }).catch(function(){});
-        }
+      var r=findRow(id); if(!r) return; var from=stageOf(r);
+      if(from===colKey) return;
+      if(colKey==='lost'){ if(from==='deal'){ hint('Сделка уже оплачена — отказ здесь не ставится. Возврат денег оформляет бухгалтерия.'); return; } refuse(r); return; }
+      if(from==='lost'){ unrefuse(r); return; }
+      if(r.trello_card_id || (colKey!=='new' && colKey!=='talk')){
+        hint(r.trello_card_id ? ('Этап «'+colTitle(from)+'» меняется сам — по карточке заказа на доске.')
+          : (colKey==='calc' ? 'Откройте лид и нажмите «На расчёт» — карточка заказа появится на доске.' : ('В «'+colTitle(colKey)+'» лид попадёт сам, когда заказ дойдёт до этого этапа на доске.')));
+        return;
+      }
+      var prev=r.status; r.status=colKey; r.stage=colKey; renderBoard();  // мгновенно на экране
+      post('/sales-save', saveBody(r,colKey)).then(function(j){
+        if(j.error){ r.status=prev; r.stage=prev; renderBoard(); alert('Не сохранилось: '+j.error); }
       });
     }
 
     // ---------- карточка лида ----------
     function openEdit(id){
       var r=id?findRow(id):null;
+      if(r && r.virtual){ hint('Открываем заказ…'); adopt(r).then(function(x){ hint(''); openEdit(x.id); }).catch(function(e){ hint('Не удалось открыть: '+(e&&e.message||e)); }); return; }
+      var o=r&&r.order, stg=r?stageOf(r):'new';
       var compOpts='<option value="">— не из базы —</option>'+COMPANIES.map(function(c){
         return '<option value="'+esc(c.id)+'"'+((r&&r.company_id===c.id)?' selected':'')+'>'+esc(c.name||c.id)+'</option>';
       }).join('');
       var host=document.getElementById('ovlHost');
       host.innerHTML='<div class="ovl" id="ovl"><div class="pop">'+
-        '<h3>'+(r?'Лид':'Новый лид')+'</h3>'+
+        '<h3>'+(r?('Лид · '+esc(colTitle(stg))):'Новый лид')+'</h3>'+
+        (o?('<div class="ordbox"><b>Заказ'+(o.number?(' №'+esc(o.number)):'')+'</b>'+(o.list?(' · колонка «'+esc(o.list)+'»'):(stg==='lost'?' · снят с доски':''))+
+          (o.total>0?('<br>Сумма: <b>'+money(o.total)+' ₸</b>'+(o.paid>0?(' · оплачено <b style="color:var(--green)">'+money(o.paid)+' ₸</b>'+(o.total>o.paid?(' · остаток '+money(o.total-o.paid)+' ₸'):'')):' · оплат пока нет')):'<br>Расчёта ещё нет')+
+          (stg==='lost'&&r.lost_reason?('<br>Причина отказа: '+esc(r.lost_reason)):'')+
+          '<div class="muted" style="margin-top:4px">Этап меняется сам, когда заказ двигается на доске.</div></div>'):'')+
         '<div class="fld"><label>Тема / что продаём *</label><input type="text" id="fTitle" value="'+esc(r?r.title:'')+'" placeholder="Например: сетки для яйцебитки, 40 шт"></div>'+
         '<div class="grid2">'+
         '<div class="fld"><label>Клиент из базы</label><select id="fComp">'+compOpts+'</select></div>'+
@@ -318,7 +427,8 @@
           '<div class="thumbs" id="fThumbs"><span class="muted">Загрузка…</span></div></div>')
          :('<div class="muted" style="margin-top:10px">Файлы можно прикрепить после первого сохранения лида.</div>'))+
         '<div class="popbar">'+
-        (r?'<button class="btn danger" id="pArch" type="button" style="margin-right:auto">В архив</button>':'')+
+        (r?'<button class="btn danger" id="pArch" type="button">В архив</button>':'')+
+        (r&&stg!=='deal'?('<button class="btn'+(stg==='lost'?'':' danger')+'" id="pRef" type="button" style="margin-right:auto">'+(stg==='lost'?'Вернуть из отказа':'Отказ')+'</button>'):'<span style="margin-right:auto"></span>')+
         '<span class="msg" id="pMsg"></span>'+
         '<button class="btn" id="pClose" type="button">Закрыть</button>'+
         '<button class="btn green" id="pSave" type="button">Сохранить</button>'+
@@ -402,14 +512,13 @@
             box.innerHTML='<span class="pill calcok" style="font-size:13px">💰 Расчёт готов: '+money(r.calc_price)+' ₸</span>'+
               (r.calc_note?('<div class="muted" style="margin-top:5px">Комментарий цеха: '+esc(r.calc_note)+'</div>'):'')+
               '<div class="muted" style="margin-top:5px">Эту цену можно отправлять клиенту. Файлы — ниже в лиде.</div>'+
-              (r.trello_card_url?('<div style="margin-top:7px"><button class="btn" type="button" id="calcOpen">Открыть карточку Trello</button></div>'):'');
+              '';
           } else if(r.trello_card_id){
             box.innerHTML='<span class="pill calc" style="font-size:13px">⏳ Отправлено на расчёт</span>'+
-              '<div class="muted" style="margin-top:5px">Инженер считает. Когда начальник цеха нажмёт «Расчёт готов», цена появится здесь сама.</div>'+
-              (r.trello_card_url?('<div style="margin-top:7px"><button class="btn" type="button" id="calcOpen">Открыть карточку Trello</button></div>'):'');
+              '<div class="muted" style="margin-top:5px">Инженер считает. Когда расчёт будет готов, цена появится здесь сама.</div>';
           } else {
             box.innerHTML='<div class="muted">Нужна цена от производства? Отправьте лид инженеру: '+
-              'создастся карточка в Trello со всеми файлами лида.</div>'+
+              'на доске появится карточка заказа со всеми файлами лида, дальше этап пойдёт сам.</div>'+
               '<div style="margin-top:7px"><button class="btn primary" type="button" id="calcSend">📐 На расчёт</button>'+
               '<span class="msg" id="calcMsg"></span></div>';
           }
@@ -423,7 +532,7 @@
             if(miss.length){ document.getElementById('calcMsg').textContent='Сначала заполните: '+miss.join(', ');
               [['fCompName',!cn],['fContact',!ct],['fPhone',miss.indexOf('телефон')>=0]].forEach(function(x){ var el=document.getElementById(x[0]); if(el) el.style.outline=x[1]?'2px solid #e2483d':''; });
               return; }
-            if(!confirm('Отправить лид «'+(r.title||'')+'» на расчёт производству?\nВ Trello появится карточка с файлами лида.')) return;
+            if(!confirm('Отправить лид «'+(r.title||'')+'» на расчёт производству?\nНа доске появится карточка заказа с файлами лида.')) return;
             sb.disabled=true;
             document.getElementById('calcMsg').textContent='Отправка…';
             // сначала сохраняем то, что введено в поля, потом отправляем
@@ -432,9 +541,9 @@
               note:document.getElementById('fNote').value, status:(r.status||'new'), nextAt:document.getElementById('fNext').value||null, byName:MYNAME };
             post('/sales-save',body).then(function(sv){ if(sv&&sv.error) return sv; r.company_name=cn; r.contact=ct; r.phone=ph; return post('/sales-to-calc',{id:r.id, byName:MYNAME}); }).then(function(j){
               if(j.error){ sb.disabled=false; document.getElementById('calcMsg').textContent=j.error; return; }
-              r.trello_card_id=j.cardId; r.trello_card_url=j.cardUrl||''; r.calc_status='sent';
+              r.trello_card_id=j.cardId; r.trello_card_url=j.cardUrl||''; r.calc_status='sent'; r.stage='calc'; r.status='calc';
               if(j.attachErrors && j.attachErrors.length) alert('Карточка создана, но часть файлов не прикрепилась:\n'+j.attachErrors.join('\n'));
-              renderCalcBox(); renderBoard();
+              renderCalcBox(); renderBoard(); loadAll();
             }).catch(function(e){ sb.disabled=false; document.getElementById('calcMsg').textContent='Ошибка сети: '+e.message; });
           };
         }
@@ -447,6 +556,8 @@
       }
       document.getElementById('pClose').onclick=function(){ host.innerHTML=''; };
       document.getElementById('ovl').onclick=function(e){ if(e.target===this) host.innerHTML=''; };
+      var pRef=document.getElementById('pRef');
+      if(pRef) pRef.onclick=function(){ host.innerHTML=''; if(stg==='lost') unrefuse(r); else refuse(r); };
       if(r) document.getElementById('pArch').onclick=function(){
         if(!confirm('Убрать лид «'+(r.title||'')+'» в архив?')) return;
         post('/sales-archive',{id:r.id,archived:1}).then(function(j){
