@@ -336,7 +336,8 @@
     h+='<h3>Надбавки к цене клиенту</h3><div class="prgrid">';
     h+=coefField('Шлейфовка реза — надбавка клиенту','shleifCutRate', cv('shleifCutRate',20,1),'% от резки');
     h+=coefField('Шлейф / сборка — надбавка клиенту','shleifRate', cv('shleifRate',50,1),'% от сварки');
-    h+=coefField('Электрохимобработка шва — надбавка клиенту (0 = выкл.)','electrochemRate', cv('electrochemRate',0,1),'% от сварки');
+    // «Электрохимобработка шва» убрана из цен (решение Асхата, 19.11.2026); значение храним скрыто, чтобы старые расчёты не изменились
+    h+='<div style="display:none">'+coefField('Электрохимобработка шва','electrochemRate', cv('electrochemRate',0,1),'%')+'</div>';
     h+=coefField('Инженерное проектирование — за каждый файл DXF / ZZX','engDesignRate', cv('engDesignRate',2000),'₸ за файл');
     h+=coefField('Дизайнерская шлейфовка — за площадь поверхности','designShleifRate', cv('designShleifRate',12000),'₸ за м²');
     h+=coefField('Монтаж (выезд) — надбавка клиенту','montazhPct', cv('montazhPct',100,1),'% от сварки + шлейфовок');

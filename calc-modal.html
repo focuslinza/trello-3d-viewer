@@ -168,7 +168,8 @@
           <div style="display:flex;align-items:center;gap:22px;margin-top:4px">
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="noShleifWeld" style="width:auto"> без шлейфовки сварки</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="noShleifCut" style="width:auto"> без шлейфовки резки</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer"><input type="checkbox" id="electrochem" style="width:auto"> электрохимобработка шва</label>
+            <!-- «электрохимобработка шва» убрана (решение Асхата, 19.11.2026); скрытая галочка хранит значение старых расчётов -->
+            <label style="display:none"><input type="checkbox" id="electrochem" style="width:auto"> электрохимобработка шва</label>
             <label id="engDesignLbl" style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer" title="Число файлов DXF и ZZX в расчёте × ставка за файл. Ставка — в «Панель руководителя → Цены». Снимите галочку, если проектирование клиенту не выставляется."><input type="checkbox" id="engDesign" style="width:auto" checked> <span id="engDesignTxt">инженерное проектирование</span></label>
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:400;text-transform:none;cursor:pointer" title="Наценка за выездные работы: % от сварки и шлейфовок, но не меньше минималки. Процент и минималка — в «Ценах и коэффициентах»"><input type="checkbox" id="mzOn" style="width:auto"> монтаж (выезд)</label>
           </div>
@@ -1040,8 +1041,9 @@
         document.getElementById('noShleifCut').checked = !!i.noShleifCut;
         document.getElementById('noShleifWeld').checked = !!i.noShleifWeld;
         document.getElementById('electrochem').checked = !!i.electrochem;
-        // у расчётов, сохранённых до 19.11.2026, галочки не было — их сумму не меняем
-        document.getElementById('engDesign').checked = (i.engDesign === true);
+        // включено по умолчанию везде, в том числе в расчётах, сохранённых раньше (решение Асхата, 19.11.2026);
+        // выключено только там, где галочку сняли сами
+        document.getElementById('engDesign').checked = (i.engDesign !== false);
 
       }).catch(function(){});
     }
