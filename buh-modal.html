@@ -1018,7 +1018,7 @@
           return;
         }
         h+='<tr'+(r.archived?' style="opacity:.45"':'')+'><td style="white-space:nowrap"><a href="#" class="invnum" data-num="'+esc(r.number)+'" title="Показать счёт" style="color:#579dff;text-decoration:none"><b>№'+esc(r.number)+'</b></a>'+
-           ' <button class="btn iarch" data-id="'+r.id+'" data-num="'+esc(r.number)+'" data-on="'+(r.archived?'0':'1')+'" type="button" title="'+(r.archived?'Вернуть счёт из архива':'В архив: счёт отменяется, у заказов снимается отметка «счёт выслан»')+'" style="padding:1px 7px;font-size:11px'+(r.archived?';color:#9ee6bd;border-color:#2e5c44':'')+'">'+(r.archived?'↩':'🗄')+'</button>'+
+           (r.archived ? (' <button class="btn iarch" data-id="'+r.id+'" data-num="'+esc(r.number)+'" data-on="'+(r.archived?'0':'1')+'" type="button" title="'+(r.archived?'Вернуть счёт из архива':'В архив: счёт отменяется, у заказов снимается отметка «счёт выслан»')+'" style="padding:1px 7px;font-size:11px'+(r.archived?';color:#9ee6bd;border-color:#2e5c44':'')+'">'+(r.archived?'↩':'🗄')+'</button>') : '')+
            (r.sentAt?('<div style="font-size:10.5px;color:var(--green);white-space:nowrap" title="Счёт отправлен клиенту'+(r.sentTo?(' на '+esc(r.sentTo)):'')+'">📤 выслан '+esc((r.sentAt||'').slice(0,10))+'</div>'):
                      ('<div style="font-size:10.5px;color:var(--muted)">не выслан</div>'))+
            '</td><td>'+esc(r.date)+'</td><td>'+esc(r.buyer)+((+r.repairs>0)?' <span class="pill" style="background:#2b1f45;color:#c9a8ff">ремонт'+(r.repairs>1?(' ×'+r.repairs):'')+'</span>':'')+
@@ -1030,10 +1030,10 @@
            '<td class="num">'+money(r.received)+' ₸</td>'+
            '<td class="num">'+(r.pct!=null?r.pct+'%':'—')+'</td>'+
            '<td style="color:'+st[1]+'">'+esc(st[0])+'</td>'+
-           '<td class="muted">'+esc(r.lastPayment||'')+
-           ' <button class="btn iedit" data-id="'+r.id+'" type="button" title="Исправить счёт: номер, дата, покупатель, сумма" style="padding:2px 8px;font-size:11px">✎</button>'+
-           '</td>'+
-           (IS_ADMIN?('<td><button class="btn idel" data-id="'+r.id+'" data-num="'+esc(r.number)+'" type="button" title="Удалить тестовый счёт из журнала безвозвратно" style="padding:2px 8px;font-size:11px;color:#e9b3b3;border-color:#5a3a3a">✕</button></td>'):'')+
+           // ИЗМЕНЕНИЕ СЧЁТА — ТОЛЬКО В САМОМ СЧЁТЕ (решение Асхата, 20.11.2026): из общего списка счёт нельзя ни править,
+           // ни отменять, ни удалять — для этого его открывают по номеру. У удалённых счетов остаются «вернуть» и «✕».
+           '<td class="muted">'+esc(r.lastPayment||'')+'</td>'+
+           (IS_ADMIN?('<td>'+(!r.archived?'':'<button class="btn idel" data-id="'+r.id+'" data-num="'+esc(r.number)+'" type="button" title="Удалить тестовый счёт из журнала безвозвратно" style="padding:2px 8px;font-size:11px;color:#e9b3b3;border-color:#5a3a3a">✕</button>')+'</td>'):'')+
            '</tr>';
       });
       h+='</tbody></table>';
