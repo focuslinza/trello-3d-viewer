@@ -208,8 +208,9 @@
   document.getElementById('save').onclick=save;
 
   loadContext().then(function(){
-    if(!ctx.url){ boot('\u0424\u0430\u0439\u043b .zzx \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u043d\u0430 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0435.'); return Promise.reject('no url'); }
-    return fetch(WORKER+'/zzx-fetch?url='+encodeURIComponent(ctx.url)).then(function(r){
+    // своя база: файл находится по номеру вложения; ссылка Trello больше не обязательна (20.11.2026)
+    if(!ctx.url && !(ctx.cardId && ctx.attId)){ boot('\u0424\u0430\u0439\u043b .zzx \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u043d\u0430 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0435.'); return Promise.reject('no url'); }
+    return fetch(WORKER+'/zzx-fetch?url='+encodeURIComponent(ctx.url||'')+'&cardId='+encodeURIComponent(ctx.cardId||'')+'&attachmentId='+encodeURIComponent(ctx.attId||'')+'&fileName='+encodeURIComponent(ctx.fileName||'')).then(function(r){
       if(!r.ok) throw new Error('\u0441\u0435\u0440\u0432\u0435\u0440: '+r.status); return r.arrayBuffer();
     });
   }).then(function(buf){
