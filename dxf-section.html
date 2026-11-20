@@ -115,11 +115,12 @@
       var list=[].slice.call(fileList||[]).filter(function(f){ return itemId ? true : /\.(dxf|zzx)$/i.test(f.name); });
       var skipped=(fileList||[]).length-list.length;
       if(!list.length){ setMsg('Можно загружать только .dxf и .zzx'); return Promise.resolve(); }
-      var i=0, ok=0, errs=[]; UPLOADING++;
+      var i=0, ok=0, errs=[], pend=[]; UPLOADING++;
       function next(){
         if(i>=list.length){
           UPLOADING=Math.max(0,UPLOADING-1);
-          setMsg('Загружено '+ok+' из '+list.length+(skipped?(' · пропущено не-DXF: '+skipped):'')+(errs.length?(' · ошибки: '+errs.join('; ')):''));
+          setMsg((ok||!pend.length?('Загружено '+ok+' из '+list.length):'')+(skipped?(' · пропущено не-DXF: '+skipped):'')+(errs.length?(' · ошибки: '+errs.join('; ')):''));
+          if(pend.length) showPending(pend);
           return autoPlace().then(draw);
         }
         var f=list[i++]; setMsg('Загружаю '+i+' из '+list.length+': '+f.name+'…');
@@ -127,6 +128,8 @@
         return fetch(WORKER+'/card-file-upload', { method:'POST', body: fd })
           .then(function(r){ return r.json(); })
           .then(function(j){
+            // заказ в производстве: файл принят и ждёт решения руководителя — это не ошибка
+            if(j && j.pending){ pend.push(f.name); return; }
             if(!j||!j.ok) throw new Error((j&&j.error)||'не загружено');
             ok++; if(Array.isArray(j.items)) ITEMS=j.items;
             if(!FILES.some(function(a){ return a.id===j.attachment.id; })) FILES.push(j.attachment);
@@ -135,6 +138,24 @@
           .then(next);
       }
       return next();
+    }
+    // ИНФО-ОКНО «ОТПРАВЛЕНО РУКОВОДИТЕЛЮ» (решение Асхата, 20.11.2026): крупно и понятно, а не мелкой строкой «ошибка»
+    function showPending(names){
+      // раздел — узкая рамка внутри карточки: окно показывает сама доска, по центру экрана
+      try{ if(window.top && window.top!==window){ window.top.postMessage({ ms:'filePending', names:names }, '*'); window.top.postMessage({ ms:'changed' }, '*'); return; } }catch(e){}
+      var old=document.getElementById('pendInfo'); if(old) old.remove();
+      var ov=document.createElement('div'); ov.id='pendInfo';
+      ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(9,30,66,.35);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px';
+      var esc2=function(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
+      ov.innerHTML='<div style="background:#fff;color:#172b4d;border-radius:12px;max-width:460px;width:100%;padding:16px 18px;box-shadow:0 8px 28px rgba(9,30,66,.3);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;border-top:5px solid #e2a100">'+
+        '<div style="font-weight:700;font-size:16px;margin-bottom:6px">⏳ '+(names.length>1?('Файлы отправлены руководителю ('+names.length+')'):'Файл отправлен руководителю')+'</div>'+
+        '<div style="margin-bottom:8px">Заказ уже в производстве, поэтому '+(names.length>1?'файлы появятся':'файл появится')+' в карточке после подтверждения руководителя. Повторно загружать не нужно.</div>'+
+        '<div style="max-height:150px;overflow:auto;font-size:13px;color:#44546f;margin-bottom:12px">'+names.map(function(n){ return '• '+esc2(n); }).join('<br>')+'</div>'+
+        '<div style="text-align:right"><button type="button" id="pendOk" style="background:#1f6ce8;color:#fff;border:0;border-radius:8px;padding:8px 18px;font-weight:600;font-size:14px;cursor:pointer">Понятно</button></div></div>';
+      document.body.appendChild(ov);
+      var cl=function(){ ov.remove(); };
+      ov.querySelector('#pendOk').onclick=cl; ov.addEventListener('click',function(e){ if(e.target===ov) cl(); });
+      try{ window.top.postMessage({ ms:'changed' }, '*'); }catch(e){}
     }
     function pickAndUpload(itemId){
       var inp=document.createElement('input'); inp.type='file'; inp.multiple=true; if(!itemId) inp.accept='.dxf,.zzx';
