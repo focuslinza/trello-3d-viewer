@@ -19,14 +19,13 @@
     .btn.primary{background:#274469;border-color:var(--blue);color:#cfe1ff;font-weight:600}
     .btn.green{background:#1c3329;border-color:#2e5c44;color:var(--green)}
     .btn.danger{border-color:#7a3a32;color:#e8a59d}
-    .board{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;align-items:start}
+    /* КОЛОНКИ КАК НА ДОСКЕ TTMS (решение Асхата, 20.11.2026): ширина 272 px, доска листается по горизонтали */
+    .board{display:grid;grid-template-columns:repeat(8,272px);gap:10px;align-items:start;overflow-x:auto;overflow-y:hidden;padding-bottom:10px;scrollbar-width:thin}
     .zone{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;border-bottom:2px solid var(--line);padding:0 4px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .zone.z1{grid-column:1 / span 2;border-color:var(--blue)}
     .zone.z2{grid-column:3 / span 5;border-color:var(--green)}
     .zone.z3{grid-column:8;border-color:var(--red)}
-    @media (max-width:1350px){ .board{grid-template-columns:repeat(4,1fr)} .zone{display:none} }
-    @media (max-width:900px){ .board{grid-template-columns:repeat(2,1fr)} }
-    @media (max-width:640px){ .board{grid-template-columns:1fr} }
+    @media (max-width:640px){ .board{grid-template-columns:1fr;overflow:visible} .zone{display:none} }
     .col.auto{border-style:dashed}
     /* главная кнопка системы — сплошная синяя с белым текстом, как «+ Заявка» в ремонтах (19.11.2026) */
     .btn.solid,html.ms-light .btn.solid,html.day .btn.solid{background:#2463eb!important;background-image:none!important;border-color:#1d4fd7!important;color:#fff!important;font-weight:700!important;box-shadow:0 1px 2px rgba(16,30,54,.18)!important}
@@ -378,13 +377,13 @@
     // высота колонок: от их верха до нижней панели; в узком окне (колонки в несколько рядов) — обычная прокрутка страницы
     function fitCols(){
       var cols=document.querySelectorAll('#board .col'); if(!cols.length) return;
-      var one = window.innerWidth>1350;
+      var one = window.innerWidth>640;   // колонки в один ряд с горизонтальной прокруткой — везде, кроме телефона
       try{ document.getElementById('wrap').style.paddingBottom = one ? '0' : ''; }catch(e){}   // страница сама не листается — листаются колонки
       var bar=document.querySelector('.bar'), barH=bar?bar.getBoundingClientRect().height:58;
       [].forEach.call(cols, function(c){
         if(!one){ c.style.maxHeight=''; return; }
         var top=c.getBoundingClientRect().top + (window.pageYOffset||0);
-        c.style.maxHeight=Math.max(220, window.innerHeight - top - barH - 14)+'px';
+        c.style.maxHeight=Math.max(220, window.innerHeight - top - barH - 40)+'px';   // 40 — место под горизонтальную полосу прокрутки
       });
     }
     window.addEventListener('resize', function(){ fitCols(); });
