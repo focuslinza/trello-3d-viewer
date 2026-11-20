@@ -200,12 +200,8 @@
           }).catch(function(){});
         }
         function addInvoiceBtn(){
-          var row3=document.createElement('div'); row3.className='row'; row3.style.marginTop='8px';
-          var lbl3=document.createElement('div'); lbl3.className='muted'; lbl3.textContent='Счёт на оплату (можно объединить несколько заказов клиента)';
-          var ib=document.createElement('button'); ib.className='btn'; ib.type='button'; ib.style.background='#1f845a';
-          ib.textContent='Счёт на оплату';
-          ib.addEventListener('click', openInvoice);
-          row3.appendChild(lbl3); row3.appendChild(ib); el.appendChild(row3);
+          // КНОПКА «СЧЁТ НА ОПЛАТУ» ПЕРЕЕХАЛА (решение Асхата, 20.11.2026): окно счёта открывается нажатием на статус
+          // «Счёт выслан» в блоке «Статус заказа». Здесь остаётся только доп. счёт на разницу.
           addExtraInvoice();
           // «Счета (PDF)» переехали внутрь окна «Счёт на оплату» — кнопка справа
           // от итоговой суммы (решение Асхата, 08.2026)
