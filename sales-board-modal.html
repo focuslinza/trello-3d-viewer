@@ -497,7 +497,9 @@
           '<button class="btn" id="fPick" type="button">📎 Галерея / файл</button>'+
           '<span class="msg" id="fMsg"></span></div>'+
           '<input type="file" id="fCamIn" accept="image/*" capture="environment" style="display:none">'+
-          '<input type="file" id="fPickIn" multiple accept="image/*,.pdf,.dxf,.dwg,.step,.stp,.igs,.iges,.xls,.xlsx,.doc,.docx,.csv,.txt" style="display:none">'+
+          '<input type="file" id="fPickIn" multiple accept="image/*,.pdf,.dxf,.zzx,.dwg,.step,.stp,.igs,.iges,.xls,.xlsx,.doc,.docx,.csv,.txt" style="display:none">'+
+          '<div class="muted" id="fRule" style="font-size:12px;margin-top:6px;display:none"></div>'+
+          '<div id="fCardBox" style="display:none;margin-top:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">Файлы в карточке заказа</div><div class="thumbs" id="fCardThumbs"></div></div>'+
           '<div class="thumbs" id="fThumbs"><span class="muted">Загрузка…</span></div></div></div>'+
         '<div class="muted" id="newHint" style="margin-top:10px;display:none">Введите тему — лид сохранится сам. После этого можно прикрепить файлы и отправить на расчёт.</div>'+
         '<div class="popbar" style="align-items:center">'+
@@ -656,12 +658,39 @@
         clearInterval(stTimer); stTimer=setInterval(function(){ if(!closed && r && r.trello_card_id && !document.hidden) loadSt(); },5000);   // оплата вносится в соседнем окне — полоса подхватит сама
         var IMG_RE=/^image\//;
         function fmsg(s){ var e=document.getElementById('fMsg'); if(e) e.textContent=s||''; }
+        // ФАЙЛЫ В КАРТОЧКУ ИЗ «ПРОДАЖ» (решение Асхата, 20.11.2026): когда у лида уже есть заказ на доске, файл уходит прямо
+        // в карточку — через тот же вход, что и с доски, поэтому действуют те же правила: в производстве — только с
+        // подтверждением руководителя, после «Порезано» DXF/ZZX нельзя, новый чертёж после КП/счёта меняет расчёт.
+        function bTok(){ try{ return localStorage.getItem('ms_board_token')||''; }catch(e){ return ''; } }
+        function loadCardFiles(){
+          var bx=document.getElementById('fCardBox'), th=document.getElementById('fCardThumbs'), rl=document.getElementById('fRule');
+          if(!bx||!th) return;
+          if(!(r && r.trello_card_id)){ bx.style.display='none'; if(rl) rl.style.display='none'; return; }
+          if(rl){ rl.style.display=''; rl.textContent='Новые файлы попадают в карточку заказа. Если заказ уже в производстве — файл уйдёт на подтверждение руководителю. После метки «Порезано» чертежи DXF и ZZX добавлять нельзя.'; }
+          fetch(WORKER+'/card-details?db=1&cardId='+encodeURIComponent(r.trello_card_id)).then(function(x){return x.json();}).then(function(j){
+            var at=(j&&j.attachments)||[]; bx.style.display='';
+            if(!at.length){ th.innerHTML='<span class="muted">В карточке файлов пока нет</span>'; }
+            else th.innerHTML=at.map(function(f){ var u=WORKER+f.url+'&inline=1';
+              if(IMG_RE.test(f.mime||'') && !/\.(dxf|dwg|zzx|svg)$/i.test(f.name||'')) return '<span class="ph"><img src="'+u+'" loading="lazy" data-open="'+u+'" alt=""></span>';
+              return '<span class="doc" data-open="'+WORKER+f.url+'">📄 <span>'+esc(f.name||'файл')+'</span></span>'; }).join('');
+            [].forEach.call(th.querySelectorAll('[data-open]'), function(el){ el.onclick=function(){ window.open(this.getAttribute('data-open'),'_blank'); }; });
+          }).catch(function(){ bx.style.display='none'; });
+          // запросы, ждущие подтверждения руководителя
+          fetch(WORKER+'/file-requests?cardId='+encodeURIComponent(r.trello_card_id)).then(function(x){return x.json();}).then(function(j){
+            var rq=(j&&(j.items||j.rows))||[]; var old=document.getElementById('fPend'); if(old) old.remove();
+            if(!rq.length) return;
+            var d=document.createElement('div'); d.id='fPend'; d.style.cssText='margin-top:6px;font-size:12.5px;color:var(--amber,#b07a00)';
+            d.textContent='⏳ Ждут подтверждения руководителя: '+rq.map(function(x){ return x.name; }).join(', ');
+            bx.appendChild(d);
+          }).catch(function(){});
+        }
         function loadFiles(){
+          loadCardFiles();
           fetch(WORKER+'/receipts-list?kind=sales&refId='+encodeURIComponent(r.id)).then(function(x){return x.json();}).then(function(j){
             var box=document.getElementById('fThumbs'); if(!box) return;
             var files=(j&&(j.receipts||j.rows))||[];
             FILE_COUNTS[String(r.id)]=files.length; 
-            if(!files.length){ box.innerHTML='<span class="muted">Файлов нет</span>'; return; }
+            if(!files.length){ box.innerHTML=(r&&r.trello_card_id)?'':'<span class="muted">Файлов нет</span>'; return; }
             box.innerHTML=files.map(function(f){
               var u=WORKER+'/receipt-get?id='+f.id;
               if(IMG_RE.test(f.mime||'')) return '<span class="ph"><img src="'+u+'" loading="lazy" data-open="'+u+'" alt=""><span class="rmf" data-rm="'+f.id+'" title="Удалить">×</span></span>';
@@ -705,18 +734,31 @@
         }
         function uploadFiles(list){
           var files=[].slice.call(list||[]); if(!files.length) return;
+          var toCard=!!(r && r.trello_card_id), pend=[];
+          // после КП или счёта новый чертёж меняет расчёт — предупреждаем заранее
+          if(toCard && files.some(function(f){ return /\.(dxf|zzx)$/i.test(f.name||''); })){
+            var sg=stageOf(r);
+            if((sg==='kp'||sg==='pay'||sg==='deal') && !confirm('По этому заказу уже есть КП или счёт.\n\nНовый чертёж изменит расчёт: неоплаченные КП и счёт станут недействительными и их нужно будет выставить заново, а по оплаченному счёту понадобится доп. счёт.\n\nДобавить файл?')) return;
+          }
           var chain=Promise.resolve(), done=0;
           files.forEach(function(f){
             chain=chain.then(function(){
               fmsg('Отправка '+(done+1)+' из '+files.length+'…');
-              var prep = IMG_RE.test(f.type||'') ? shrinkImage(f) : rawFile(f);
+              // чертежи (DXF/DWG) браузер иногда называет «image/vnd.dxf» — их не сжимаем как фото
+              var prep = (IMG_RE.test(f.type||'') && !/\.(dxf|dwg|zzx|svg|step|stp|igs|iges)$/i.test(f.name||'')) ? shrinkImage(f) : rawFile(f);
               return prep.then(function(p){
+                if(toCard){
+                  if(p.b64.length>8500000) throw new Error('«'+p.name+'» слишком большой (макс ~6 МБ)');
+                  return post('/board-upload',{token:bTok(),cardId:r.trello_card_id,filename:p.name,mime:p.mime,dataB64:p.b64}).then(function(j){
+                    if(j&&j.pending){ pend.push(p.name); return {}; }   // заказ в производстве: файл ушёл на подтверждение
+                    return j; });
+                }
                 if(p.b64.length>2800000) throw new Error('«'+p.name+'» слишком большой (макс ~2 МБ)');
                 return post('/receipt-save',{kind:'sales',refId:r.id,filename:p.name,mime:p.mime,dataB64:p.b64,byName:MYNAME});
               }).then(function(j){ if(j.error) throw new Error(j.error); done++; });
             });
           });
-          chain.then(function(){ fmsg('Готово ✓'); loadFiles(); renderBoard(); setTimeout(function(){fmsg('');},1500); })
+          chain.then(function(){ fmsg(pend.length?('⏳ На подтверждение руководителю: '+pend.join(', ')):'Готово ✓'); loadFiles(); renderBoard(); setTimeout(function(){fmsg('');},pend.length?7000:1500); })
                .catch(function(e){ fmsg('Ошибка: '+e.message); loadFiles(); });
         }
         $('fCam').onclick=function(){ $('fCamIn').click(); };
