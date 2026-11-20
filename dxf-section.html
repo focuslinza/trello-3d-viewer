@@ -99,7 +99,8 @@
     function saveItems(){
       setMsg('Сохраняю изделия…');
       return fetch(WORKER+'/card-items', { method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ cardId: CARD_ID, items: ITEMS }) })
+        // known — файлы, о которых это окно знает: всё остальное в изделиях (подтверждённое руководителем, пока окно было открыто) сервер сохранит
+        body: JSON.stringify({ cardId: CARD_ID, items: ITEMS, known: (typeof FILES!=='undefined'&&Array.isArray(FILES))?FILES.map(function(a){ return a.id; }):undefined }) })
         .then(function(r){ return r.json(); })
         .then(function(j){ if (!j || !j.ok) throw new Error((j&&j.error)||'не сохранено'); ITEMS = j.items || ITEMS; setMsg('Изделия сохранены ✓'); })
         .catch(function(e){ setMsg('Ошибка сохранения изделий: '+(e&&e.message||'')); });
