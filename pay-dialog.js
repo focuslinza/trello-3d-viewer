@@ -130,7 +130,8 @@
       t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100000;padding:10px 18px;border-radius:8px;font:600 14px system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);background:' + (warn ? '#533f04;color:#f5cd47' : '#1c3329;color:#4bce97') + ';border:1px solid ' + (warn ? '#7f5f01' : '#2e5c44');
       document.body.appendChild(t); setTimeout(function () { t.remove(); }, warn ? 6000 : 3000);
     }
-    function close() { ov.remove(); document.removeEventListener('keydown', onKey); if (opts.onClose) try { opts.onClose(); } catch (x) {} }
+    // silent — окно не закрыто, а сменилось другим (оплата по всему счёту): onClose не зовём, иначе окно-хозяин закроется вместе с новым окном
+    function close(silent) { ov.remove(); document.removeEventListener('keydown', onKey); if (!silent && opts.onClose) try { opts.onClose(); } catch (x) {} }
     function onKey(e) { if (e.key === 'Escape') close(); }
     document.addEventListener('keydown', onKey);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
@@ -189,7 +190,7 @@
       }
       a.oninput = after; after(); a.focus(); a.select();
       var toInv = ov.querySelector('#pdToInv');
-      if (toInv) toInv.onclick = function () { close(); window.openInvoicePay({ number: S.invoiceNumber, cardId: cardId, onDone: opts.onDone }); };
+      if (toInv) toInv.onclick = function () { close(true); window.openInvoicePay({ number: S.invoiceNumber, cardId: cardId, title: opts.title, onDone: opts.onDone, onClose: opts.onClose }); };
       [].forEach.call(ov.querySelectorAll('[data-m]'), function (el) {
         el.onclick = function () {
           method = el.getAttribute('data-m');
@@ -278,14 +279,14 @@
   //  openInvoicePay({ number, cardId, title, onDone })
   window.openInvoicePay = function (opts) {
     css(); ttInit();
-    fetch(W() + '/invoice-payment?number=' + encodeURIComponent(opts.number), { headers: hdr() }).then(function (r) { return r.json(); }).then(function (S) {
-      if (!S || !S.ok || !S.orders || S.orders.length < 2) { window.openPayDialog({ cardId: opts.cardId || (S && S.orders && S.orders[0] && S.orders[0].cardId), title: opts.title, onDone: opts.onDone }); return; }
+    fetch(W() + '/invoice-payment?number=' + encodeURIComponent(opts.number) + (opts.cardId ? '&cardId=' + encodeURIComponent(opts.cardId) : ''), { headers: hdr() }).then(function (r) { return r.json(); }).then(function (S) {
+      if (!S || !S.ok || !S.orders || S.orders.length < 2) { window.openPayDialog({ cardId: opts.cardId || (S && S.orders && S.orders[0] && S.orders[0].cardId), title: opts.title, onDone: opts.onDone, onClose: opts.onClose }); return; }
       invDlg(S);
-    }).catch(function () { window.openPayDialog({ cardId: opts.cardId, title: opts.title, onDone: opts.onDone }); });
+    }).catch(function () { window.openPayDialog({ cardId: opts.cardId, title: opts.title, onDone: opts.onDone, onClose: opts.onClose }); });
     function invDlg(S) {
       var method = '', busy = false;
       var ov = document.createElement('div'); ov.className = 'pdl-ov'; ov.innerHTML = '<div class="pdl"></div>'; document.body.appendChild(ov);
-      function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+      function close(silent) { ov.remove(); document.removeEventListener('keydown', onKey); if (!silent && opts.onClose) try { opts.onClose(); } catch (x) {} }
       function onKey(e) { if (e.key === 'Escape') close(); }
       document.addEventListener('keydown', onKey);
       ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
@@ -333,7 +334,7 @@
           if (!method) { e.textContent = 'Выберите способ оплаты'; return; }
           if (method === 'person' && !person) { e.textContent = 'Укажите, кому перевели'; return; }
           busy = true; ok.disabled = true; e.style.color = ''; e.textContent = 'Сохраняю…';
-          fetch(W() + '/invoice-payment', { method: 'POST', headers: hdr(), body: JSON.stringify({ number: S.number, amount: v, method: method, person: person, date: ov.querySelector('#ipD').value, note: ov.querySelector('#ipN').value }) })
+          fetch(W() + '/invoice-payment', { method: 'POST', headers: hdr(), body: JSON.stringify({ number: S.number, cardId: opts.cardId || (S.orders[0] && S.orders[0].cardId) || '', amount: v, method: method, person: person, date: ov.querySelector('#ipD').value, note: ov.querySelector('#ipN').value }) })
             .then(function (r) { return r.json(); }).then(function (j) {
               busy = false;
               if (!j || !j.ok) throw new Error((j && j.error) || 'сервер не подтвердил');
@@ -345,7 +346,7 @@
       function wireOne() {
         [].forEach.call(ov.querySelectorAll('[data-one]'), function (b) { b.onclick = function () {
           var id = b.getAttribute('data-one'), o = S.orders.filter(function (x) { return x.cardId === id; })[0];
-          close(); window.openPayDialog({ cardId: id, title: (o && o.number ? '№' + o.number + ' ' : '') + String((o && o.name) || '').slice(0, 40), onDone: opts.onDone });
+          close(true); window.openPayDialog({ cardId: id, title: (o && o.number ? '№' + o.number + ' ' : '') + String((o && o.name) || '').slice(0, 40), onDone: opts.onDone, onClose: opts.onClose });
         }; });
       }
       draw();
