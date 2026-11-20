@@ -155,8 +155,8 @@
         <label style="font-size:12.5px" title="Сверх порога работник получает этот процент от СТОИМОСТИ РАБОТ (не от своей доли). Ставку меняет руководство.">сверх порога, % <input id="capOverWorksPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="1"></label>
       </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:8px">
-        <label style="font-size:12.5px" title="Для инженера: его заработок складывается по-другому (работы по файлам + степень изобретения), поэтому порог у него отдельный от цехового.">Инженерный: порог, ₸ <input id="engCapPerOrder" type="number" min="0" step="10000" style="width:110px" placeholder="нет"></label>
-        <label style="font-size:12.5px" title="Сверх порога — этот % от «работ» инженера (работы по файлам + степень изобретения).">сверх порога, % <input id="engCapOverWorksPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="1"></label>
+        <label style="font-size:12.5px" title="Для инженера: его заработок складывается по-другому (работы по файлам), поэтому порог у него отдельный от цехового.">Инженерный: порог, ₸ <input id="engCapPerOrder" type="number" min="0" step="10000" style="width:110px" placeholder="нет"></label>
+        <label style="font-size:12.5px" title="Сверх порога — этот % от «работ» инженера (работы по файлам).">сверх порога, % <input id="engCapOverWorksPct" type="number" min="0" max="100" step="0.5" style="width:70px" placeholder="1"></label>
       </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:8px">
         <label style="font-size:12.5px" title="Только для личного «% от работ сданных заказов» начальника цеха (поле в его карточке ниже) — не общий «офисный» порог, у других ролей на этом механизме своя цифра не появится, пока для них тоже не включат этот же процент.">Порог начальника цеха от работ, ₸ <input id="officeCapPerOrder" type="number" min="0" step="10000" style="width:110px" placeholder="нет"></label>
