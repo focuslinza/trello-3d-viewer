@@ -54,7 +54,9 @@
     function isZzx(a){ return getExt(a.fileName||a.name||a.url||'')==='.zzx'; }
     // ПРОЧИЕ ФАЙЛЫ ИЗДЕЛИЯ (решение Асхата, 12.11.2026): PDF, фото, STEP… — загруженные в карточку
     // (не ссылки). Лежат в изделии рядом с DXF/ZZX, качаются по одному, в «Скачать все» не входят.
-    function isOther(a){ return !isDxf(a) && !isZzx(a) && (a.isUpload!==false) && /trello/i.test(String(a.url||'trello')); }
+    // 20.11.2026: на своей доске файл лежит в своём хранилище (ссылка «/download?…», без слова trello) — такие файлы тоже
+    // «прочие файлы изделия». Раньше из-за проверки на trello PDF, фото и STEP в разделе не показывались и их нельзя было разложить.
+    function isOther(a){ return !isDxf(a) && !isZzx(a) && (a.isUpload!==false) && /trello|\/download\?|\/att\//i.test(String(a.url||'trello')); }
     function extLabel(a){ var e=getExt(a.fileName||a.name||a.url||'').replace('.',''); return (e||'файл').toUpperCase().slice(0,5); }
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
