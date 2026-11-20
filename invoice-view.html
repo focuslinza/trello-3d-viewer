@@ -400,6 +400,10 @@
       var items=(parse(CUR.items_json,[])||[]).map(function(x){ return Object.assign({},x); });
       var h='<div style="font-weight:700;font-size:15px;margin-bottom:6px">Изменить счёт №'+esc(CUR.number)+' — номер останется тем же</div>'+
         '<table style="width:100%"><thead><tr><th>Наименование</th><th style="width:80px">Кол-во</th><th style="width:110px">Цена</th><th style="width:110px">Сумма</th><th></th></tr></thead><tbody id="edRows"></tbody></table>'+
+        '<div style="margin:10px 0;padding:8px 10px;border:1px dashed var(--line);border-radius:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+          '<b style="font-size:13px">Подогнать итог счёта до</b><input id="edFit" type="number" min="1" step="any" placeholder="сумма" style="width:140px"> <span>₸</span>'+
+          '<button class="btn" id="edFitGo" type="button">Подогнать</button>'+
+          '<span class="muted" id="edFitNote" style="font-size:12px;flex:1;min-width:200px">Цены всех строк изменятся пропорционально, итог выйдет ровно в эту сумму.</span></div>'+
         '<div style="margin:10px 0"><label class="muted" style="font-size:12px">Причина изменения (увидят в истории)</label><input id="edReason" type="text" placeholder="например: скидка / переименовали по просьбе клиента" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
         '<div style="display:flex;gap:8px;justify-content:space-between;align-items:center"><b id="edTotal"></b><span><button class="btn" id="edCancel" type="button">Отмена</button> <button class="btn primary" id="edSave" type="button">Сохранить как новую версию</button></span></div>';
       var ov=overlay(h);
@@ -423,6 +427,31 @@
         [].forEach.call(ov.querySelectorAll('.edDel'),function(e){ e.onclick=function(){ if(items.length<2){ alert('В счёте должна остаться хотя бы одна строка. Чтобы отменить счёт целиком — «Аннулировать».'); return; } items.splice(+this.dataset.i,1); draw(); }; });
       }
       draw();
+      // ПОДГОНКА ИТОГА (решение Асхата, 20.11.2026): вводим нужную сумму счёта — цены всех строк меняются пропорционально,
+      // копейки округления уходят в самую крупную строку, итог выходит ровно в заданную сумму
+      ov.querySelector('#edFitGo').onclick=function(){
+        var note=ov.querySelector('#edFitNote'), target=Math.round((+String(ov.querySelector('#edFit').value).replace(',','.')||0)*100)/100;
+        var tot=0; items.forEach(function(it){ tot+=(+it.qty||0)*(+it.price||0); });
+        if(!(target>0)){ note.style.color='var(--red,#d33a2c)'; note.textContent='Введите сумму больше нуля.'; return; }
+        if(!(tot>0)){ note.style.color='var(--red,#d33a2c)'; note.textContent='В счёте нет суммы — подгонять нечего.'; return; }
+        var k=target/tot, whole=(Math.abs(target-Math.round(target))<0.005);
+        items.forEach(function(it){ if(!(+it.qty>0)) return; var np=(+it.price||0)*k; it.price=whole?Math.round(np):Math.round(np*100)/100; });
+        // остаток округления — в самую крупную строку (лучше с количеством 1, чтобы цена осталась «круглой»)
+        var sum2=0; items.forEach(function(it){ sum2+=(+it.qty||0)*(+it.price||0); });
+        var diff=Math.round((target-sum2)*100)/100;
+        if(Math.abs(diff)>=0.005){
+          var best=-1, bestV=-1;
+          items.forEach(function(it,i){ var v=(+it.qty||0)*(+it.price||0); if(+it.qty===1 && v>bestV){ bestV=v; best=i; } });
+          if(best<0) items.forEach(function(it,i){ var v=(+it.qty||0)*(+it.price||0); if(+it.qty>0 && v>bestV){ bestV=v; best=i; } });
+          if(best>=0){ var q=+items[best].qty||1; items[best].price=Math.round(((+items[best].price||0)+diff/q)*100)/100; }
+        }
+        draw();
+        var sum3=0; items.forEach(function(it){ sum3+=(+it.qty||0)*(+it.price||0); });
+        var pc=Math.round((k-1)*1000)/10;
+        note.style.color=''; note.textContent='Подогнано: итог '+money(sum3)+' ₸ ('+(pc>0?'+':'')+pc+'% к прежним ценам). Проверьте строки и нажмите «Сохранить как новую версию».';
+        var rs=ov.querySelector('#edReason'); if(rs && !rs.value) rs.value='подгонка итога до '+money(target)+' ₸';
+      };
+      ov.querySelector('#edFit').addEventListener('keydown',function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); ov.querySelector('#edFitGo').click(); } });
       ov.querySelector('#edCancel').onclick=function(){ ov.remove(); };
       ov.querySelector('#edSave').onclick=function(){
         var btn=this; btn.disabled=true; btn.textContent='Сохраняю…';
