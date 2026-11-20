@@ -599,7 +599,7 @@
         if(has){
           var R=j.rights||{}, full=j.total>0&&j.rest<=0.5, pct=j.total>0?Math.min(full?100:99,Math.round(j.paidSum/j.total*100)):0;
           steps=[
-            {k:'invoiceSent', t:'Счёт выслан', on:j.invoiceSent, d:j.invoiceSent?(who(j.sentInfo)||'отмечено'):'ещё не выслан', can:R.mark, btn:j.invoiceSent?'':'Счёт на оплату'},
+            {k:'invoiceSent', t:'Счёт выслан', on:j.invoiceSent, d:j.invoiceSent?(who(j.sentInfo)||'отмечено'):'ещё не выслан', can:R.mark, btn:j.invoiceSent?'':'Отметить'},
             {k:'pay', t:full?'Оплачено 100%':(j.paidSum>0?'Оплата '+pct+'%':(j.legacyPaid?'Оплачен (без суммы)':'Оплата')), on:full, part:!full&&(j.paidSum>0||j.pendingSum>0||j.legacyPaid),
               d:j.total>0?(full?money(j.paidSum)+' ₸':(j.paidSum>0?money(j.paidSum)+' из '+money(j.total)+' ₸ · остаток '+money(j.rest)+' ₸':(j.legacyPaid?'отмечен раньше, не подтверждён':'не оплачено · '+money(j.total)+' ₸'))+(j.pendingSum>0?' · ждёт подтверждения '+money(j.pendingSum)+' ₸':'')):'нет расчёта',
               can:j.total>0&&(R.pay||R.mark), why:'У вас нет права вносить оплату', bar:(!full&&j.paidSum>0)?pct:null, btn:full?'':(R.pay?'Внести':'Внести на подтверждение')},
@@ -629,7 +629,6 @@
             var k=el.getAttribute('data-k');
             if(k==='rej'||k==='back'){ var x=r; Promise.resolve(flush()).then(function(){ closed=true; clearInterval(stTimer); document.removeEventListener('keydown',onKey); host.innerHTML=''; if(k==='rej') refuse(x); else unrefuse(x); }); return; }
             if(k==='pay'){ t.modal({ url:'./pay-modal.html?t='+Date.now(), title:'Оплата заказа'+(r.order&&r.order.number?(' №'+r.order.number):''), accentColor:'#1f6ce8', height:640, args:{ cardId:r.trello_card_id, title:String(r.title||'').slice(0,60) } }); return; }
-            if(k==='invoiceSent'){ changed=true; t.modal({ url:'./invoice-modal.html?t='+Date.now(), title:'Счёт на оплату', accentColor:'#1f6ce8', fullscreen:true, args:{ cardId:r.trello_card_id, boardId:'' } }); return; }
             var st=steps.filter(function(x){return x.k===k;})[0], nv=!st.on;
             var q=nv?({invoiceSent:'Отметить, что счёт выслан клиенту?',delivered:'Отметить заказ сданным клиенту?',actSigned:'Отметить, что акт подписан?'})[k]
                     :({invoiceSent:'Снять отметку «счёт выслан»?',delivered:'Снять отметку «сдали»? Начисления по заказу могут измениться.',actSigned:'Снять отметку «акт»?'})[k];
