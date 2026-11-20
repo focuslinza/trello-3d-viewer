@@ -25,6 +25,7 @@
     .kpi .v{font-size:24px;font-weight:800;margin-top:4px}
     .kpi.green .v{color:var(--green)} .kpi.red .v{color:var(--red)} .kpi.amber .v{color:var(--amber)}
     .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    .attn{position:absolute;top:-7px;right:-7px;min-width:20px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:10px;background:#e5372b;color:#fff;font-size:12px;font-weight:700;line-height:20px;text-align:center;box-shadow:0 0 0 2px #fff,0 1px 3px rgba(0,0,0,.35);pointer-events:none}
     .tab{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;color:var(--txt)}
     .tab.active{border-color:var(--accent);background:#2b3a63;color:#fff}
     table{width:100%;border-collapse:collapse;margin-top:4px}
@@ -1157,14 +1158,17 @@
     var fn=el.__msOpen; if(fn) fn.call(el);
   }
 
-  // число предложений ИИ, ждущих решения — на вкладке «Настройки»
+  // красный кружок с числом на правом верхнем углу вкладки «Настройки»: предложения ИИ, ждущие «Да/Нет», + ошибки «Здоровья системы»
+  // (решение Асхата, 20.11.2026: уведомление стоит на том разделе, к которому относится)
   function aiBadge(){
     var t=document.getElementById('settingsBtn'); if(!t) return;
     var tok=''; try{ tok=localStorage.getItem('ms_board_token')||''; }catch(e){}
-    fetch(WORKER+'/ai-proposals',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminToken: tok }) })
+    fetch(WORKER+'/attention',{ headers:{'X-MS-Token': tok} })
       .then(function(r){ return r.json(); }).then(function(j){
-        var n=((j&&j.items)||[]).filter(function(p){ return p.status==='pending'; }).length;
-        t.textContent=n?('Настройки 🤖'+n):'Настройки';
+        var n=(j&&+j.n)||0, d=t.querySelector('.attn');
+        if(!n){ if(d) d.remove(); t.title='Своя доска, здоровье системы, резервные копии'; return; }
+        if(!d){ d=document.createElement('span'); d.className='attn'; t.style.position='relative'; t.style.overflow='visible'; t.appendChild(d); }
+        d.textContent=n>99?'99+':String(n); t.title=(j.tip||'')+'\nОткройте «Настройки» → «Здоровье системы».';
       }).catch(function(){});
   }
   setTimeout(aiBadge, 1500);
