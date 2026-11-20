@@ -98,6 +98,8 @@
       <!-- «Цели» убраны (решение Асхата, 11.2026) -->
       <div class="tab" id="goalsBtn" data-sec="1" style="display:none">Цели</div>
       <div class="tab" id="settingsBtn" data-sec="1" title="Своя доска, здоровье системы, резервные копии">Настройки</div>
+      <!-- «Правила» — все автоматические правила системы одним списком (решение Асхата, 20.11.2026) -->
+      <div class="tab" id="rulesBtn" data-sec="1" title="Все автоматические правила системы: сияние карточек, оплата, продажи. Сроки и пороги можно менять">Правила</div>
       <!-- «Доступ» и «Заявки» перенесены сюда из шапки своей доски (решение Асхата, 15.11.2026) -->
       <div class="tab" id="accessBtn" data-sec="1" style="display:none" title="Перенесено в «Должности»">Доступ</div>
       <div class="tab" id="reqBtn" data-sec="1" style="display:none" title="Перенесено в «Сотрудники»">Заявки</div>
@@ -1231,6 +1233,65 @@
     var first=TABS.filter(function(x){ return x.style.display!=='none'; })[0];
     if(first) openTab(first);
   }
+  // ПРАВИЛА — список всех автоматических правил по категориям; сроки и пороги меняет учредитель
+  document.getElementById('rulesBtn').onclick=function(){
+    var old=document.getElementById('rlOverlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='rlOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:var(--bg,#1d2125);z-index:100;overflow:auto;color:var(--txt)';
+    ov.innerHTML='<div id="rlBody" style="max-width:980px;margin:0 auto;padding:16px">Загружаю…</div>';
+    document.body.appendChild(ov);
+    var tok=''; try{ tok=localStorage.getItem('ms_board_token')||''; }catch(e){}
+    function esc(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function draw(j){
+      var box=document.getElementById('rlBody'); if(!box) return;
+      if(!j||j.error){ box.innerHTML='<div class="sec" style="color:var(--red)">'+esc((j&&j.error)||'Не удалось загрузить правила')+'</div>'; return; }
+      var ed=!!j.canEdit, cats=[], by={};
+      (j.rules||[]).forEach(function(r){ if(!by[r.cat]){ by[r.cat]={subs:[],m:{}}; cats.push(r.cat); } var c=by[r.cat]; if(!c.m[r.sub]){ c.m[r.sub]=[]; c.subs.push(r.sub); } c.m[r.sub].push(r); });
+      var h='<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px"><div style="font-weight:700;font-size:17px">Правила системы</div>'+
+        '<div class="muted small" style="flex:1">'+(ed?'Срок или порог можно изменить — поменяйте значение и нажмите «Сохранить». Изменение действует сразу для всех.':'Менять сроки и пороги может только учредитель.')+'</div>'+
+        '<input id="rlFind" type="search" placeholder="поиск по правилам" style="padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);color:var(--txt);font-size:13px;width:200px"></div>';
+      cats.forEach(function(cn){
+        h+='<div class="sec rl-cat"><div style="font-weight:700;font-size:15px;margin-bottom:6px">'+esc(cn)+'</div>';
+        by[cn].subs.forEach(function(sn){
+          h+='<div class="rl-sub"><div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 2px">'+esc(sn)+'</div>';
+          by[cn].m[sn].forEach(function(r){
+            var on=true, ctl='', note='';
+            (r.p||[]).forEach(function(q){
+              var dis=ed?'':' disabled';
+              if(q.t==='on'){ on=(+q.v===1); ctl+='<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" data-k="'+q.k+'"'+(on?' checked':'')+dis+'>вкл.</label>'; }
+              else if(q.t==='unit'){ ctl+='<select data-k="'+q.k+'"'+dis+' style="padding:5px 6px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--txt);font-size:13px"><option value="h"'+(q.v==='h'?' selected':'')+'>часов</option><option value="d"'+(q.v!=='h'?' selected':'')+'>рабочих дней</option></select>'; }
+              else { ctl+='<input type="number" min="1" step="'+(q.t==='num'?'0.5':'1')+'" data-k="'+q.k+'" value="'+esc(q.v)+'"'+dis+' title="'+esc(q.label)+'" style="width:74px;padding:5px 6px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--txt);font-size:13px;text-align:right">'+(q.t==='pct'?'<span style="font-size:13px">%</span>':q.t==='days'?'<span style="font-size:13px">дней</span>':''); }
+              if(q.changed){ var d=''; try{ d=q.at?new Date(q.at).toLocaleDateString('ru-RU'):''; }catch(e){}
+                note='изменено'+(q.by?': '+esc(q.by):'')+(d?', '+d:'')+' · было '+(q.t==='on'?(+q.def===1?'вкл.':'выкл.'):q.t==='unit'?(q.def==='h'?'часы':'раб. дни'):esc(q.def)+(q.t==='pct'?' %':'')); }
+            });
+            h+='<div class="rl-row" data-id="'+esc(r.id)+'" style="display:flex;gap:14px;align-items:center;padding:9px 0;border-top:1px solid var(--line);'+(on?'':'opacity:.55')+'">'+
+              '<div style="flex:1;min-width:0;font-size:13.5px;line-height:1.4">'+esc(r.text)+(note?'<div class="small" style="color:var(--amber);margin-top:2px">'+note+(ed?' · <a href="#" class="rl-reset" style="color:var(--accent)">вернуть как было</a>':'')+'</div>':'')+'</div>'+
+              (ctl?'<div class="rl-ctl" style="display:flex;gap:8px;align-items:center;flex:0 0 auto">'+ctl+(ed?'<button type="button" class="btn rl-save" style="display:none;padding:5px 10px">Сохранить</button>':'')+'</div>':'<div class="muted small" style="flex:0 0 auto">без настроек</div>')+'</div>';
+          });
+          h+='</div>';
+        });
+        h+='</div>';
+      });
+      box.innerHTML=h;
+      var fi=document.getElementById('rlFind');
+      fi.oninput=function(){ var v=fi.value.trim().toLowerCase();
+        [].forEach.call(box.querySelectorAll('.rl-row'),function(x){ x.style.display=(!v||x.textContent.toLowerCase().indexOf(v)>=0)?'flex':'none'; });
+        [].forEach.call(box.querySelectorAll('.rl-sub,.rl-cat'),function(x){ x.style.display=[].some.call(x.querySelectorAll('.rl-row'),function(y){ return y.style.display!=='none'; })?'':'none'; }); };
+      if(!ed) return;
+      [].forEach.call(box.querySelectorAll('.rl-row'),function(row){
+        var sv=row.querySelector('.rl-save'), ins=row.querySelectorAll('[data-k]');
+        [].forEach.call(ins,function(i){ var f=function(){ if(sv) sv.style.display=''; }; i.addEventListener('input',f); i.addEventListener('change',f); });
+        function send(vals){ if(sv) sv.disabled=true;
+          fetch(WORKER+'/rules-save',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminToken: tok, values: vals }) })
+            .then(function(r){ return r.json(); }).then(function(j2){ if(j2&&j2.error){ if(sv) sv.disabled=false; alert(j2.error); return; } draw(j2); })
+            .catch(function(e){ if(sv) sv.disabled=false; alert('Нет связи: '+(e&&e.message||e)); }); }
+        if(sv) sv.onclick=function(){ var vals={}; [].forEach.call(ins,function(i){ vals[i.getAttribute('data-k')]=i.type==='checkbox'?(i.checked?1:0):i.value; }); send(vals); };
+        var rs=row.querySelector('.rl-reset'); if(rs) rs.onclick=function(ev){ ev.preventDefault(); var vals={}; [].forEach.call(ins,function(i){ vals[i.getAttribute('data-k')]=null; }); send(vals); };
+      });
+    }
+    fetch(WORKER+'/rules',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ adminToken: tok }) })
+      .then(function(r){ return r.json(); }).then(draw).catch(function(e){ draw({ error:'Нет связи: '+(e&&e.message||e) }); });
+  };
   // ТАБЕЛЬ — внутри панели (решение Асхата, 11.2026: убран из шапки доски у руководства)
   window.__MS_T = t;
   document.getElementById('tabelBtn').onclick=function(){
