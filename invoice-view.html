@@ -237,7 +237,7 @@
           }
           if(field==='paid' && window.openPayDialog){
             this.classList.remove('busy');
-            openPayDialog({ cardId:cardId, title:(o.number?'№'+o.number+' ':'')+String(o.name||'').slice(0,40), onDone:function(s){ o.paid=!!s.paidFlag; render(); loadPayments&&loadPayments(); if(CUR) loadPaySum(CUR.number); } });
+            openPayDialog({ cardId:cardId, title:(o.number?'№'+o.number+' ':'')+String(o.name||'').slice(0,40), onDone:function(s){ o.paid=!!s.paidFlag; render(); if(CUR) loadPaySum(CUR.number); loadPayments&&loadPayments(); if(CUR) loadPaySum(CUR.number); } });
             return;
           }
           // те же вызовы, что во вкладке «Заказы»: «оплачен» идёт через /calc-paid
