@@ -1212,7 +1212,7 @@
       if(!j || j.isFounder || !j.dashTabs) return;
       var d=j.dashTabs, any=Object.keys(d).some(function(k){ return d[k]; });
       if(!any) return;
-      var MAP={ fin:'financeBtn', prices:'pricingBtn', positions:'positionsBtn', staff:'workers', tabel:'tabelBtn', settings:'settingsBtn' };
+      var MAP={ fin:'financeBtn', prices:'pricingBtn', positions:'positionsBtn', staff:'workers', tabel:'tabelBtn', settings:'settingsBtn', rules:'rulesBtn' };
       Object.keys(MAP).forEach(function(k){
         if(d[k]) return;
         var el=document.getElementById(MAP[k]); if(el){ el.style.display='none'; el.__msDenied=1; }
