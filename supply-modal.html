@@ -208,6 +208,7 @@
           sub.push(esc((r.createdAt||'').slice(0,10)));
           h+='<div class="sub">'+sub.join(' · ')+'</div>';
           if(r.comment) h+='<div class="sub">'+esc(r.comment)+'</div>';
+          if(r.comments) h+='<div class="sub" title="Комментарии в заявке">💬 '+r.comments+'</div>';
           h+='<div class="row2"><span></span><span>';
           if(canMove){
             if(ci>0) h+='<button class="mv" data-mv="'+r.id+'" data-to="'+SUP_COLS[ci-1].key+'" title="В колонку «'+SUP_COLS[ci-1].title+'»">‹</button> ';
@@ -428,6 +429,9 @@
       if(r.note) h+='<span class="muted">Ответ снабжения: '+esc(r.note)+'</span>';
       h+='</div><div class="thumbs" id="supThumbs"></div>';
       h+=filePickHtml('supAddFile','Добавить фото');
+      h+='<div class="fld"><label>Переписка по заявке</label><div id="supCmts" style="max-height:220px;overflow:auto;font-size:13px;line-height:1.5"><span class="muted">загрузка…</span></div>'+
+         '<div style="display:flex;gap:8px;margin-top:6px"><input type="text" id="supCmtText" placeholder="Написать комментарий от своего имени…" style="flex:1" maxlength="2000">'+
+         '<button class="btn" id="supCmtSend" type="button">Отправить</button></div></div>';
       if(canMng){
         h+='<div class="fld"><label>Заметка снабжения (где купили, цена / причина отказа)</label>'+
            '<div style="display:flex;gap:8px"><input type="text" id="supNote" value="'+esc(r.note||'')+'" style="flex:1">'+
@@ -457,6 +461,35 @@
         uploadFiles(id, files, null).then(function(){ openSupCard(id); loadAll(); })
           .catch(function(e){ alert('Файл не добавился: '+(e&&e.message||e)); });
       });
+      // переписка: каждый пишет от своего имени
+      function drawCmts(j){
+        var el=document.getElementById('supCmts'); if(!el) return;
+        var list=(j&&j.comments)||[]; r.comments=list.length;
+        el.innerHTML = list.length ? list.map(function(c){
+          var mine = j.founder || (j.me && String(j.me)===String(c.byId));
+          return '<div style="padding:5px 0;border-bottom:1px solid var(--line)"><b>'+esc(c.by||'—')+'</b> <span class="muted" style="font-size:11.5px">'+esc(cmtTime(c.at))+'</span>'+
+            (mine?' <a href="#" class="muted" data-cdel="'+c.id+'" title="Удалить комментарий" style="font-size:11.5px;text-decoration:none">✕</a>':'')+
+            '<div style="white-space:pre-wrap;word-break:break-word">'+esc(c.text)+'</div></div>';
+        }).join('') : '<span class="muted">Комментариев пока нет.</span>';
+        el.scrollTop=el.scrollHeight;
+        Array.prototype.forEach.call(el.querySelectorAll('[data-cdel]'),function(a){ a.onclick=function(e){ e.preventDefault();
+          if(!confirm('Удалить комментарий?')) return;
+          cmtPost({id:id,del:+this.getAttribute('data-cdel')}); }; });
+      }
+      function cmtTime(at){ var t=Date.parse(String(at||'').replace(' ','T')+'Z'); if(isNaN(t)) return String(at||'').slice(0,16);
+        var d=new Date(t), p=function(n){return (n<10?'0':'')+n;}; return p(d.getDate())+'.'+p(d.getMonth()+1)+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+      function cmtPost(body){
+        return fetch(WORKER+'/supply-comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+          .then(function(x){return x.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил'); j.me=CMT_ME.me; j.founder=CMT_ME.founder; drawCmts(j); })
+          .catch(function(e){ alert('Не получилось: '+(e&&e.message||e)); });
+      }
+      var CMT_ME={me:'',founder:false};
+      fetch(WORKER+'/supply-comments?id='+id).then(function(x){return x.json();}).then(function(j){ CMT_ME={me:(j&&j.me)||'',founder:!!(j&&j.founder)}; drawCmts(j||{}); })
+        .catch(function(){ var el=document.getElementById('supCmts'); if(el) el.innerHTML='<span class="muted">Не удалось загрузить переписку.</span>'; });
+      var cs=document.getElementById('supCmtSend'), ct=document.getElementById('supCmtText');
+      function cmtSend(){ var t=ct.value.trim(); if(!t) return; cs.disabled=true;
+        cmtPost({id:id,text:t,byName:ME.name}).then(function(){ cs.disabled=false; if(document.getElementById('supCmtText')) { ct.value=''; ct.focus(); } }); }
+      cs.onclick=cmtSend; ct.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); cmtSend(); } };
       var ns=document.getElementById('supNoteSave');
       if(ns) ns.onclick=function(){
         fetch(WORKER+'/supply-set',{method:'POST',headers:{'Content-Type':'application/json'},
