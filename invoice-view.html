@@ -407,6 +407,7 @@
       var items=(parse(CUR.items_json,[])||[]).map(function(x){ return Object.assign({},x); });
       var h='<div style="font-weight:700;font-size:15px;margin-bottom:6px">Изменить счёт №'+esc(CUR.number)+' — номер останется тем же</div>'+
         '<table style="width:100%"><thead><tr><th>Наименование</th><th style="width:80px">Кол-во</th><th style="width:110px">Цена</th><th style="width:110px">Сумма</th><th></th></tr></thead><tbody id="edRows"></tbody></table>'+
+        '<div style="margin:8px 0"><button class="btn" id="edAdd" type="button">+ Добавить заказ этого заказчика</button><div id="edAddBox" style="display:none;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-height:240px;overflow:auto"></div></div>'+
         '<div style="margin:10px 0;padding:8px 10px;border:1px dashed var(--line);border-radius:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
           '<b style="font-size:13px">Подогнать итог счёта до</b><input id="edFit" type="number" min="1" step="any" placeholder="сумма" style="width:140px"> <span>₸</span>'+
           '<button class="btn" id="edFitGo" type="button">Подогнать</button>'+
@@ -431,7 +432,7 @@
         [].forEach.call(ov.querySelectorAll('.edN'),function(e){ e.oninput=function(){ items[+this.dataset.i].name=this.value; }; });
         [].forEach.call(ov.querySelectorAll('.edQ'),function(e){ e.onchange=function(){ items[+this.dataset.i].qty=+this.value||0; draw(); }; });
         [].forEach.call(ov.querySelectorAll('.edP'),function(e){ e.onchange=function(){ items[+this.dataset.i].price=+this.value||0; draw(); }; });
-        [].forEach.call(ov.querySelectorAll('.edDel'),function(e){ e.onclick=function(){ if(items.length<2){ alert('В счёте должна остаться хотя бы одна строка. Чтобы отменить счёт целиком — «Аннулировать».'); return; } items.splice(+this.dataset.i,1); draw(); }; });
+        [].forEach.call(ov.querySelectorAll('.edDel'),function(e){ e.onclick=function(){ if(items.length<2){ alert('В счёте должна остаться хотя бы одна строка. Чтобы отменить счёт целиком — «Аннулировать».'); return; } items.splice(+this.dataset.i,1); draw(); if(CAND && ov.querySelector('#edAddBox').style.display!=='none') drawCand(); }; });
       }
       draw();
       // ПОДГОНКА ИТОГА (решение Асхата, 20.11.2026): вводим нужную сумму счёта — цены всех строк меняются пропорционально,
@@ -459,6 +460,38 @@
         var rs=ov.querySelector('#edReason'); if(rs && !rs.value) rs.value='подгонка итога до '+money(target)+' ₸';
       };
       ov.querySelector('#edFit').addEventListener('keydown',function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); ov.querySelector('#edFitGo').click(); } });
+      // ДОБАВИТЬ ЗАКАЗ ТОГО ЖЕ ЗАКАЗЧИКА (решение Асхата, 23.11.2026)
+      var CAND=null;
+      function drawCand(){
+        var box=ov.querySelector('#edAddBox'); if(!CAND) return;
+        var inInv={}; items.forEach(function(it){ if(it.cardId) inInv[String(it.cardId)]=1; });
+        var list=(CAND.orders||[]).filter(function(o){ return !inInv[o.cardId]; });
+        if(!list.length){ box.innerHTML='<span class="muted">'+esc(CAND.note||('У заказчика'+(CAND.company?' «'+CAND.company+'»':'')+' нет других заказов с расчётом, которые можно добавить.'))+'</span>'; return; }
+        box.innerHTML='<div class="muted" style="font-size:12px;margin-bottom:4px">Заказы заказчика'+(CAND.company?' «'+esc(CAND.company)+'»':'')+'. Цена — как при выставлении счёта, её можно поправить в строке.</div>'+
+          list.map(function(o){
+            return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)">'+
+              '<span style="flex:1;min-width:0"><b>№'+esc(o.number)+'</b> '+esc(o.name)+(o.list?' <span class="muted" style="font-size:11.5px">· '+esc(o.list)+'</span>':'')+
+              (o.busy?'<br><span style="color:var(--red,#d33a2c);font-size:11.5px">уже в счёте №'+esc(o.busy)+' — сначала уберите его оттуда</span>':'')+'</span>'+
+              '<span style="white-space:nowrap">'+money(o.price)+' ₸</span>'+
+              (o.busy?'':'<button class="btn edAddGo" data-c="'+esc(o.cardId)+'" type="button" style="padding:2px 10px">Добавить</button>')+'</div>';
+          }).join('');
+        [].forEach.call(box.querySelectorAll('.edAddGo'),function(bn){ bn.onclick=function(){
+          var o=(CAND.orders||[]).filter(function(x){ return x.cardId===bn.dataset.c; })[0]; if(!o) return;
+          items.push({ code:o.number||'', name:o.name, qty:1, unit:'Услуга', price:o.price, cardId:o.cardId });
+          var rs=ov.querySelector('#edReason'); if(rs && (!rs.value || /^добавлен/.test(rs.value))) rs.value=(rs.value?rs.value+', ':'добавлен заказ ')+'№'+o.number;
+          draw(); drawCand();
+        }; });
+      }
+      ov.querySelector('#edAdd').onclick=function(){
+        var box=ov.querySelector('#edAddBox');
+        if(box.style.display!=='none'){ box.style.display='none'; return; }
+        box.style.display='block';
+        if(CAND){ drawCand(); return; }
+        box.innerHTML='<span class="muted">загрузка…</span>';
+        fetch(WORKER+'/invoice-candidates?id='+CUR.id).then(function(r){return r.json();}).then(function(j){
+          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил'); CAND=j; drawCand();
+        }).catch(function(e){ box.innerHTML='<span style="color:var(--red,#d33a2c)">Не удалось загрузить заказы: '+esc(e&&e.message||e)+'</span>'; });
+      };
       ov.querySelector('#edCancel').onclick=function(){ ov.remove(); };
       ov.querySelector('#edSave').onclick=function(){
         var btn=this; btn.disabled=true; btn.textContent='Сохраняю…';
