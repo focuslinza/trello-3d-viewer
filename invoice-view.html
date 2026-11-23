@@ -496,7 +496,7 @@
       ov.querySelector('#edSave').onclick=function(){
         var btn=this; btn.disabled=true; btn.textContent='Сохраняю…';
         postJ('/invoice-revise',{ id:CUR.id, items:items, reason:ov.querySelector('#edReason').value||'', byName:(Q.get('by')||'') })
-          .then(function(j){ ov.remove(); alert('Счёт №'+j.number+' исправлен (версия '+j.version+'), итог '+money(j.total)+' ₸.\nСкачайте новый PDF кнопкой «Скачать PDF».'); reloadAll(j.number); })
+          .then(function(j){ ov.remove(); alert('Счёт №'+j.number+' исправлен (версия '+j.version+'), итог '+money(j.total)+' ₸.'+(j.rebalanced?'\nВнесённая по счёту оплата заново поделена между заказами счёта.':'')+'\nСкачайте новый PDF кнопкой «Скачать PDF».'); reloadAll(j.number); })
           .catch(function(e){ btn.disabled=false; btn.textContent='Сохранить как новую версию'; alert('Не удалось: '+(e&&e.message||e)); });
       };
     };
