@@ -201,6 +201,7 @@
     });
   }
   function render(){
+    window.__rendered=true;   // размер окна сообщаем доске только когда список уже нарисован
     var h='<div class="sec"><h3>Счета, в которые входит этот заказ</h3>';
     if(!ROWS.length){
       h+='<div class="muted">По этому заказу счета ещё не выставлялись. Нажмите «Счёт на оплату» в карточке, скачайте PDF — и счёт появится здесь автоматически.</div>';
@@ -304,6 +305,7 @@
     var last='';
     function fit(){
       var w=document.querySelector('.wrap'); if(!w) return;
+      if(!window.__rendered) return;
       var eh=document.getElementById('edHost');
       var big=!!((eh&&eh.firstChild)||document.querySelector('.pdl-ov'));
       var msg=big?{ms:'fit',reset:1}:{ms:'fit',w:932,h:Math.ceil(w.getBoundingClientRect().height)+2};
