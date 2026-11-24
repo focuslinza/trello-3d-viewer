@@ -193,9 +193,11 @@
     ROWS.forEach(function(r,i){
       fetch(WORKER+'/invoice-payment?number='+encodeURIComponent(r.number)+(cardId?'&cardId='+encodeURIComponent(cardId):''))
         .then(function(x){ return x.json(); })
-        .then(function(j){ r.pay=(j&&j.ok)?{ total:j.total, paidSum:j.paidSum, pendingSum:j.pendingSum, rest:j.rest }:{ err:1 }; })
+        .then(function(j){ r.pay=(j&&j.ok)?{ total:j.total, paidSum:j.paidSum, pendingSum:j.pendingSum, rest:j.rest }:{ err:1 }; if(j&&j.ok&&j.canEdit===false){ r.noEdit=j.editWhy||'Изменить счёт нельзя'; } else delete r.noEdit; })
         .catch(function(){ r.pay={ err:1 }; })
         .then(function(){ var el=document.getElementById('invPay'+i); if(el && ROWS[i]===r) el.innerHTML=payChip(r.pay);
+          // заказ в производстве — счёт меняет только учредитель (решение Асхата, 24.11.2026): остальным кнопка «Изменить» не показывается
+          var eb=document.querySelector('.ed[data-i="'+i+'"]'); if(eb && ROWS[i]===r){ if(r.noEdit){ eb.style.display='none'; eb.title=r.noEdit; } else eb.style.display=''; }
           // по счёту внесена оплата — удалять его нельзя (решение Асхата, 24.11.2026)
           if(r.pay && (+r.pay.paidSum>0 || +r.pay.pendingSum>0)){ var d=document.querySelector('.del[data-i="'+i+'"]'); if(d){ var sp=d.previousElementSibling; d.remove(); if(sp && sp.className==='sp') sp.remove(); } } });
     });

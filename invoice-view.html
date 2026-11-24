@@ -154,6 +154,8 @@
       var arch=(+r.archived===1);
       ['invEdit','invSplit','invAnnul','invResid'].forEach(function(id){ document.getElementById(id).style.display=arch?'none':''; });
       if(FROM_CARD) document.getElementById('invResid').style.display='none';
+      // заказ в производстве — счёт меняет только учредитель (решение Асхата, 24.11.2026)
+      var _ps=PSUM[String(CUR.number)]; if(_ps && _ps.canEdit===false){ ['invEdit','invSplit'].forEach(function(id){ var e=document.getElementById(id); e.style.display='none'; e.title=_ps.editWhy||''; }); }
       // из «Счета по заказу» кнопка «Изменить» ведёт сразу в окно правки, без лишнего шага (решение Асхата, 24.11.2026)
       if(Q.get('edit')==='1' && !window.__autoEdit){ window.__autoEdit=true; var eb=document.getElementById('invEdit'); if(!arch&&eb&&eb.style.display!=='none'&&!eb.disabled) eb.click(); else eoOff(); }
       document.getElementById('invPay').style.display=(arch||!invCardIds(r).length)?'none':'';
