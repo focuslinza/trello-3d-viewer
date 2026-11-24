@@ -44,7 +44,9 @@
     .btn.green{background:var(--green)}
     .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
     .btn:disabled{opacity:.5;cursor:not-allowed}
-    .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:nowrap}
+    .bar .btn{white-space:nowrap}
+    @media (max-width:760px){ .bar{flex-wrap:wrap} .bar>div:last-child{flex-wrap:wrap!important;margin-left:0!important} }
     .warnbox{background:var(--warn);border:1px solid #7a5a32;border-radius:8px;padding:10px 12px;color:#f0d9b5;margin-top:8px}
     .qty{width:70px}
     .small{font-size:12px}
@@ -69,15 +71,13 @@
 
   <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
   <div class="bar">
-    <div style="display:flex;gap:14px;align-items:center">
-      <div class="tot" id="grand">—</div>
-      <button class="btn" id="pdfList" type="button" style="background:#0c66e4;border-color:#0c66e4;color:#fff" title="Ранее выставленные счета по этому заказу — просмотр и скачивание PDF">Счета по заказу · изменить</button>
-      <button class="btn" id="kpList" type="button" style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff" title="Коммерческие предложения по выбранным заказам: скачать, удалить, история">📄 КП по заказу</button>
-    </div>
-    <div style="display:flex;gap:10px">
-      <button class="btn" id="kpGen" type="button" disabled style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff;font-weight:700" title="Коммерческое предложение (PDF) по выбранным заказам">📄 Создать КП</button>
+    <div class="tot" id="grand">—</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:nowrap;margin-left:auto">
       <button class="btn green" id="gen" type="button" disabled>🧾 Создать счёт</button>
-      <button class="btn ghost" id="close" type="button">Закрыть</button>
+      <button class="btn" id="pdfList" type="button" style="background:#0c66e4;border-color:#0c66e4;color:#fff" title="Ранее выставленные счета по этому заказу — просмотр и скачивание PDF">Счета по заказу</button>
+      <span style="width:1px;align-self:stretch;background:var(--line);margin:0 4px"></span>
+      <button class="btn" id="kpGen" type="button" disabled style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff;font-weight:700" title="Коммерческое предложение (PDF) по выбранным заказам">📄 Создать КП</button>
+      <button class="btn" id="kpList" type="button" style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff" title="Коммерческие предложения по выбранным заказам: скачать, удалить, история">📄 КП по заказу</button>
     </div>
   </div>
 
@@ -1369,7 +1369,6 @@
       }; });
     }).catch(function(e){ host.querySelector('#kpLb').textContent='Сеть: '+(e&&e.message||e); });
   }
-  document.getElementById('close').onclick=function(){ t.closeModal(); };
   document.getElementById('gen').onclick=generate;
   document.getElementById('kpGen').onclick=generateKp;
   document.getElementById('kpList').onclick=showKpList;
