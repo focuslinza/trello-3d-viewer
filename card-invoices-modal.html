@@ -173,7 +173,9 @@
         .then(function(x){ return x.json(); })
         .then(function(j){ r.pay=(j&&j.ok)?{ total:j.total, paidSum:j.paidSum, pendingSum:j.pendingSum, rest:j.rest }:{ err:1 }; })
         .catch(function(){ r.pay={ err:1 }; })
-        .then(function(){ var el=document.getElementById('invPay'+i); if(el && ROWS[i]===r) el.innerHTML=payChip(r.pay); });
+        .then(function(){ var el=document.getElementById('invPay'+i); if(el && ROWS[i]===r) el.innerHTML=payChip(r.pay);
+          // по счёту внесена оплата — удалять его нельзя (решение Асхата, 24.11.2026)
+          if(r.pay && (+r.pay.paidSum>0 || +r.pay.pendingSum>0)){ var d=document.querySelector('.del[data-i="'+i+'"]'); if(d){ var sp=d.previousElementSibling; d.remove(); if(sp && sp.className==='sp') sp.remove(); } } });
     });
   }
   function render(){
@@ -193,10 +195,9 @@
           '<div class="inv-act">'+
             '<button class="btn green pay" data-i="'+i+'" type="button" title="Отметить оплату заказа: сумма, дата, способ и куда">₸ Оплата</button>'+
             '<button class="btn vw" data-i="'+i+'" type="button" title="Открыть в новом окне без скачивания">Просмотр</button>'+
-            '<button class="btn ghost dl" data-i="'+i+'" type="button">⬇ PDF</button>'+
-            '<button class="btn ghost ml" data-i="'+i+'" type="button" title="Письмо в Zoho всем, кто у компании получает счета на почту; PDF приложите сами (кнопка «⬇ PDF»)">✉ Письмо</button>'+
+            '<button class="btn ghost dl" data-i="'+i+'" type="button" title="Скачать счёт в PDF">⬇ Скачать</button>'+
             '<button class="btn ghost ed" data-i="'+i+'" type="button" title="Исправить строки, разделить, выставить остаток или аннулировать — номер счёта не меняется">✎ Изменить</button>'+
-            (CAN_DEL?'<span class="sp"></span><button class="btn red del" data-i="'+i+'" type="button" title="Удалить (запись останется в истории счетов)">✕ Удалить</button>':'')+
+            ((CAN_DEL && !(r.pay && (+r.pay.paidSum>0 || +r.pay.pendingSum>0)))?'<span class="sp"></span><button class="btn red del" data-i="'+i+'" type="button" title="Удалить (запись останется в истории счетов)">✕ Удалить</button>':'')+
           '</div>'+
         '</div>';
       });
