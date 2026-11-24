@@ -371,6 +371,41 @@
   // и в счёте их «не было», хотя в базе они есть). Слияние по cardId.
   // ДЕТАЛИ ДЛЯ РЕМОНТА В СЧЁТ НА ПРОИЗВОДСТВО НЕ ПОПАДАЮТ (решение Асхата, 19.11.2026): их стоимость входит
   // в ремонт, и счёт выставляется в ремонтах. Признак — название «Для ремонта Р-…» (так их создаёт система).
+  // СВЕЖИЕ СТАТУСЫ В ОТКРЫТОМ ОКНЕ (решение Асхата, 24.11.2026): оплату или «выслан» поставили в карточке поверх этого окна —
+  // список заказов перечитывается сам: когда доска сообщает об изменении, когда закрыли окно поверх и когда вернулись в окно.
+  // Галочки и количество, которые уже выбраны, сохраняются.
+  var _rfBusy=false, _rfAt=0, _rfT=null;
+  function refreshOrders(){
+    if(_rfBusy || !ALL_ORDERS.length) return;
+    if(Date.now()-_rfAt<1500){ clearTimeout(_rfT); _rfT=setTimeout(refreshOrders,1600); return; }
+    _rfBusy=true; _rfAt=Date.now();
+    var urls=[WORKER+'/calc-list?limit=500'+'&_='+Date.now()]; if(selectedCompanyId) urls.push(WORKER+'/calc-list?companyId='+encodeURIComponent(selectedCompanyId)+'&limit=1000&_='+Date.now());
+    var pRows=Promise.all(urls.map(function(u){ return fetch(u).then(function(r){return r.json();}).then(function(j){ return (j&&j.rows)||[]; }).catch(function(){ return null; }); }));
+    var pBill=fetch(WORKER+'/invoice-list?slim=1&_='+Date.now()).then(function(r){return r.json();}).then(function(j){
+      var map={}; ((j&&j.rows)||[]).forEach(function(iv){ if(+iv.archived===1) return; var mark=String(iv.number||'');
+        try{ (JSON.parse(iv.card_ids_json)||[]).forEach(function(cid){ (map[cid]=map[cid]||[]).push(mark); }); }catch(e){}
+        try{ (JSON.parse(iv.repair_ids_json)||[]).forEach(function(rid){ var k='R'+rid; (map[k]=map[k]||[]).push(mark); }); }catch(e){} });
+      return map; }).catch(function(){ return null; });
+    Promise.all([pRows,pBill]).then(function(res){
+      var by={}; (res[0]||[]).forEach(function(rows){ (rows||[]).forEach(function(row){ by[row.id]=row; }); });
+      var changed=false;
+      ALL_ORDERS.forEach(function(o){
+        if(o.isRepair) return; var row=by[o.cardId]; if(!row) return;
+        var nv={ total:+row.total||0, bill:+row.billTotal||0, list:row.list_name||'', paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0),
+          invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, noAct:!!row.noAct, cashOnly:!!row.cashOnly, partial:!!row.partial, unconfirmed:!!row.unconfirmed,
+          paidSum:+row.paidSum||0, rest:+row.rest||0, discount:+row.discount||0 };
+        Object.keys(nv).forEach(function(k){ if(o[k]!==nv[k]){ o[k]=nv[k]; changed=true; } });
+      });
+      if(res[1]){ if(JSON.stringify(res[1])!==JSON.stringify(BILLED)){ BILLED=res[1]; changed=true; } }
+      // оплаченный заказ со счётом больше не выбирается
+      ALL_ORDERS.forEach(function(o){ if(o.checked && o.paid && !o.isRepair && (BILLED[o.cardId]||[]).length){ o.checked=false; changed=true; } });
+      if(changed){ var ae=document.activeElement, typing=ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)&&ae.type!=='checkbox'&&ae.type!=='radio';
+        if(typing){ clearTimeout(_rfT); _rfT=setTimeout(function(){ try{ render(); }catch(e){} },2500); } else { try{ render(); }catch(e){} } }
+    }).catch(function(){}).then(function(){ _rfBusy=false; });
+  }
+  window.addEventListener('message',function(ev){ var d=ev.data||{}; if(d.ms==='refresh') refreshOrders(); });
+  window.addEventListener('focus',function(){ refreshOrders(); });
+  document.addEventListener('visibilitychange',function(){ if(!document.hidden) refreshOrders(); });
   function isRepairPartName(n){ return /для\s+ремонта\s+[рp]-?\d/i.test(String(n||'')); }
   var LOADED_FOR = {};
   function loadOrdersForCompany(cid){
@@ -1166,67 +1201,62 @@
     LAST_SENT = { to: list.map(function(c){ return c.name; }).join(', '), how: 'Почта' };
     return true;
   }
+  // ОДНО ОКНО ПОСЛЕ СОЗДАНИЯ СЧЁТА (решение Асхата, 24.11.2026): раньше было два — «счёт создан» со списком заказов
+  // и отдельное «Кому отправили счёт?». Теперь всё в одном: кому (выпадающий список), как (WhatsApp / Почта / Лично / Другое)
+  // и одна кнопка «выслан» — она отмечает все заказы счёта сразу.
   function askMarkSent(number, lines, orders){
     var todo = (orders||[]).filter(function(o){ return !o.invoiceSent; });
+    var co = companyById(selectedCompanyId) || {};
+    var people = (co.contacts||[]).filter(function(c){ return c && c.name; });
+    var firstPerson = (todo.filter(function(o){ return o.personName; })[0]||{}).personName || '';
+    var def = LAST_SENT ? LAST_SENT.to : (firstPerson || (people[0]&&people[0].name) || '');
+    var known = people.some(function(c){ return c.name===def; });
+    var how = LAST_SENT ? LAST_SENT.how : 'WhatsApp';
     var h='<div id="sentOvl" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:95;display:flex;align-items:center;justify-content:center;padding:16px">'+
-      '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;max-width:560px;width:100%;padding:18px 20px">'+
-      '<div style="font-weight:700;font-size:15px;margin-bottom:8px">✅ Счёт №'+esc(number)+' создан</div>'+
+      '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;max-width:640px;width:100%;padding:18px 20px">'+
+      '<div style="font-weight:700;font-size:15px;margin-bottom:6px">✅ Счёт №'+esc(number)+' создан</div>'+
       '<div class="small muted" style="margin-bottom:12px;white-space:pre-line">'+esc(lines.join('\n'))+'</div>';
     if(todo.length){
-      h+='<div style="border-top:1px solid var(--line);padding-top:12px">'+
-        '<div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:#3a2e14;color:#f5cd47;font-size:13px">⚠ Отправьте счёт клиенту <b>сейчас</b> и отметьте «выслан». Неотправленный счёт легко забыть.</div>'+
-        '<div style="margin-bottom:8px">Отправили? Нажмите <span class="chip" style="cursor:default">выслан</span>'+(todo.length>1?' — у всех заказов сразу или у каждого отдельно:':':')+'</div>'+
-        '<table style="margin:0"><tbody>'+todo.map(function(o){
-          return '<tr><td class="small">'+esc(o.number||'—')+'</td><td class="small">'+esc(String(o.name||'').slice(0,70))+'</td>'+
-            '<td style="text-align:right"><span class="chip sentChip" data-id="'+esc(o.cardId)+'" title="Счёт отправлен клиенту">выслан</span></td></tr>';
-        }).join('')+'</tbody></table>'+
-        '<div style="display:flex;gap:10px;justify-content:flex-end;align-items:center;margin-top:12px">'+
+      h+='<div class="small muted" style="margin-bottom:6px">Кому и как отправили счёт</div>'+
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+          '<select id="rcpSel" style="flex:1 1 180px;min-width:150px;padding:8px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px">'+
+            people.map(function(c){ return '<option value="'+esc(c.name)+'"'+(c.name===def?' selected':'')+'>'+esc(c.name+(c.role?' · '+c.role:'')+(c.phone?' · '+c.phone:''))+'</option>'; }).join('')+
+            '<option value=""'+(known?'':' selected')+'>другой человек…</option></select>'+
+          '<span id="rcpHow" style="display:flex;gap:6px;flex:0 0 auto">'+SENT_HOWS.map(function(x){ return '<span class="chip'+(x===how?' on':'')+'" data-how="'+x+'">'+x+'</span>'; }).join('')+'</span>'+
+        '</div>'+
+        '<input type="text" id="rcpOther" placeholder="Имя, телефон или почта" value="'+(known?'':esc(def))+'" style="width:100%;margin-top:8px;'+(known&&people.length?'display:none':'')+'">'+
+        '<div style="display:flex;gap:10px;justify-content:flex-end;align-items:center;margin-top:14px">'+
           (invoiceMailList().length?'<button class="btn ghost" id="sentMail" type="button" title="Открыть письмо в Zoho: адресаты — все, кто у компании получает счета на почту; PDF приложите сами">✉ Письмо ('+invoiceMailList().length+')</button>':'')+
-          (todo.length>1?'<span class="chip" id="sentAll" style="font-size:13px;padding:6px 14px" title="Отметить «выслан» у всех заказов этого счёта">выслан — все '+todo.length+'</span>':'')+
-        '</div></div>';
+          '<button class="btn" id="sentAll" type="button" style="background:#1f845a;border-color:#1f845a;color:#fff;font-weight:700;padding:8px 22px" title="Отметить, что счёт отправлен клиенту'+(todo.length>1?' — у всех '+todo.length+' заказов счёта':'')+'">✓ Выслан</button>'+
+        '</div>';
     } else {
       h+='<div style="text-align:right"><button class="btn" id="sentLater" type="button">OK</button></div>';
     }
     h+='</div></div>';
     var host=document.createElement('div'); host.innerHTML=h; document.body.appendChild(host);
     function closeIt(){ host.remove(); render(); }
-    var _sl=document.getElementById('sentLater'); if(_sl) _sl.onclick=closeIt;   // «Позже» убрано (12.11.2026) — окно закрывается после «выслан»
-    var sm=document.getElementById('sentMail');
-    if(sm) sm.onclick=function(){ openInvoiceMail(number, grandTotal()); };
-    var RCP = null;
-    function recipient(){
-      if (RCP) return Promise.resolve(RCP);
-      var firstPerson = (todo.filter(function(o){ return o.personName; })[0]||{}).personName || '';
-      return askRecipient(firstPerson).then(function(r){
-        if(!r) return null;
-        RCP = r;
-        // журнал счёта: кому отправили (карточки уже в «Ждём оплату» — перенос ничего не сдвинет)
-        fetch(WORKER+'/invoice-mark-sent',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ number:String(number||''), sentTo:r.label }) }).catch(function(){});
-        return r;
-      });
-    }
-    function mark(o, chip){
-      if(o.invoiceSent){ return Promise.resolve(); }
-      if(!RCP) return recipient().then(function(r){ if(r) return mark(o, chip); });
-      chip && chip.classList.add('busy');
-      return fetch(WORKER+'/acct-set',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:o.cardId, field:'invoiceSent', value:1, why:'выслан: '+RCP.label }) })
-        .then(function(r){return r.json();}).then(function(j){
-          if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
-          o.invoiceSent=true;
-          if(chip){ chip.classList.remove('busy'); chip.classList.add('on'); chip.textContent='✓ выслан'; }
-        }).catch(function(e){ if(chip) chip.classList.remove('busy'); alert('Не удалось отметить: '+(e&&e.message||e)); });
-    }
-    [].forEach.call(host.querySelectorAll('.sentChip'), function(ch){
-      ch.onclick=function(){ var id=this.getAttribute('data-id'); var o=todo.filter(function(x){return x.cardId===id;})[0]; if(o) mark(o, this).then(function(){ if(todo.every(function(x){return x.invoiceSent;})) setTimeout(closeIt, 600); }); };
-    });
-    var all=document.getElementById('sentAll');
-    if(all) all.onclick=function(){
-      var self=this;
-      recipient().then(function(r){ if(!r) return;
-      self.classList.add('busy');
-      var chips={}; [].forEach.call(host.querySelectorAll('.sentChip'), function(c){ chips[c.getAttribute('data-id')]=c; });
-      todo.reduce(function(p,o){ return p.then(function(){ return mark(o, chips[o.cardId]); }); }, Promise.resolve())
-        .then(function(){ self.classList.remove('busy'); self.classList.add('on'); self.textContent='✓ выслан — все'; setTimeout(closeIt, 700); });
+    var _sl=host.querySelector('#sentLater'); if(_sl) _sl.onclick=closeIt;   // «Позже» нет (12.11.2026) — окно закрывается после «выслан»
+    var sm=host.querySelector('#sentMail'); if(sm) sm.onclick=function(){ openInvoiceMail(number, grandTotal()); };
+    var all=host.querySelector('#sentAll'); if(!all) return;
+    var sel=host.querySelector('#rcpSel'), oth=host.querySelector('#rcpOther');
+    sel.onchange=function(){ oth.style.display = sel.value ? 'none' : ''; if(!sel.value) oth.focus(); };
+    [].forEach.call(host.querySelectorAll('[data-how]'), function(c){ c.onclick=function(){ how=this.getAttribute('data-how'); [].forEach.call(host.querySelectorAll('[data-how]'), function(x){ x.classList.toggle('on', x===c); }); }; });
+    all.onclick=function(){
+      var to = sel.value || String(oth.value||'').trim();
+      if(!to){ oth.style.display=''; oth.focus(); oth.style.borderColor='#f28b82'; return; }
+      var label = to+' ('+how+')'; LAST_SENT={ to:to, how:how };
+      all.disabled=true; all.textContent='Отмечаю…';
+      // журнал счёта: кому отправили
+      fetch(WORKER+'/invoice-mark-sent',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ number:String(number||''), sentTo:label }) }).catch(function(){});
+      var errsM=[];
+      todo.reduce(function(p,o){ return p.then(function(){
+        if(o.invoiceSent) return;
+        return fetch(WORKER+'/acct-set',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cardId:o.cardId, field:'invoiceSent', value:1, why:'выслан: '+label }) })
+          .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил'); o.invoiceSent=true; })
+          .catch(function(e){ errsM.push('№'+(o.number||'')+': '+(e&&e.message||e)); });
+      }); }, Promise.resolve()).then(function(){
+        if(errsM.length){ all.disabled=false; all.textContent='✓ Выслан'; alert('Не удалось отметить:\n'+errsM.join('\n')); return; }
+        all.textContent='✓ Выслан'; setTimeout(closeIt, 400);
       });
     };
   }
