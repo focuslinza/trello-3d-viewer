@@ -294,7 +294,8 @@
       '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
       '<button id="edBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад к счетам заказа</button>'+
       '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт № '+esc(row.number)+'</div><span style="width:160px"></span></div>'+
-      '<iframe src="./invoice-view.html?number='+encodeURIComponent(row.number)+'&from=card&by='+encodeURIComponent(ME_NAME)+'&t='+Date.now()+'" style="flex:1;border:0;background:#1d2125"></iframe></div>';
+      '<iframe src="./invoice-view.html?number='+encodeURIComponent(row.number)+'&from=card&edit=1&by='+encodeURIComponent(ME_NAME)+'&t='+Date.now()+'" style="flex:1;border:0;background:#1d2125"></iframe></div>';
+    if(!window.__invBackOn){ window.__invBackOn=true; window.addEventListener('message',function(ev){ if(ev.data&&ev.data.ms==='invBack'){ var bk=document.getElementById('edBack'); if(bk) bk.click(); } }); }
     // после правки счёта суммы и индикатор оплаты перечитываются сразу и ещё раз через несколько секунд (24.11.2026)
     document.getElementById('edBack').onclick=function(){ host.innerHTML=''; load(); setTimeout(function(){ if(!(host&&host.firstChild)) loadPay(); },9000); };
   }

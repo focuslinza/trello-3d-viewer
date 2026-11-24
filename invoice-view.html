@@ -143,6 +143,8 @@
       var arch=(+r.archived===1);
       ['invEdit','invSplit','invAnnul','invResid'].forEach(function(id){ document.getElementById(id).style.display=arch?'none':''; });
       if(FROM_CARD) document.getElementById('invResid').style.display='none';
+      // из «Счета по заказу» кнопка «Изменить» ведёт сразу в окно правки, без лишнего шага (решение Асхата, 24.11.2026)
+      if(Q.get('edit')==='1' && !arch && !window.__autoEdit){ window.__autoEdit=true; setTimeout(function(){ var eb=document.getElementById('invEdit'); if(eb&&eb.style.display!=='none'&&!eb.disabled) eb.click(); },60); }
       document.getElementById('invPay').style.display=(arch||!invCardIds(r).length)?'none':'';
       if(!arch && invCardIds(r).length && PSUM[String(r.number)]===undefined){ PSUM[String(r.number)]=null; loadPaySum(r.number); }
       if(parse(r.items_json,[]).length<2) document.getElementById('invSplit').style.display='none';
@@ -432,11 +434,12 @@
           if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не ответил'); CAND=j; drawCand();
         }).catch(function(e){ box.innerHTML='<span style="color:var(--red,#d33a2c)">Не удалось загрузить заказы: '+esc(e&&e.message||e)+'</span>'; });
       };
-      ov.querySelector('#edCancel').onclick=function(){ ov.remove(); };
+      // правку открыли прямо из «Счета по заказу» — «Отмена» возвращает туда же, а не оставляет на счёте
+      ov.querySelector('#edCancel').onclick=function(){ ov.remove(); if(FROM_CARD && Q.get('edit')==='1' && !window.__edSaved){ try{ window.parent.postMessage({ms:'invBack'},'*'); }catch(e){} } };
       ov.querySelector('#edSave').onclick=function(){
         var btn=this; btn.disabled=true; btn.textContent='Сохраняю…';
         postJ('/invoice-revise',{ id:CUR.id, items:items, reason:ov.querySelector('#edReason').value||'', byName:(Q.get('by')||'') })
-          .then(function(j){ ov.remove(); alert('Счёт №'+j.number+' исправлен (версия '+j.version+'), итог '+money(j.total)+' ₸.'+(j.rebalanced?'\nВнесённая по счёту оплата заново поделена между заказами счёта.':'')+'\nСкачайте новый PDF кнопкой «Скачать PDF».'); reloadAll(j.number); })
+          .then(function(j){ ov.remove(); window.__edSaved=true; alert('Счёт №'+j.number+' исправлен (версия '+j.version+'), итог '+money(j.total)+' ₸.'+(j.rebalanced?'\nВнесённая по счёту оплата заново поделена между заказами счёта.':'')+'\nСкачайте новый PDF кнопкой «Скачать PDF».'); reloadAll(j.number); })
           .catch(function(e){ btn.disabled=false; btn.textContent='Сохранить как новую версию'; alert('Не удалось: '+(e&&e.message||e)); });
       };
     };
