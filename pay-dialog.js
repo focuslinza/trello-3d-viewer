@@ -142,7 +142,7 @@
       var multi = S.invoiceNumber && S.invoiceOrders > 1;
       var h = '<h3>Оплата одного заказа' + (opts.title ? ' · ' + esc(opts.title) : '') + '</h3>' +
         '<div class="sub">' + (S.invoiceNumber ? (multi ? 'Заказ входит в счёт № ' + esc(S.invoiceNumber) + ' вместе с другими (' + S.invoiceOrders + ' заказов в счёте). Здесь оплата зачтётся <b>только этому заказу</b>.'
-            : 'Счёт № ' + esc(S.invoiceNumber) + ' — в нём только этот заказ, оплата заказа и есть оплата счёта.') : 'Счёт по заказу ещё не выставлен — сумма берётся из расчёта.') + '</div>' +
+            : 'Счёт № ' + esc(S.invoiceNumber) + ' — в нём только этот заказ, оплата заказа и есть оплата счёта.') : (S.needInvoice ? '<span style="color:#f3b3b3">⛔ Счёт по заказу не выставлен. Без сохранённого счёта оплату внести нельзя — сначала выставьте счёт (карточка → «Счёт на оплату»).</span>' : 'Счёт по заказу ещё не выставлен — сумма берётся из расчёта.')) + '</div>' +
         (multi ? '<div style="margin:-4px 0 10px"><button class="b" id="pdToInv" type="button" style="border-color:#1f845a;color:#4bce97">₸ Внести оплату по всему счёту № ' + esc(S.invoiceNumber) + '</button></div>' : '') +
         '<div class="kp"><div><span>' + (S.byInvoice ? 'Сумма по счёту' : 'Сумма заказа') + '</span><b>' + money(S.total) + ' ₸</b>' + (S.byInvoice ? '<div style="font-size:11.5px;color:#9fadbc">с налогом · расчёт ' + money(S.calcTotal) + ' ₸</div>' : '') + '</div>' +
         '<div><span>Оплачено (подтв.)</span><b style="color:#4bce97">' + money(S.paidSum) + ' ₸</b>' + (S.pendingSum > 0 ? '<div style="font-size:11.5px;color:#e8c07d">+ ' + money(S.pendingSum) + ' ₸ ждёт подтв.</div>' : '') + '</div>' +
@@ -192,6 +192,13 @@
         el.style.display = el.innerHTML ? '' : 'none';
       }
       a.oninput = after; after(); a.focus(); a.select();
+      // БЕЗ СЧЁТА ОПЛАТА НЕ ВНОСИТСЯ (решение Асхата, 24.11.2026): форма видна, но выключена — понятно, чего не хватает
+      if (S.needInvoice) {
+        ['#pdA', '#pdD', '#pdN', '#pdP', '#pdOk', '#pdLegacy'].forEach(function (q) { var e = ov.querySelector(q); if (e) { e.disabled = true; e.style.opacity = '.45'; } });
+        var ms = ov.querySelector('.ms'); if (ms) { ms.style.pointerEvents = 'none'; ms.style.opacity = '.45'; }
+        var af = ov.querySelector('#pdAfter'); if (af) af.style.display = 'none';
+        var okb = ov.querySelector('#pdOk'); if (okb) okb.title = 'Сначала выставьте счёт на оплату';
+      }
       var toInv = ov.querySelector('#pdToInv');
       if (toInv) toInv.onclick = function () { close(true); window.openInvoicePay({ number: S.invoiceNumber, cardId: cardId, title: opts.title, onDone: opts.onDone, onClose: opts.onClose }); };
       [].forEach.call(ov.querySelectorAll('[data-m]'), function (el) {
