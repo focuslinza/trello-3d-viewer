@@ -140,7 +140,18 @@
     try { w.document.write('<title>Счёт № '+String(row.number||'').replace(/[<>&"]/g,'')+'</title><body style="margin:0;background:#333;color:#ccc;font-family:Arial"><div style="padding:20px">Готовлю счёт…</div></body>'); } catch(e){}
     pdfMake.createPdf(b.dd).getBlob(function(blob){
       var url=URL.createObjectURL(blob);
-      try { w.location.href=url; }
+      // просмотр и скачивание в одном окне (решение Асхата, 24.11.2026): сверху кнопка «Скачать» с нормальным именем файла
+      try {
+        var nm=String(b.fname||('Счет_'+row.number+'.pdf')).replace(/[<>&"]/g,'');
+        w.document.open();
+        w.document.write('<!doctype html><meta charset="utf-8"><title>Счёт № '+String(row.number||'').replace(/[<>&"]/g,'')+'</title>'+
+          '<body style="margin:0;background:#333;font-family:Arial,sans-serif;display:flex;flex-direction:column;height:100vh">'+
+          '<div style="flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:8px 12px;background:#22272b;color:#dfe5ec;font-size:14px">'+
+          '<b style="flex:1">Счёт № '+String(row.number||'').replace(/[<>&"]/g,'')+'</b>'+
+          '<a href="'+url+'" download="'+nm+'" style="background:#3b6cf6;color:#fff;text-decoration:none;font-weight:700;padding:7px 14px;border-radius:7px">⬇ Скачать</a></div>'+
+          '<iframe src="'+url+'" style="flex:1;border:0;width:100%;background:#fff"></iframe></body>');
+        w.document.close();
+      }
       catch(e){ try{ w.close(); }catch(_){} alert('Не удалось открыть просмотр: '+(e&&e.message||e)); }
     });
   }
@@ -205,8 +216,7 @@
           (r.sentTo?'<div class="inv-sent">✓ выслан: '+esc(r.sentTo)+(r.sentAt?' · '+esc(String(r.sentAt).slice(0,16).replace("T"," ")):'')+'</div>':'<div class="inv-unsent">не отмечен как высланный</div>')+
           '<div class="inv-act">'+
             '<button class="btn green pay" data-i="'+i+'" type="button" title="Отметить оплату заказа: сумма, дата, способ и куда">₸ Оплата</button>'+
-            '<button class="btn vw" data-i="'+i+'" type="button" title="Открыть в новом окне без скачивания">Просмотр</button>'+
-            '<button class="btn ghost dl" data-i="'+i+'" type="button" title="Скачать счёт в PDF">⬇ Скачать</button>'+
+            '<button class="btn vw" data-i="'+i+'" type="button" title="Открыть счёт в PDF — там же его можно скачать или распечатать">Просмотр</button>'+
             '<button class="btn ghost ed" data-i="'+i+'" type="button" title="Исправить строки, разделить, выставить остаток или аннулировать — номер счёта не меняется">✎ Изменить</button>'+
             '<button class="btn ghost rs" data-i="'+i+'" type="button" title="Выставить счёт на неоплаченный остаток по этому счёту — номер возьмётся из системы">🔹 Счёт на остаток</button>'+
             '<button class="btn ghost x1" data-i="'+i+'" type="button" title="Файл в формате счёта 1С — бухгалтер импортирует его в 1С:Бухгалтерию">📗 Excel для 1С</button>'+
