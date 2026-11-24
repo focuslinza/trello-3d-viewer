@@ -381,7 +381,7 @@
       var added=0;
       ((j&&j.rows)||[]).forEach(function(row){
         if(have[row.id] || isRepairPartName(row.card_name)) return;
-        ALL_ORDERS.push({ cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, list:row.list_name||'', company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
+        ALL_ORDERS.push({ cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, bill:+row.billTotal||0, engCoef:+row.engCoef||0, list:row.list_name||'', company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
           invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, noAct:!!row.noAct, cashOnly:!!row.cashOnly, partial:!!row.partial, unconfirmed:!!row.unconfirmed, paidSum:+row.paidSum||0, rest:+row.rest||0, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'', sampleOf:row.sample_card_id||'', mainOf:row.main_card_id||'' });
         added++;
       });
@@ -393,7 +393,7 @@
       return ((j&&j.rows)||[]).filter(function(row){ return !isRepairPartName(row.card_name); }).map(function(row){
         // taxIncluded: старые заказы считались С НАЛОГОМ внутри суммы — к ним
         // множитель поставщика применять нельзя, иначе налог начислится дважды
-        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, engCoef:+row.engCoef||0, list:row.list_name||'', company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
+        return { cardId:row.id, name:row.card_name||'(без названия)', number:row.card_number||'', link:null, total:+row.total||0, bill:+row.billTotal||0, engCoef:+row.engCoef||0, list:row.list_name||'', company_id:row.company_id||null, paid:(+row.paid?1:0), paid_at:row.paid_at||null, hidden:(+row.hidden?1:0), qty:1, checked:false, personName:'', taxIncluded:(+row.tax_rate>0),
           invoiceSent:!!row.invoiceSent, delivered:!!row.delivered, actSigned:!!row.actSigned, noAct:!!row.noAct, cashOnly:!!row.cashOnly, partial:!!row.partial, unconfirmed:!!row.unconfirmed, paidSum:+row.paidSum||0, rest:+row.rest||0, dateAt:row.updated_at||'', discount:+row.discount||0, cancelReason:row.cancel_reason||'', sampleOf:row.sample_card_id||'', mainOf:row.main_card_id||'' };
       });
     }).catch(function(){ return []; });
@@ -610,7 +610,10 @@
             (o.mainOf?' <span class="small" style="color:#e8c07d" title="Образец: по нему уже создан основной заказ">образец → есть основной</span>':'')+'</div></td>'+
           '<td class="num">'+(o.paid?'<span class="muted">'+(o.qty||1)+'</span>':'<input type="number" min="1" step="1" class="qty qn" data-id="'+esc(o.cardId)+'" value="'+(o.qty||1)+'">')+'</td>'+
           (ONLY_REPAIR ? '' : '<td class="small" style="white-space:nowrap">'+listChip(o.list)+'</td>')+
-          '<td class="num">'+money(o.total*((o.paid&&!needsInv(o))?1:kFor(o)))+(o.taxIncluded&&!o.paid?' <span class="muted" title="Этот заказ посчитан со включённым налогом — повторно налог не добавляется">₸*</span>':' ₸')+
+          '<td class="num">'+((!o.isRepair && (BILLED[o.cardId]||[]).length && o.bill>0)
+            ? ('<span title="Сумма по действующему счёту №'+esc((BILLED[o.cardId]||[]).join(', №'))+'">'+money(o.bill)+' ₸</span>'+
+               ((o.total>0 && (o.bill<o.total-1 || o.bill>o.total*1.17)) ? '<br><span class="small muted" style="text-decoration:line-through" title="Сумма по расчёту карточки">'+money(o.total)+' ₸</span>' : ''))
+            : money(o.total*((o.paid&&!needsInv(o))?1:kFor(o)))+(o.taxIncluded&&!o.paid?' <span class="muted" title="Этот заказ посчитан со включённым налогом — повторно налог не добавляется">₸*</span>':' ₸'))+
             ((+o.discount>0)?' <span class="small" style="color:#e8c07d" title="Уступка '+money(o.discount)+' ₸ — спеццена в расчёте; в счёте клиенту итоговая цена, скидка не показывается">−'+Math.round(o.discount/(o.total+o.discount)*100)+'%</span>':'')+'</td>'+
           '<td>'+chip(o,'invoiceSent','выслан',true,'Счёт отправлен клиенту — отмечает тот, кто отправил')+'</td>'+
           '<td>'+chip(o,'paid','оплачен',cashOk,cashOk?'Клиент заплатил наличными':'Оплату по безналу отмечает бухгалтер')+'</td>'+
