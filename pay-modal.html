@@ -6,8 +6,8 @@
   <title>Оплата заказа</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <script src="./config.js"></script>
-  <script src="./pay-dialog.js?v=20"></script>
-  <style>html,body{margin:0;background:#1d2125;color:#dbe4ec;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;min-height:100vh}</style>
+  <script src="./pay-dialog.js?v=21"></script>
+  <style>html,body{margin:0;background:#1d2125;color:#dbe4ec;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;}</style>
   <!-- ОДНО ОКНО, А НЕ «ОКНО В ОКНЕ» (решение Асхата, 19.11.2026): здесь форма оплаты занимает всё окно —
        без своего затемнения, рамки и тени (они нужны только когда форма всплывает поверх другого окна) -->
   <style>
@@ -27,6 +27,16 @@
   function done(){ if (closed) return; closed = true; setTimeout(function(){ t.closeModal(); }, 1300); }
   if (!window.openPayDialog || !cardId) { document.body.innerHTML = '<div style="padding:30px">Окно оплаты не загрузилось — закройте и откройте снова.</div>'; return; }
   window.openPayDialog({ cardId: cardId, title: title, onClose: done });
+  // ОКНО ПО РАЗМЕРУ СОДЕРЖИМОГО (решение Асхата, 24.11.2026): сообщаем доске высоту — окно без пустого места снизу
+  (function(){
+    var last=0;
+    function fit(){ var d=document.querySelector('.pdl'); if(!d) return; if(/загруз/i.test(d.textContent)&&d.textContent.length<60) return;
+      var h=Math.ceil(d.getBoundingClientRect().height)+2; if(Math.abs(h-last)<2) return; last=h;
+      try{ window.parent.postMessage({ms:'fit',w:660,h:h},'*'); }catch(e){} }
+    try{ new MutationObserver(function(){ setTimeout(fit,30); }).observe(document.body,{childList:true,subtree:true,characterData:true}); }catch(e){}
+    try{ new ResizeObserver(fit).observe(document.body); }catch(e){}
+    setTimeout(fit,300); setTimeout(fit,1200);
+  })();
 })();
 </script>
 </body>

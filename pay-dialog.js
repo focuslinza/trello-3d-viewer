@@ -83,6 +83,8 @@
       '.pdl .row2{display:flex;gap:10px}.pdl .row2>div{flex:1}' +
       '.pdl .after{margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--bg2,#22272b)}' +
       '.pdl .bar2{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px}' +
+      // кнопки «Закрыть» нет (решение Асхата, 24.11.2026): окно закрывается щелчком вне его или Esc; на телефоне кнопка остаётся
+      '@media (min-width:641px){.pdl #pdC,.pdl #ipC{display:none}}' +
       '.pdl .b{padding:8px 14px;border-radius:8px;border:1px solid var(--line,#3a414a);background:var(--bg2,#22272b);color:inherit;cursor:pointer;font-size:13.5px}' +
       '.pdl .b.pr{background:#1f6ce8;border-color:#1f6ce8;color:#fff}.pdl .b:disabled{opacity:.6;cursor:default}' +
       '.pdl .x{background:none;border:none;color:var(--muted,#9fadbc);cursor:pointer;font-size:14px}.pdl .x:hover{color:#f87168}' +
@@ -183,10 +185,11 @@
       var a = ov.querySelector('#pdA');
       function after() {
         var v = +a.value || 0, r = Math.round((S.total - S.paidSum - (S.pendingSum || 0) - v) * 100) / 100, el = ov.querySelector('#pdAfter');
-        if (!(v > 0)) { el.innerHTML = '<span style="color:var(--muted,#9fadbc)">Введите сумму оплаты.</span>'; return; }
+        if (!(v > 0)) { el.style.display = ''; el.innerHTML = '<span style="color:var(--muted,#9fadbc)">Введите сумму оплаты.</span>'; return; }
         el.innerHTML = r > 0 ? 'После этой оплаты: <b>частично</b>, остаток <b style="color:#e8c07d">' + money(r) + ' ₸</b>. ' + ((S.paidSum + (S.pendingSum || 0) + v) >= S.total * 0.5 ? 'В работу — после подтверждения учредителем.' : 'Меньше 50% — в работу нельзя.')
           : (r < 0 ? 'После этой оплаты: <b style="color:#4bce97">полностью</b>, переплата <b style="color:#f87168">' + money(-r) + ' ₸</b> — проверьте сумму.'
-            : 'После этой оплаты: <b style="color:#4bce97">оплачен полностью</b>.');
+            : '');   // «оплачен полностью» не пишем — это и так видно по остатку (решение Асхата, 24.11.2026)
+        el.style.display = el.innerHTML ? '' : 'none';
       }
       a.oninput = after; after(); a.focus(); a.select();
       var toInv = ov.querySelector('#pdToInv');
