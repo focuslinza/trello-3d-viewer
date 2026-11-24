@@ -9,6 +9,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
   <script src="./dejavu-vfs.js"></script>
   <script src="./invoice-doc.js?v=3"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+  <script src="./invoice-xls.js?v=1" defer></script>
   <script src="./pay-dialog.js?v=20"></script>
   <style>
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; }
@@ -94,7 +96,7 @@
           return { id:r.id, number:r.number, dateIso:r.date_iso||'', dateText:r.date_text||'', contract:r.contract||'Без договора',
                    supplier:parse(r.supplier_json,null), buyer:parse(r.buyer_json,null), items:parse(r.items_json,[]),
                    total:+r.total||0, createdAt:r.created_at||'', sentTo:r.sent_to||'', sentAt:r.sent_at||'', archived:+r.archived===1,
-                   archReason:r.archive_reason||'', archAt:r.archived_at||'', archBy:r.archived_by||'' };
+                   archReason:r.archive_reason||'', archAt:r.archived_at||'', archBy:r.archived_by||'', raw:r };
         });
         // удалённые/аннулированные — отдельно, в «Историю счетов» (решение Асхата, 11.11.2026)
         HIST=ROWS.filter(function(r){ return r.archived; });
@@ -144,6 +146,16 @@
   }
   var HIST=[];
   function localAt(u){ try{ var d=new Date(String(u).replace(' ','T')+(/Z|[+-]\d\d:?\d\d$/.test(u)?'':'Z')); if(isNaN(d)) return String(u).slice(0,16); var p=function(n){return (n<10?'0':'')+n;}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }catch(e){ return String(u).slice(0,16); } }
+  // СЧЁТ НА ОСТАТОК — перенесён сюда из окна счёта (решение Асхата, 24.11.2026)
+  function residInvoice(row){
+    var sum=prompt('Счёт на остаток по счёту №'+row.number+'.\nСумма остатка (оставьте как есть — посчитаем «сумма счёта минус поступления»):','');
+    if(sum===null) return;
+    fetch(WORKER+'/invoice-residual',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:row.id, amount:(sum?+sum:0)||0, byName:ME_NAME }) })
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил');
+        alert('Создан счёт №'+j.number+' на остаток '+money(j.amount)+' ₸ по счёту №'+j.parent+'.\nВ 1С вносите этот же номер.'); load();
+      }).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+  }
   function delInvoice(row){
     if(!CAN_DEL) return;
     if(!confirm('Удалить счёт № '+row.number+' на '+money(row.total)+' ₸?\n\nСчёт перестанет действовать (уйдёт из журнала и бухгалтерии), но запись о нём — номер, дата, сумма, кто удалил — останется ниже в «Истории счетов», PDF можно будет открыть. Оплаты по заказу не трогаются.')) return;
@@ -196,6 +208,8 @@
             '<button class="btn vw" data-i="'+i+'" type="button" title="Открыть в новом окне без скачивания">Просмотр</button>'+
             '<button class="btn ghost dl" data-i="'+i+'" type="button" title="Скачать счёт в PDF">⬇ Скачать</button>'+
             '<button class="btn ghost ed" data-i="'+i+'" type="button" title="Исправить строки, разделить, выставить остаток или аннулировать — номер счёта не меняется">✎ Изменить</button>'+
+            '<button class="btn ghost rs" data-i="'+i+'" type="button" title="Выставить счёт на неоплаченный остаток по этому счёту — номер возьмётся из системы">🔹 Счёт на остаток</button>'+
+            '<button class="btn ghost x1" data-i="'+i+'" type="button" title="Файл в формате счёта 1С — бухгалтер импортирует его в 1С:Бухгалтерию">📗 Excel для 1С</button>'+
             ((CAN_DEL && !(r.pay && (+r.pay.paidSum>0 || +r.pay.pendingSum>0)))?'<span class="sp"></span><button class="btn red del" data-i="'+i+'" type="button" title="Удалить (запись останется в истории счетов)">✕ Удалить</button>':'')+
           '</div>'+
         '</div>';
@@ -220,6 +234,9 @@
       }).join('')+'</tbody></table></div>';
     }
     document.getElementById('app').innerHTML=h;
+    [].forEach.call(document.querySelectorAll('.x1'), function(b){ b.onclick=function(){ var r=ROWS[+this.getAttribute('data-i')];
+      if(!window.INVOICE_XLS){ alert('Генератор Excel не загрузился — проверьте интернет.'); return; } window.INVOICE_XLS.download(r.raw); }; });
+    [].forEach.call(document.querySelectorAll('.rs'), function(b){ b.onclick=function(){ residInvoice(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.dl'), function(b){ b.onclick=function(){ downloadPdf(ROWS[+this.getAttribute('data-i')]); }; });
     [].forEach.call(document.querySelectorAll('.hv'), function(b){ b.onclick=function(){ previewPdf(HIST[+this.getAttribute('data-h')]); }; });
     [].forEach.call(document.querySelectorAll('.vw'), function(b){ b.onclick=function(){ previewPdf(ROWS[+this.getAttribute('data-i')]); }; });
@@ -266,7 +283,7 @@
       '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
       '<button id="edBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад к счетам заказа</button>'+
       '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт № '+esc(row.number)+'</div><span style="width:160px"></span></div>'+
-      '<iframe src="./invoice-view.html?number='+encodeURIComponent(row.number)+'&by='+encodeURIComponent(ME_NAME)+'&t='+Date.now()+'" style="flex:1;border:0;background:#1d2125"></iframe></div>';
+      '<iframe src="./invoice-view.html?number='+encodeURIComponent(row.number)+'&from=card&by='+encodeURIComponent(ME_NAME)+'&t='+Date.now()+'" style="flex:1;border:0;background:#1d2125"></iframe></div>';
     document.getElementById('edBack').onclick=function(){ host.innerHTML=''; load(); };
   }
 
