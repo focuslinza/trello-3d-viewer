@@ -14,7 +14,7 @@
     :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; --accent:#4f7cff; --green:#3aa657; --red:#d4574e; }
     *{box-sizing:border-box}
     body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
-    .wrap{padding:16px;max-width:900px;margin:0 auto}
+    .wrap{padding:16px 16px 4px;max-width:932px;margin:0 auto}
     .sec{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
     h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
     .muted{color:var(--muted)} .small{font-size:12px}
@@ -41,7 +41,6 @@
 </head>
 <body>
   <div class="wrap" id="app"><div class="muted" id="boot">Проверка доступа…</div></div>
-  <div class="bar"><button class="btn ghost" id="close" type="button">Закрыть</button></div>
 
 <script>
   var t = window.TrelloPowerUp.iframe();
@@ -271,7 +270,22 @@
     document.getElementById('edBack').onclick=function(){ host.innerHTML=''; load(); };
   }
 
-  document.getElementById('close').onclick=function(){ t.closeModal(); };
+  // ОКНО ПО РАЗМЕРУ СОДЕРЖИМОГО (решение Асхата, 24.11.2026): кнопки «Закрыть» нет — окно закрывается щелчком вне его.
+  // Когда внутри открыт счёт или окно оплаты — окно снова большое.
+  (function(){
+    var last='';
+    function fit(){
+      var w=document.querySelector('.wrap'); if(!w) return;
+      var eh=document.getElementById('edHost');
+      var big=!!((eh&&eh.firstChild)||document.querySelector('.pdl-ov'));
+      var msg=big?{ms:'fit',reset:1}:{ms:'fit',w:932,h:Math.ceil(w.getBoundingClientRect().height)+2};
+      var k=JSON.stringify(msg); if(k===last) return; last=k;
+      try{ window.parent.postMessage(msg,'*'); }catch(e){}
+    }
+    try{ new MutationObserver(function(){ setTimeout(fit,30); }).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+    try{ new ResizeObserver(function(){ fit(); }).observe(document.querySelector('.wrap')); }catch(e){}
+    window.addEventListener('load',function(){ setTimeout(fit,50); }); setTimeout(fit,400);
+  })();
 
   if(!cardId){ boot('Не удалось определить карточку.'); }
   else checkAccess().then(function(ok){
