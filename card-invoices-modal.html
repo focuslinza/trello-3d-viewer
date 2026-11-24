@@ -290,14 +290,19 @@
   function openEdit(row){
     var host=document.getElementById('edHost');
     if(!host){ host=document.createElement('div'); host.id='edHost'; document.body.appendChild(host); }
-    host.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:90;display:flex;flex-direction:column">'+
-      '<div style="display:flex;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
+    // «Изменить» открывает ТОЛЬКО окно правки (решение Асхата, 24.11.2026): без синей полосы и без самого счёта на фоне
+    host.dataset.eo='1'; window.__eoH=0;
+    host.innerHTML='<div style="position:fixed;inset:0;background:var(--bg);z-index:90;display:flex;flex-direction:column">'+
+      '<div id="edBar" style="display:none;align-items:center;padding:0 10px;height:46px;background:#1f6ce8;color:#fff;flex:0 0 auto">'+
       '<button id="edBack" type="button" style="background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:8px 10px">← Назад к счетам заказа</button>'+
       '<div style="flex:1;text-align:center;font-weight:700;font-size:15px">Счёт № '+esc(row.number)+'</div><span style="width:160px"></span></div>'+
-      '<iframe src="./invoice-view.html?number='+encodeURIComponent(row.number)+'&from=card&edit=1&by='+encodeURIComponent(ME_NAME)+'&t='+Date.now()+'" style="flex:1;border:0;background:#1d2125"></iframe></div>';
-    if(!window.__invBackOn){ window.__invBackOn=true; window.addEventListener('message',function(ev){ if(ev.data&&ev.data.ms==='invBack'){ var bk=document.getElementById('edBack'); if(bk) bk.click(); } }); }
+      '<iframe src="./invoice-view.html?number='+encodeURIComponent(row.number)+'&from=card&edit=1&by='+encodeURIComponent(ME_NAME)+'&t='+Date.now()+'" style="flex:1;border:0;background:transparent"></iframe></div>';
+    if(!window.__invBackOn){ window.__invBackOn=true; window.addEventListener('message',function(ev){ var d=ev.data||{}, hh=document.getElementById('edHost');
+      if(d.ms==='invBack'){ var bk=document.getElementById('edBack'); if(bk) bk.click(); }
+      else if(d.ms==='edSize'&&hh){ window.__eoH=+d.h||0; if(window.__fit) window.__fit(); }
+      else if(d.ms==='edFull'&&hh){ delete hh.dataset.eo; var br=document.getElementById('edBar'); if(br) br.style.display='flex'; if(window.__fit) window.__fit(); } }); }
     // после правки счёта суммы и индикатор оплаты перечитываются сразу и ещё раз через несколько секунд (24.11.2026)
-    document.getElementById('edBack').onclick=function(){ host.innerHTML=''; load(); setTimeout(function(){ if(!(host&&host.firstChild)) loadPay(); },9000); };
+    document.getElementById('edBack').onclick=function(){ host.innerHTML=''; delete host.dataset.eo; load(); setTimeout(function(){ if(!(host&&host.firstChild)) loadPay(); },9000); };
   }
 
   // ОКНО ПО РАЗМЕРУ СОДЕРЖИМОГО (решение Асхата, 24.11.2026): кнопки «Закрыть» нет — окно закрывается щелчком вне его.
@@ -308,11 +313,14 @@
       var w=document.querySelector('.wrap'); if(!w) return;
       if(!window.__rendered) return;
       var eh=document.getElementById('edHost');
-      var big=!!((eh&&eh.firstChild)||document.querySelector('.pdl-ov'));
-      var msg=big?{ms:'fit',reset:1}:{ms:'fit',w:932,h:Math.ceil(w.getBoundingClientRect().height)+2};
+      var eo=!!(eh&&eh.firstChild&&eh.dataset.eo);
+      if(eo&&!window.__eoH) return;   // окно правки ещё не сообщило свою высоту — размер не трогаем
+      var big=!!((eh&&eh.firstChild&&!eo)||document.querySelector('.pdl-ov'));
+      var msg=big?{ms:'fit',reset:1}:{ms:'fit',w:932,h:eo?(window.__eoH+2):(Math.ceil(w.getBoundingClientRect().height)+2)};
       var k=JSON.stringify(msg); if(k===last) return; last=k;
       try{ window.parent.postMessage(msg,'*'); }catch(e){}
     }
+    window.__fit=fit;
     try{ new MutationObserver(function(){ setTimeout(fit,30); }).observe(document.body,{childList:true,subtree:true}); }catch(e){}
     try{ new ResizeObserver(function(){ fit(); }).observe(document.querySelector('.wrap')); }catch(e){}
     window.addEventListener('load',function(){ setTimeout(fit,50); }); setTimeout(fit,400);
