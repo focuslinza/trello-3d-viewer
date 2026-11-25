@@ -219,12 +219,39 @@
         h+='</div>';
       });
       h+='</div>';
+      if(IS_ADMIN) h+='<div style="margin:10px 4px 0"><button class="btn" id="supArchList" type="button" title="Заявки, убранные в архив: можно вернуть на доску или удалить">🗄 Архив заявок</button></div>';
       return h;
+    }
+
+    // АРХИВ ЗАЯВОК (решение Асхата, 25.11.2026): удаление — только отсюда
+    function openSupArchive(){
+      var host=document.getElementById('supOvlHost');
+      host.innerHTML='<div class="ovl" id="supOvl"><div class="pop"><h3>Архив заявок снабжения</h3><div id="supArchBody" class="muted" style="margin-top:8px">загрузка…</div></div></div>';
+      document.getElementById('supOvl').onclick=function(e){ if(e.target===this){ closeSupOvl(); loadAll(); } };
+      function draw(){
+        fetch(WORKER+'/supply-list?archived=1').then(function(x){return x.json();}).then(function(j){
+          var el=document.getElementById('supArchBody'); if(!el) return; var list=(j&&j.requests)||[];
+          if(!list.length){ el.innerHTML='В архиве пусто.'; return; }
+          el.className=''; el.innerHTML='<div style="max-height:60vh;overflow:auto">'+list.map(function(q){
+            return '<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)">'+
+              '<span style="flex:1;min-width:0"><b>'+esc(q.name)+'</b><br><span class="muted" style="font-size:12px">'+esc(STATUS_LBL[q.status]||q.status)+' · заказал: '+esc(q.byName||'—')+' · '+esc((q.createdAt||'').slice(0,10))+(q.comment?' · '+esc(q.comment):'')+'</span></span>'+
+              '<button class="btn" data-back="'+q.id+'" type="button" title="Вернуть заявку на доску">↩ Вернуть</button>'+
+              '<button class="btn danger" data-kill="'+q.id+'" type="button" title="Удалить безвозвратно вместе с фото и историей">✕ Удалить</button></div>';
+          }).join('')+'</div>';
+          [].forEach.call(el.querySelectorAll('[data-back]'),function(b){ b.onclick=function(){ b.disabled=true;
+            fetch(WORKER+'/supply-request-archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:+b.getAttribute('data-back'),hidden:0,byName:ME.name})}).then(function(x){return x.json();}).then(draw); }; });
+          [].forEach.call(el.querySelectorAll('[data-kill]'),function(b){ b.onclick=function(){
+            if(!confirm('УДАЛИТЬ заявку безвозвратно вместе с фото и историей?')) return; b.disabled=true;
+            fetch(WORKER+'/supply-request-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:+b.getAttribute('data-kill')})}).then(function(x){return x.json();}).then(function(j2){ if(j2&&j2.error) alert(j2.error); draw(); }); }; });
+        }).catch(function(){ var el=document.getElementById('supArchBody'); if(el) el.textContent='Не удалось загрузить архив.'; });
+      }
+      draw();
     }
 
     var supDragId=null;
     function wireReqBoard(){
       var nb=document.getElementById('supNewBtn'); if(nb) nb.onclick=openSupCreate;
+      var al=document.getElementById('supArchList'); if(al) al.onclick=openSupArchive;
       var canMove = CAN_SUPPLY||IS_ADMIN;
       [].forEach.call(document.querySelectorAll('.kcard'), function(c){
         c.onclick=function(e){ if(e.target.classList.contains('mv'))return; openSupCard(+this.getAttribute('data-id')); };
@@ -424,12 +451,13 @@
       h+='<div class="muted">'+(STATUS_LBL[r.status]||r.status)+' · заказал: '+esc(r.byName||'—')+' · '+esc((r.createdAt||'').slice(0,10))+'</div>';
       h+='<div style="margin-top:10px;font-size:13.5px;line-height:1.7">';
       if(r.qty) h+='Количество: <b>'+esc(r.qty)+'</b><br>';
-      if(r.comment) h+='Комментарий: '+esc(r.comment)+'<br>';
+      // комментарий заявки может поправить любой, кто её открыл; прежний текст остаётся в истории (решение Асхата, 25.11.2026)
+      h+='<span id="supCmWrap">Комментарий: <span id="supCmTxt">'+(r.comment?esc(r.comment):'<span class="muted">нет</span>')+'</span> <a href="#" id="supCmEdit" class="muted" title="Изменить комментарий заявки" style="text-decoration:none">✎ изменить</a></span><br>';
       if(r.link) h+='<a href="'+esc(r.link)+'" target="_blank">ссылка на товар ↗</a><br>';
       if(r.note) h+='<span class="muted">Ответ снабжения: '+esc(r.note)+'</span>';
       h+='</div><div class="thumbs" id="supThumbs"></div>';
       h+=filePickHtml('supAddFile','Добавить фото');
-      h+='<div class="fld"><label>Переписка по заявке</label><div id="supCmts" style="max-height:220px;overflow:auto;font-size:13px;line-height:1.5"><span class="muted">загрузка…</span></div>'+
+      h+='<div class="fld"><label>Комментарии и история</label><div id="supCmts" style="max-height:220px;overflow:auto;font-size:13px;line-height:1.5"><span class="muted">загрузка…</span></div>'+
          '<div style="display:flex;gap:8px;margin-top:6px"><input type="text" id="supCmtText" placeholder="Написать комментарий от своего имени…" style="flex:1" maxlength="2000">'+
          '<button class="btn" id="supCmtSend" type="button">Отправить</button></div></div>';
       if(canMng){
@@ -439,12 +467,21 @@
       }
       h+='<div class="popbar">';
       if(canMng && r.status!=='rejected') h+='<button class="btn danger" id="supRej" type="button" title="Заявка не будет исполнена; уйдёт с доски">Отклонить</button>';
-      if(IS_ADMIN) h+='<button class="btn" id="supArch" type="button" title="В архив: скрыть, данные останутся">🗄 Архив</button>'+
-                      '<button class="btn danger" id="supDel" type="button" title="Удалить безвозвратно">✕ Удалить</button>';
-      h+='<button class="btn" id="supClose" type="button">Закрыть</button></div>';
+      // «Удалить» и «Закрыть» убраны (решение Асхата, 25.11.2026): заявку архивируют, удаляют уже из архива; окно закрывается щелчком мимо
+      if(IS_ADMIN) h+='<button class="btn" id="supArch" type="button" title="В архив: заявка уйдёт с доски, данные останутся. Удалить можно потом из архива.">🗄 Архив</button>';
+      h+='</div>';
       h+='</div></div>';
       document.getElementById('supOvlHost').innerHTML=h;
-      document.getElementById('supClose').onclick=function(){ closeSupOvl(); loadAll(); };
+      document.getElementById('supCmEdit').onclick=function(e){ e.preventDefault();
+        var w=document.getElementById('supCmWrap');
+        w.innerHTML='<div style="display:flex;gap:8px;margin:4px 0"><input type="text" id="supCmIn" maxlength="2000" style="flex:1" value="'+esc(r.comment||'')+'"><button class="btn" id="supCmOk" type="button">Сохранить</button></div>';
+        var inp=document.getElementById('supCmIn'), ok=document.getElementById('supCmOk'); inp.focus();
+        function save(){ ok.disabled=true;
+          fetch(WORKER+'/supply-request-edit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,comment:inp.value,byName:ME.name})})
+            .then(function(x){return x.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил'); if(!j.same) r.comment=j.comment; openSupCard(id); })
+            .catch(function(e2){ ok.disabled=false; alert('Не получилось: '+(e2&&e2.message||e2)); }); }
+        ok.onclick=save; inp.onkeydown=function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); save(); } };
+      };
       document.getElementById('supOvl').onclick=function(e){ if(e.target===this){ closeSupOvl(); loadAll(); } };
       // файлы заявки: картинки миниатюрами, документы значками
       fetch(WORKER+'/receipts-list?kind=req&refId='+id).then(function(x){return x.json();}).then(function(j){
@@ -464,8 +501,9 @@
       // переписка: каждый пишет от своего имени
       function drawCmts(j){
         var el=document.getElementById('supCmts'); if(!el) return;
-        var list=(j&&j.comments)||[]; r.comments=list.length;
+        var list=(j&&j.comments)||[]; r.comments=list.filter(function(c){ return !c.ev; }).length;
         el.innerHTML = list.length ? list.map(function(c){
+          if(c.ev) return '<div style="padding:4px 0;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px"><b>'+esc(c.by||'—')+'</b> '+esc(c.text)+' <span style="font-size:11px">· '+esc(cmtTime(c.at))+'</span></div>';
           var mine = j.founder || (j.me && String(j.me)===String(c.byId));
           return '<div style="padding:5px 0;border-bottom:1px solid var(--line)"><b>'+esc(c.by||'—')+'</b> <span class="muted" style="font-size:11.5px">'+esc(cmtTime(c.at))+'</span>'+
             (mine?' <a href="#" class="muted" data-cdel="'+c.id+'" title="Удалить комментарий" style="font-size:11.5px;text-decoration:none">✕</a>':'')+
@@ -507,13 +545,7 @@
       var ar=document.getElementById('supArch');
       if(ar) ar.onclick=function(){
         if(!confirm('Убрать заявку в архив? Она исчезнет с доски; данные останутся.')) return;
-        fetch(WORKER+'/supply-request-archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
-          .then(function(x){return x.json();}).then(function(){ closeSupOvl(); loadAll(); });
-      };
-      var dl=document.getElementById('supDel');
-      if(dl) dl.onclick=function(){
-        if(!confirm('УДАЛИТЬ заявку безвозвратно вместе с файлами?')) return;
-        fetch(WORKER+'/supply-request-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+        fetch(WORKER+'/supply-request-archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,byName:ME.name})})
           .then(function(x){return x.json();}).then(function(){ closeSupOvl(); loadAll(); });
       };
     }
