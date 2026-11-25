@@ -103,6 +103,10 @@
     .bar .tab{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer}
     .bar .tab.active{border-color:var(--blue,#579dff);color:#cfe1ff;background:#274469;margin-top:-12px;padding-top:18px;border-top-color:transparent;border-radius:0 0 8px 8px}
     #crmView iframe{width:100%;height:100%;border:0;display:block}
+    /* окно одного обращения: ни вкладок, ни доски — только само окно лида на всю страницу */
+    html.lo #wrap,html.lo #anView,html.lo #crmView,html.lo .bar{display:none!important}
+    html.lo .ovl{background:transparent;padding:0;align-items:stretch}
+    html.lo .ovl .pop{max-width:none;width:100%;max-height:none;min-height:100vh;border-radius:0;border:none;box-shadow:none}
     .empty{color:var(--muted);padding:8px 4px;font-size:12.5px}
     .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
     .thumbs .ph{position:relative}
@@ -129,8 +133,8 @@
   <div id="crmView" style="display:none;position:fixed;left:0;right:0;top:0;bottom:58px"></div>
   <div class="bar">
     <div class="tabs" id="barTabs">
-      <div class="tab active" data-sv="board" title="Менеджер ведёт клиента до расчёта, дальше этап меняется сам — по карточке заказа на доске">Воронка</div>
-      <div class="tab" data-sv="an" title="Лиды, источники, конверсия, клики по ссылкам роликов">📊 Аналитика</div>
+      <!-- вкладки «Воронка» больше нет (решение Асхата, 25.11.2026): колонки продаж стоят на главной доске -->
+      <div class="tab active" data-sv="an" title="Лиды, источники, конверсия, клики по ссылкам роликов">📊 Аналитика</div>
       <div class="tab" data-sv="crm" title="База клиентов (CRM)">👥 Клиенты</div>
     </div>
     <button class="btn" id="close" type="button">Закрыть</button>
@@ -144,7 +148,11 @@
     // кнопка сверху справа: существующий CRM-раздел (позже — коммерческие CRM)
     // ---------- аналитика продаж ----------
     window.__MS_T = t;   // для встроенного окна «Клиенты»
-    var SV='board';
+    var SV='an';
+    // ОКНО ОДНОГО ОБРАЩЕНИЯ (25.11.2026): доска открывает эту страницу с args.lead — показываем только окно лида
+    var LEAD_ONLY=(function(){ try{ return String(t.arg('lead')||''); }catch(e){ return ''; } })();
+    if(LEAD_ONLY) document.documentElement.classList.add('lo');
+    function leadDone(){ try{ (window.top||parent).postMessage({ms:'changed'},'*'); }catch(e){} try{ t.closeModal(); }catch(e){} }
     function showView(v){
       SV=v;
       [].forEach.call(document.querySelectorAll('[data-sv]'), function(x){ x.classList.toggle('active', x.getAttribute('data-sv')===v); });
@@ -297,12 +305,12 @@
 
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
-    function post(u,b){ return fetch(WORKER+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+    function post(u,b){ return fetch(WORKER+u,{method:'POST',keepalive:(u==='/sales-save'),headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
     function today(){ return new Date().toISOString().slice(0,10); }
 
     function loadAll(){
       return Promise.all([
-        fetch(WORKER+'/sales-list').then(function(r){return r.json();}).catch(function(){return {};}),
+        fetch(WORKER+'/sales-list'+(LEAD_ONLY&&LEAD_ONLY!=='new'?'?incl='+encodeURIComponent(LEAD_ONLY):'')).then(function(r){return r.json();}).catch(function(){return {};}),
         fetch(WORKER+'/companies-list').then(function(r){return r.json();}).catch(function(){return {};}),
         fetch(WORKER+'/sales-file-counts').then(function(r){return r.json();}).catch(function(){return {};}),
         t.member('id','fullName').catch(function(){return {};})
@@ -427,24 +435,24 @@
     // ОТКАЗ — одно действие и одна причина для лида и для заказа на доске
     function refuse(r){
       var reason=prompt('Отказ: «'+(r.title||'')+'». Причина (клиент отказался / дорого / ушёл к другим / дубль):','клиент отказался');
-      if(reason===null) return Promise.resolve();
+      if(reason===null){ if(LEAD_ONLY) leadDone(); return Promise.resolve(); }
       return adopt(r).then(function(x){
         var first = x.trello_card_id ? post('/calc-cancel',{cardId:x.trello_card_id, reason:reason, byName:MYNAME}) : Promise.resolve({ok:true});
         return first.then(function(c){
           if(c && c.error){ alert(c.error); return; }
           return post('/sales-save', saveBody(x,'lost',{lostReason:reason})).then(function(j){ if(j&&j.error) alert('Не сохранилось: '+j.error); });
         });
-      }).then(loadAll).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+      }).then(function(){ return LEAD_ONLY?leadDone():loadAll(); }).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
     }
     function unrefuse(r){
-      if(!confirm('Вернуть «'+(r.title||'')+'» из отказа?'+(r.trello_card_id?' Карточка заказа вернётся на доску.':''))) return Promise.resolve();
+      if(!confirm('Вернуть «'+(r.title||'')+'» из отказа?'+(r.trello_card_id?' Карточка заказа вернётся на доску.':''))){ if(LEAD_ONLY) leadDone(); return Promise.resolve(); }
       return adopt(r).then(function(x){
         var first = x.trello_card_id ? post('/calc-cancel',{cardId:x.trello_card_id, undo:true, byName:MYNAME}) : Promise.resolve({ok:true});
         return first.then(function(c){
           if(c && c.error){ alert(c.error); return; }
           return post('/sales-save', saveBody(x,'talk')).then(function(j){ if(j&&j.error) alert('Не сохранилось: '+j.error); });
         });
-      }).then(loadAll).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
+      }).then(function(){ return LEAD_ONLY?leadDone():loadAll(); }).catch(function(e){ alert('Не удалось: '+(e&&e.message||e)); });
     }
     function moveTo(id, colKey){
       var r=findRow(id); if(!r) return; var from=stageOf(r);
@@ -532,7 +540,7 @@
         isDirty=false; if(!closed) pmsg('Сохраняю…');
         chain=chain.then(function(){ b.id=(r?r.id:undefined); return post('/sales-save',b); }).then(function(j){
           if(!j||j.error){ isDirty=true; if(!closed) pmsg('Не сохранилось: '+((j&&j.error)||'нет связи')); return; }
-          changed=true;
+          changed=true; if(LEAD_ONLY){ try{ (window.top||parent).postMessage({ms:'changed'},'*'); }catch(e){} }
           var f={ title:b.title, company_id:b.companyId, company_name:b.companyName, contact:b.contact, phone:b.phone, amount:b.amount, source:b.source, source_code:b.sourceCode, note:b.note, next_at:b.nextAt };
           if(!r){ r=f; r.id=j.id; r.status='new'; r.stage='new'; ROWS.unshift(r); if(!closed) initLead(); }
           else for(var k in f) r[k]=f[k];
@@ -546,7 +554,7 @@
       function close(){
         if(closed) return; closed=true; clearInterval(stTimer); document.removeEventListener('keydown',onKey);
         var pr=flush(); host.innerHTML='';
-        Promise.resolve(pr).then(function(){ if(changed) loadAll(); else renderBoard(); });
+        Promise.resolve(pr).then(function(){ if(LEAD_ONLY){ leadDone(); return; } if(changed) loadAll(); else renderBoard(); });
       }
       function onKey(e){ if(e.key==='Escape') close(); }
       document.addEventListener('keydown',onKey);
@@ -802,7 +810,18 @@
 
     document.getElementById('newBtn').onclick=function(){ openEdit(null); };
     document.getElementById('q').addEventListener('input',function(){ FILTER=this.value; renderBoard(); });
-    loadAll();
+    if(LEAD_ONLY){
+      loadAll().then(function(){
+        if(LEAD_ONLY==='new'){ openEdit(null); return; }
+        if(findRow(LEAD_ONLY)){ openEdit(LEAD_ONLY); return; }
+        // обращения нет в списке (давний отказ из архива) — показываем, что нашли
+        document.getElementById('ovlHost').innerHTML='<div class="ovl"><div class="pop"><h3>Обращение не найдено</h3><div class="muted" style="margin-top:8px">Возможно, его удалили или оно ушло в архив давно.</div></div></div>';
+      });
+      // окно закрыли щелчком мимо (страница исчезает) — дописываем несохранённое
+      window.addEventListener('pagehide',function(){ try{ var e=new KeyboardEvent('keydown',{key:'Escape'}); document.dispatchEvent(e); }catch(e2){} });
+    } else {
+      showView('an');
+    }
   </script>
 </body>
 </html>

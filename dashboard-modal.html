@@ -1251,7 +1251,13 @@
         '<div class="muted small" style="flex:1">'+(ed?'Срок или порог можно изменить — поменяйте значение и нажмите «Сохранить». Изменение действует сразу для всех.':'Менять сроки и пороги может только учредитель.')+'</div>'+
         '<input id="rlFind" type="search" placeholder="поиск по правилам" style="padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);color:var(--txt);font-size:13px;width:200px"></div>';
       cats.forEach(function(cn){
-        h+='<div class="sec rl-cat"><div style="font-weight:700;font-size:15px;margin-bottom:6px">'+esc(cn)+'</div>';
+        // КАТАЛОГ (решение Асхата, 25.11.2026): раздел свёрнут до названия, открывается нажатием; поиск раскрывает найденное
+        var nRul=0; by[cn].subs.forEach(function(sn){ nRul+=by[cn].m[sn].length; });
+        var isOpen=!!(window.__rlOpen||{})[cn];
+        h+='<div class="sec rl-cat" data-cat="'+esc(cn)+'"><div class="rl-ch" style="font-weight:700;font-size:15px;cursor:pointer;display:flex;align-items:center;gap:8px;user-select:none">'+
+          '<span class="rl-ar" style="display:inline-block;width:14px;color:var(--muted)">'+(isOpen?'▾':'▸')+'</span><span style="flex:1">'+esc(cn)+'</span>'+
+          '<span class="muted small" style="font-weight:500">'+by[cn].subs.map(esc).join(' · ')+'</span>'+
+          '<span class="muted small" style="font-weight:600;min-width:28px;text-align:right">'+nRul+'</span></div><div class="rl-cb" style="'+(isOpen?'':'display:none')+'">';
         by[cn].subs.forEach(function(sn){
           h+='<div class="rl-sub"><div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 2px">'+esc(sn)+'</div>';
           by[cn].m[sn].forEach(function(r){
@@ -1270,13 +1276,18 @@
           });
           h+='</div>';
         });
-        h+='</div>';
+        h+='</div></div>';
       });
       box.innerHTML=h;
+      window.__rlOpen=window.__rlOpen||{};
+      function setOpen(cat,on){ var cb=cat.querySelector('.rl-cb'), ar=cat.querySelector('.rl-ar'); if(cb) cb.style.display=on?'':'none'; if(ar) ar.textContent=on?'▾':'▸'; }
+      [].forEach.call(box.querySelectorAll('.rl-cat'),function(cat){ cat.querySelector('.rl-ch').onclick=function(){
+        var k=cat.getAttribute('data-cat'); window.__rlOpen[k]=!window.__rlOpen[k]; setOpen(cat,window.__rlOpen[k]); }; });
       var fi=document.getElementById('rlFind');
       fi.oninput=function(){ var v=fi.value.trim().toLowerCase();
         [].forEach.call(box.querySelectorAll('.rl-row'),function(x){ x.style.display=(!v||x.textContent.toLowerCase().indexOf(v)>=0)?'flex':'none'; });
-        [].forEach.call(box.querySelectorAll('.rl-sub,.rl-cat'),function(x){ x.style.display=[].some.call(x.querySelectorAll('.rl-row'),function(y){ return y.style.display!=='none'; })?'':'none'; }); };
+        [].forEach.call(box.querySelectorAll('.rl-sub,.rl-cat'),function(x){ x.style.display=[].some.call(x.querySelectorAll('.rl-row'),function(y){ return y.style.display!=='none'; })?'':'none'; });
+        [].forEach.call(box.querySelectorAll('.rl-cat'),function(cat){ setOpen(cat, v?true:!!window.__rlOpen[cat.getAttribute('data-cat')]); }); };
       if(!ed) return;
       [].forEach.call(box.querySelectorAll('.rl-row'),function(row){
         var sv=row.querySelector('.rl-save'), ins=row.querySelectorAll('[data-k]');
