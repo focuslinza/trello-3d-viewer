@@ -239,11 +239,11 @@
         h+='</div>';
         if(u){
           h+='<div class="muted" style="margin-top:6px">Обращение — лид или заказ, заведённый за период. Сделка — заказ, по которому в периоде поступила первая оплата.</div>';
-          h+=sect('Сейчас в воронке', tbl([['Новые','new'],['Переговоры','talk'],['На расчёте','calc'],['Расчёт сделан','ready'],['Согласование (КП у клиента)','kp'],['Ждём оплату','pay']].map(function(x){
+          h+=sect('Сейчас в воронке', tbl([['Лиды','new'],['Переговоры','talk'],['На расчёте','calc'],['Расчёт сделан','ready'],['Согласование (КП у клиента)','kp'],['Ждём оплату','pay']].map(function(x){
             return [x[0], u.now[x[1]]+(u.nowSum[x[1]]>0?(' / '+money(u.nowSum[x[1]])+' ₸'):'')]; })));
         } else {
           h+=sect('Воронка (лиды, созданные в периоде)', tbl([
-            ['Новые', j.byStatus['new']],['Переговоры', j.byStatus['talk']],['На расчёте', j.byStatus['calc']],['Расчёт сделан', j.byStatus['ready']],['Согласование', j.byStatus['kp']],
+            ['Лиды', j.byStatus['new']],['Переговоры', j.byStatus['talk']],['На расчёте', j.byStatus['calc']],['Расчёт сделан', j.byStatus['ready']],['Согласование', j.byStatus['kp']],
             ['Ждём оплату', j.byStatus['pay']],['✅ Сделка', j.byStatus['deal']],['❌ Отказ', j.byStatus['lost']]]));
         }
         h+='<div id="anClients"></div>';
@@ -276,7 +276,7 @@
     // ЕДИНАЯ ВОРОНКА (решение Асхата, 19.11.2026): менеджер двигает лид только между «Новые» и «Переговоры»
     // и ставит «Отказ»; остальные этапы приходят с доски заказов сами (см. salesFunnel в worker.js)
     var COLS=[
-      {key:'new', title:'Новые'},
+      {key:'new', title:'Лиды'},
       {key:'talk', title:'Переговоры'},
       {key:'calc', title:'На расчёте', auto:1, tip:'Карточка заказа в «Заявки» — инженер считает'},
       {key:'ready', title:'Расчёт сделан', auto:1, tip:'Карточка в «Расчет сделан» — инженеры посчитали, можно отправлять КП или счёт'},
@@ -564,7 +564,7 @@
       $('ovl').onclick=function(e){ if(e.target===this && downOut) close(); };
 
       function paintHead(){
-        $('pH').textContent = r?('Лид · '+colTitle(stg())):'Новый лид';
+        $('pH').textContent = r?(stg()==='new'?'Лид':('Лид · '+colTitle(stg()))):'Новый лид';
         var o=r&&r.order, s=stg(), h='';
         if(o){
           h='<div class="ordbox"><b>Заказ'+(o.number?(' №'+esc(o.number)):'')+'</b>'+(o.list?(' · колонка «'+esc(o.list)+'»'):(s==='lost'?' · снят с доски':''))+
