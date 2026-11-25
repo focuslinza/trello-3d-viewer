@@ -219,7 +219,7 @@
         h+='</div>';
       });
       h+='</div>';
-      if(IS_ADMIN) h+='<div style="margin:10px 4px 0"><button class="btn" id="supArchList" type="button" title="Заявки, убранные в архив: можно вернуть на доску или удалить">🗄 Архив заявок</button></div>';
+      if(IS_ADMIN||CAN_SUPPLY) h+='<div style="margin:10px 4px 0"><button class="btn" id="supArchList" type="button" title="Заявки, убранные в архив: можно вернуть на доску или удалить">🗄 Архив заявок</button></div>';
       return h;
     }
 
@@ -236,10 +236,10 @@
             return '<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)">'+
               '<span style="flex:1;min-width:0"><b>'+esc(q.name)+'</b><br><span class="muted" style="font-size:12px">'+esc(STATUS_LBL[q.status]||q.status)+' · заказал: '+esc(q.byName||'—')+' · '+esc((q.createdAt||'').slice(0,10))+(q.comment?' · '+esc(q.comment):'')+'</span></span>'+
               '<button class="btn" data-back="'+q.id+'" type="button" title="Вернуть заявку на доску">↩ Вернуть</button>'+
-              '<button class="btn danger" data-kill="'+q.id+'" type="button" title="Удалить безвозвратно вместе с фото и историей">✕ Удалить</button></div>';
+              (IS_FOUNDER?'<button class="btn danger" data-kill="'+q.id+'" type="button" title="Удалить безвозвратно вместе с фото и историей">✕ Удалить</button>':'')+'</div>';
           }).join('')+'</div>';
           [].forEach.call(el.querySelectorAll('[data-back]'),function(b){ b.onclick=function(){ b.disabled=true;
-            fetch(WORKER+'/supply-request-archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:+b.getAttribute('data-back'),hidden:0,byName:ME.name})}).then(function(x){return x.json();}).then(draw); }; });
+            fetch(WORKER+'/supply-request-archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:+b.getAttribute('data-back'),hidden:0,byName:ME.name})}).then(function(x){return x.json();}).then(function(j){ if(j&&j.error) alert(j.error); draw(); }); }; });
           [].forEach.call(el.querySelectorAll('[data-kill]'),function(b){ b.onclick=function(){
             if(!confirm('УДАЛИТЬ заявку безвозвратно вместе с фото и историей?')) return; b.disabled=true;
             fetch(WORKER+'/supply-request-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:+b.getAttribute('data-kill')})}).then(function(x){return x.json();}).then(function(j2){ if(j2&&j2.error) alert(j2.error); draw(); }); }; });
@@ -468,7 +468,8 @@
       h+='<div class="popbar">';
       if(canMng && r.status!=='rejected') h+='<button class="btn danger" id="supRej" type="button" title="Заявка не будет исполнена; уйдёт с доски">Отклонить</button>';
       // «Удалить» и «Закрыть» убраны (решение Асхата, 25.11.2026): заявку архивируют, удаляют уже из архива; окно закрывается щелчком мимо
-      if(IS_ADMIN) h+='<button class="btn" id="supArch" type="button" title="В архив: заявка уйдёт с доски, данные останутся. Удалить можно потом из архива.">🗄 Архив</button>';
+      // архивируют руководители и снабженец; удаляет из архива только учредитель (решение Асхата, 25.11.2026)
+      if(IS_ADMIN||CAN_SUPPLY) h+='<button class="btn" id="supArch" type="button" title="В архив: заявка уйдёт с доски, данные останутся. Удалить из архива может только учредитель.">🗄 Архив</button>';
       h+='</div>';
       h+='</div></div>';
       document.getElementById('supOvlHost').innerHTML=h;
@@ -546,7 +547,7 @@
       if(ar) ar.onclick=function(){
         if(!confirm('Убрать заявку в архив? Она исчезнет с доски; данные останутся.')) return;
         fetch(WORKER+'/supply-request-archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,byName:ME.name})})
-          .then(function(x){return x.json();}).then(function(){ closeSupOvl(); loadAll(); });
+          .then(function(x){return x.json();}).then(function(j){ if(j&&j.error){ alert(j.error); return; } closeSupOvl(); loadAll(); });
       };
     }
 
