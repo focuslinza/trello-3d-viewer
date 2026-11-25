@@ -350,7 +350,8 @@
       });
       return chain;
     }
-    function closeSupOvl(){ if (QUICK) { quickClose(); return; } var el=document.getElementById('supOvlHost'); if(el) el.innerHTML=''; }
+    window.addEventListener('pagehide',function(){ if(window.__supFlush) window.__supFlush(); });
+    function closeSupOvl(){ if(window.__supFlush){ var _f=window.__supFlush; window.__supFlush=null; _f(); } if (QUICK) { quickClose(); return; } var el=document.getElementById('supOvlHost'); if(el) el.innerHTML=''; }
 
     // справочник материалов и компонентов — тот же, что в калькуляторе (заводские + свои, без скрытых)
     var CATALOG=null, CATALOG_P=null;
@@ -462,12 +463,12 @@
       h+='</div><div class="thumbs" id="supThumbs"></div>';
       h+=filePickHtml('supAddFile','Добавить фото');
       h+='<div class="fld"><label>Комментарии и история</label><div id="supCmts" style="max-height:220px;overflow:auto;font-size:13px;line-height:1.5"><span class="muted">загрузка…</span></div>'+
-         '<div style="display:flex;gap:8px;margin-top:6px"><input type="text" id="supCmtText" placeholder="Написать комментарий от своего имени…" style="flex:1" maxlength="2000">'+
-         '<button class="btn" id="supCmtSend" type="button">Отправить</button></div></div>';
+         // БЕЗ КНОПОК «ОТПРАВИТЬ» И «СОХРАНИТЬ» (решение Асхата, 25.11.2026): написал — нажал Enter или щёлкнул мимо поля/окна — записалось само
+         '<div style="display:flex;gap:8px;margin-top:6px"><input type="text" id="supCmtText" placeholder="Написать комментарий от своего имени…" style="flex:1" maxlength="2000"></div></div>';
       if(canMng){
         h+='<div class="fld"><label>Заметка снабжения (где купили, цена / причина отказа)</label>'+
-           '<div style="display:flex;gap:8px"><input type="text" id="supNote" value="'+esc(r.note||'')+'" style="flex:1">'+
-           '<button class="btn" id="supNoteSave" type="button">Сохранить</button></div></div>';
+           '<div style="display:flex;gap:8px;align-items:center"><input type="text" id="supNote" value="'+esc(r.note||'')+'" style="flex:1">'+
+           '<span class="muted" id="supNoteMsg" style="font-size:12px;min-width:14px"></span></div></div>';
       }
       h+='<div class="popbar">';
       if(canMng && r.status!=='rejected') h+='<button class="btn danger" id="supRej" type="button" title="Заявка не будет исполнена; уйдёт с доски">Отклонить</button>';
@@ -513,7 +514,7 @@
           return '<div style="padding:5px 0;border-bottom:1px solid var(--line)"><b>'+esc(c.by||'—')+'</b> <span class="muted" style="font-size:11.5px">'+esc(cmtTime(c.at))+'</span>'+
             (mine?' <a href="#" class="muted" data-cdel="'+c.id+'" title="Удалить комментарий" style="font-size:11.5px;text-decoration:none">✕</a>':'')+
             '<div style="white-space:pre-wrap;word-break:break-word">'+esc(c.text)+'</div></div>';
-        }).join('') : '<span class="muted">Комментариев пока нет.</span>';
+        }).join('') : '';
         el.scrollTop=el.scrollHeight;
         Array.prototype.forEach.call(el.querySelectorAll('[data-cdel]'),function(a){ a.onclick=function(e){ e.preventDefault();
           if(!confirm('Удалить комментарий?')) return;
@@ -522,24 +523,27 @@
       function cmtTime(at){ var t=Date.parse(String(at||'').replace(' ','T')+'Z'); if(isNaN(t)) return String(at||'').slice(0,16);
         var d=new Date(t), p=function(n){return (n<10?'0':'')+n;}; return p(d.getDate())+'.'+p(d.getMonth()+1)+' '+p(d.getHours())+':'+p(d.getMinutes()); }
       function cmtPost(body){
-        return fetch(WORKER+'/supply-comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        return fetch(WORKER+'/supply-comments',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
           .then(function(x){return x.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'сервер не подтвердил'); j.me=CMT_ME.me; j.founder=CMT_ME.founder; drawCmts(j); })
           .catch(function(e){ alert('Не получилось: '+(e&&e.message||e)); });
       }
       var CMT_ME={me:'',founder:false};
       fetch(WORKER+'/supply-comments?id='+id).then(function(x){return x.json();}).then(function(j){ CMT_ME={me:(j&&j.me)||'',founder:!!(j&&j.founder)}; drawCmts(j||{}); })
         .catch(function(){ var el=document.getElementById('supCmts'); if(el) el.innerHTML='<span class="muted">Не удалось загрузить переписку.</span>'; });
-      var cs=document.getElementById('supCmtSend'), ct=document.getElementById('supCmtText');
-      function cmtSend(){ var t=ct.value.trim(); if(!t) return; cs.disabled=true;
-        cmtPost({id:id,text:t,byName:ME.name}).then(function(){ cs.disabled=false; if(document.getElementById('supCmtText')) { ct.value=''; ct.focus(); } }); }
-      cs.onclick=cmtSend; ct.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); cmtSend(); } };
-      var ns=document.getElementById('supNoteSave');
-      if(ns) ns.onclick=function(){
-        fetch(WORKER+'/supply-set',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({id:id,status:r.status,note:document.getElementById('supNote').value.trim()})})
-          .then(function(x){return x.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); r.note=document.getElementById('supNote').value.trim(); ns.textContent='✓'; setTimeout(function(){ns.textContent='Сохранить';},1200); })
-          .catch(function(e){ alert('Не сохранилось: '+(e&&e.message||e)); });
-      };
+      // комментарий уходит сам: Enter, щелчок мимо поля или закрытие окна
+      var ct=document.getElementById('supCmtText');
+      function cmtSend(){ var t=ct.value.trim(); if(!t) return; ct.value=''; cmtPost({id:id,text:t,byName:ME.name}); }
+      ct.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); cmtSend(); } };
+      ct.onblur=cmtSend;
+      // заметка снабжения сохраняется сама, когда из поля вышли (или нажали Enter)
+      var nt=document.getElementById('supNote'), nm=document.getElementById('supNoteMsg');
+      function noteSave(){ if(!nt) return; var v=nt.value.trim(); if(v===String(r.note||'').trim()) return; r.note=v; if(nm) nm.textContent='…';
+        fetch(WORKER+'/supply-set',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,status:r.status,note:v})})
+          .then(function(x){return x.json();}).then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'?'); if(nm){ nm.textContent='✓'; setTimeout(function(){ if(nm) nm.textContent=''; },1500); } })
+          .catch(function(e){ if(nm) nm.textContent=''; alert('Заметка не сохранилась: '+(e&&e.message||e)); }); }
+      if(nt){ nt.onblur=noteSave; nt.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); noteSave(); } }; }
+      // окно закрыли целиком (щелчок мимо окна на доске) — дописываем набранное
+      window.__supFlush=function(){ try{ cmtSend(); noteSave(); }catch(e){} };
       var rej=document.getElementById('supRej');
       if(rej) rej.onclick=function(){
         var reason=prompt('Причина отказа (увидит заказавший):',''); if(reason==null) return;
