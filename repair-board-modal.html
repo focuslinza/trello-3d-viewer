@@ -117,7 +117,8 @@
 
     // ---------- загрузка ----------
     // ?openRepair=<id> — открыть карточку заявки сразу (заход из бухгалтерии)
-    var AUTO_OPEN = (function(){ try { return new URLSearchParams(location.search).get('openRepair')||''; } catch(e){ return ''; } })();
+    // openRepair приходит либо в адресе (из бухгалтерии), либо в args (поиск на доске, 25.11.2026)
+    var AUTO_OPEN = (function(){ try { var q=new URLSearchParams(location.search), v=q.get('openRepair')||''; if(!v){ var a=JSON.parse(q.get('args')||'{}'); v=(a&&a.openRepair)||''; } return String(v||''); } catch(e){ return ''; } })();
     function loadAll(){
       // viewerId обязателен: цены список отдаёт только подтверждённому праву
       // (урок 09.2026: без него на доске «нет цены», хотя в карточке цена есть)
@@ -129,7 +130,7 @@
         renderBoard();
         if(_wasAvr) loadAvr().catch(function(){});
         // заход из бухгалтерии по номеру заявки — сразу открыть её карточку
-        if(AUTO_OPEN){ var _id=AUTO_OPEN; AUTO_OPEN=''; if(ROWS.some(function(x){ return String(x.id)===String(_id); })) openCard(_id); }
+        if(AUTO_OPEN){ var _id=AUTO_OPEN; AUTO_OPEN=''; openCard(_id); }
         // миниатюры: одним батч-запросом id первого фото каждой заявки
         var ids=ROWS.filter(function(r){ return r.status!=='avr'; }).map(function(r){return r.id;});
         if(ids.length){
@@ -542,7 +543,9 @@
       h+='<div class="popbar">';
       if(IS_ADMIN){
         h+='<button class="btn" id="rejBtn" type="button" title="Отклонить заявку (уйдёт с доски, останется в базе)">Отклонить</button>';
-        h+='<button class="btn" id="archBtn" type="button" title="В архив: скрыть отовсюду, данные останутся">🗄 Архив</button>';
+        // заявка открыта из архива (поиск на доске) — вместо «Архив» кнопка возврата (25.11.2026)
+        h+=r.hidden?'<button class="btn" id="archBtn" type="button" title="Вернуть заявку из архива на доску ремонта">↩ Вернуть из архива</button>'
+                   :'<button class="btn" id="archBtn" type="button" title="В архив: скрыть отовсюду, данные останутся">🗄 Архив</button>';
         h+='<button class="btn danger" id="delBtn" type="button" title="Удалить безвозвратно (для тестовых)">✕ Удалить</button>';
       }
       h+='<button class="btn" id="popClose" type="button">Закрыть</button></div>';
@@ -755,6 +758,7 @@
           post('/repair-set-status',{id:r.id,status:'rejected'}).then(function(){ closeOvl(); loadAll(); });
         };
         document.getElementById('archBtn').onclick=function(){
+          if(r.hidden){ post('/repair-archive',{id:r.id,hidden:0}).then(function(j){ if(j&&j.error){ alert(j.error); return; } closeOvl(); loadAll(); }); return; }
           if(!confirm('Убрать заявку в архив? Она исчезнет из списков и аналитики; данные останутся.')) return;
           post('/repair-archive',{id:r.id}).then(function(j){ if(j&&j.error){ alert(j.error); return; } closeOvl(); loadAll(); });
         };

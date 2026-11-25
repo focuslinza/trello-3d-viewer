@@ -160,6 +160,7 @@
       });
     }
 
+    var OPEN_ARCH=qa('openArch');
     function loadAll(){
       var priv = (CAN_SUPPLY||IS_ADMIN);
       return Promise.all([
@@ -171,6 +172,7 @@
         if(res[1]&&res[1].ok){ TOOLS=res[1].tools||[]; DUE=res[1].dueCount||0; }
         if(res[2]&&res[2].ok){ CASH=res[2]; }
         render();
+        if(OPEN_ARCH){ var _fa=OPEN_ARCH; OPEN_ARCH=''; openSupArchive(_fa); }
         var ids=REQS.map(function(r){return r.id;});
         if(ids.length){
           fetch(WORKER+'/receipt-thumbs?kind=req&ids='+ids.join(',')).then(function(r){return r.json();}).then(function(t2){
@@ -224,16 +226,18 @@
     }
 
     // АРХИВ ЗАЯВОК (решение Асхата, 25.11.2026): удаление — только отсюда
-    function openSupArchive(){
+    function openSupArchive(focusId){
       var host=document.getElementById('supOvlHost');
       host.innerHTML='<div class="ovl" id="supOvl"><div class="pop"><h3>Архив заявок снабжения</h3><div id="supArchBody" class="muted" style="margin-top:8px">загрузка…</div></div></div>';
       document.getElementById('supOvl').onclick=function(e){ if(e.target===this){ closeSupOvl(); loadAll(); } };
       function draw(){
         fetch(WORKER+'/supply-list?archived=1').then(function(x){return x.json();}).then(function(j){
           var el=document.getElementById('supArchBody'); if(!el) return; var list=(j&&j.requests)||[];
+          // заявку, найденную поиском на доске, показываем первой и подсвечиваем (25.11.2026)
+          if(focusId){ list=list.slice().sort(function(x,y){ return (String(y.id)===String(focusId))-(String(x.id)===String(focusId)); }); }
           if(!list.length){ el.innerHTML='В архиве пусто.'; return; }
           el.className=''; el.innerHTML='<div style="max-height:60vh;overflow:auto">'+list.map(function(q){
-            return '<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)">'+
+            return '<div style="display:flex;gap:8px;align-items:center;padding:7px 6px;border-bottom:1px solid var(--line)'+(focusId&&String(q.id)===String(focusId)?';background:rgba(240,195,109,.18);border-radius:6px':'')+'">'+
               '<span style="flex:1;min-width:0"><b>'+esc(q.name)+'</b><br><span class="muted" style="font-size:12px">'+esc(STATUS_LBL[q.status]||q.status)+' · заказал: '+esc(q.byName||'—')+' · '+esc((q.createdAt||'').slice(0,10))+(q.comment?' · '+esc(q.comment):'')+'</span></span>'+
               '<button class="btn" data-back="'+q.id+'" type="button" title="Вернуть заявку на доску">↩ Вернуть</button>'+
               (IS_FOUNDER?'<button class="btn danger" data-kill="'+q.id+'" type="button" title="Удалить безвозвратно вместе с фото и историей">✕ Удалить</button>':'')+'</div>';
