@@ -55,9 +55,13 @@
     <h2>Должности</h2>
     <div class="sub">У должности — этапы работ, обязанности, права доступа и сетка окладов по разрядам (рост по стажу и навыкам).
       Людей назначают на должности во вкладке «Зарплата»; права и оклад человека берутся из его должностей. Изменили должность — у всех, кто на ней, права и оклад обновятся сами.</div>
+    <!-- ДОЛЖНОСТИ — ВЫПАДАЮЩИМ СПИСКОМ (решение Асхата, 26.11.2026): выбрали должность — показаны её данные; «+» — новая -->
+    <div style="display:flex;gap:8px;align-items:center;margin:4px 0 12px">
+      <select id="posSel" style="flex:1;max-width:460px;padding:9px 10px;border-radius:9px;border:1px solid var(--line,#3a414a);background:var(--bg2,#22272b);color:var(--txt,#e6edf3);font:inherit;font-weight:600"></select>
+      <button class="btn" id="addPos" type="button" title="Новая должность" style="font-size:20px;line-height:1;padding:6px 14px;font-weight:700">+</button>
+    </div>
     <div id="list" class="muted">Загрузка…</div>
-    <button class="btn add" id="addPos" type="button">+ новая должность</button>
-    <div class="savebar" style="position:sticky;bottom:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 0;margin-top:12px;background:var(--bg,#1d2125);border-top:1px solid var(--line,#3a414a)">
+    <div class="savebar" style="display:none;position:sticky;bottom:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 0;margin-top:12px;background:var(--bg,#1d2125);border-top:1px solid var(--line,#3a414a)">
       <button class="btn" id="saveAllPos" type="button" style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff;font-weight:700;padding:10px 22px">💾 Сохранить всё</button>
       <span id="saveAllPosMsg" style="font-size:13px"></span>
     </div>
@@ -69,7 +73,7 @@
   var STAGES=[{key:'eng',label:'Инж'},{key:'cut',label:'Резка'},{key:'bend',label:'Гибка'},{key:'weld',label:'Сварка'},{key:'assembly',label:'Сборка'},{key:'montazh',label:'Монтаж'},{key:'repair',label:'Ремонт'}];
   var PERMS=[
     {fld:'can_timesheet',label:'Табель',hint:'заполняет посещаемость'},
-    {fld:'can_hr',label:'HR кабинет',hint:'личные дела сотрудников; собственное дело недоступно'},
+    {fld:'can_hr',label:'Картотека',hint:'личные дела сотрудников; собственное дело недоступно'},
     {fld:'can_dashboard',label:'Панель руководителя',hint:'выручка, прибыль, этапы, заработки, оплаты'},
     {fld:'can_supply',label:'Снабжение',hint:'заявки, инструмент, наличные'},
     {fld:'can_issue_invoice',label:'Выставлять счета',hint:'кнопка «Выставить счёт» на карточке заказа'},
@@ -96,7 +100,7 @@
       {t:'pm',k:'dash_tabel',label:'Табель',hint:'явка и время'},
       {t:'pm',k:'dash_settings',label:'Настройки',hint:'своя доска, здоровье системы, резервные копии'},
       {t:'pm',k:'dash_rules',label:'Правила',hint:'список автоматических правил системы; менять сроки и пороги может только учредитель'},
-      {t:'pm',k:'can_hr',label:'HR кабинет',hint:'личные дела сотрудников'}]},
+      {t:'pm',k:'can_hr',label:'Картотека',hint:'личные дела сотрудников'}]},
     {t:'pm',k:'can_invoice',label:'Бухгалтерия',hint:'заказы, счета, оплаты, зарплаты, ремонт, обеды, брак',kids:[
       {t:'pm',k:'can_confirm_pay',label:'Вносит и подтверждает оплаты',hint:'сверяет с банком; подтверждает и отменяет оплаты'},
       {t:'pm',k:'can_issue_invoice',label:'Выставляет счета на оплату',hint:'«Счёт на оплату» в карточке заказа'},
@@ -280,21 +284,36 @@
         btn.disabled=false;
         if(!j||!j.ok){ btn.textContent=b0; alert('Не сохранилось: '+((j&&j.error)||'?')); return; }
         msg('Сохранено: '+p.name+(j.updatedWorkers?' · обновлены права и оклад у '+j.updatedWorkers+' чел.':''));
+        if(!p.id) WANT_NAME=p.name; DIRTY=false;
         load();
       }).catch(function(e){ btn.disabled=false; btn.textContent=b0; alert('Нет связи: '+(e&&e.message||e)); });
   }
   function del(el){
     var id=el.getAttribute('data-id');
-    if(!id){ el.remove(); return; }
+    if(!id){ NEWMODE=false; render(); return; }
     if(!confirm('Удалить должность «'+el.querySelector('.nm').value+'»?')) return;
     fetch(WORKER+'/position-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
-      .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok){ alert((j&&j.error)||'Не удалось'); return; } load(); });
+      .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok){ alert((j&&j.error)||'Не удалось'); return; } SEL=''; DIRTY=false; load(); });
   }
+  var SEL='', NEWMODE=false, DIRTY=false, WANT_NAME='';
+  function leaveOk(){ return !DIRTY || confirm('Изменения в должности не сохранены. Перейти без сохранения?'); }
   function render(){
-    var list=document.getElementById('list'); list.className=''; list.innerHTML='';
-    if(!POS.length) list.innerHTML='<div class="muted" style="padding:6px 0 12px">Должностей пока нет. Создайте первую — например «Сварщик», «Начальник цеха», «Бухгалтер».</div>';
-    POS.forEach(function(p){ list.appendChild(card(p,false)); });
+    var sel=document.getElementById('posSel'), list=document.getElementById('list'); list.className=''; list.innerHTML='';
+    var sorted=POS.slice().sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||''),'ru'); });
+    if(WANT_NAME){ var hit=sorted.filter(function(x){ return x.name===WANT_NAME; })[0]; if(hit){ SEL=hit.id; NEWMODE=false; } WANT_NAME=''; }
+    if(SEL && !sorted.some(function(x){ return x.id===SEL; })) SEL='';
+    sel.innerHTML='<option value="">'+(NEWMODE?'— новая должность —':(sorted.length?'— выберите должность —':'— должностей пока нет —'))+'</option>'+
+      sorted.map(function(x){ var n=peopleOf(x.id).length; return '<option value="'+esc(x.id)+'">'+esc(x.name)+(n?' · '+n+' чел.':'')+'</option>'; }).join('');
+    sel.value=NEWMODE?'':SEL;
+    DIRTY=false;
+    if(NEWMODE){ var c=card(null,true); list.appendChild(c); c.querySelector('.nm').focus(); return; }
+    var p=sorted.filter(function(x){ return x.id===SEL; })[0];
+    if(p) list.appendChild(card(p,false));
+    else list.innerHTML='<div class="muted" style="padding:6px 0 12px">'+(sorted.length?'Выберите должность из списка — покажу её обязанности, доступ, колонки доски и сетку окладов. Новая должность — кнопка «+».':'Должностей пока нет. Нажмите «+» и создайте первую — например «Сварщик», «Начальник цеха», «Бухгалтер».')+'</div>';
   }
+  document.getElementById('list').addEventListener('input',function(){ DIRTY=true; });
+  document.getElementById('list').addEventListener('change',function(){ DIRTY=true; });
+  document.getElementById('posSel').onchange=function(){ if(!leaveOk()){ this.value=NEWMODE?'':SEL; return; } SEL=this.value; NEWMODE=false; render(); };
   var LISTS=[], LISTS_ERR='';
   function bTok(){ try{ return localStorage.getItem('ms_board_token')||''; }catch(e){ return ''; } }
   function load(){
@@ -329,7 +348,7 @@
     });
   };
   document.getElementById('addPos').onclick=function(){
-    var c=card(null,true); document.getElementById('list').appendChild(c); c.querySelector('.nm').focus();
+    if(!leaveOk()) return; NEWMODE=true; render();
   };
   window.__posReload=load;
   load();
