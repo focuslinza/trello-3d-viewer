@@ -206,6 +206,12 @@
             '<td style="'+td+r+(c.lost?'color:var(--red)':'')+'">'+(c.lost?(c.lost+' / '+money(c.lostSum)+' ₸'):'—')+'</td><td style="'+td+r+'">'+dmy(c.last)+'</td></tr>'+
              '<tr id="clx'+i+'" style="display:none"><td colspan="10" style="padding:4px 8px 12px 20px;border-bottom:1px solid var(--line)"></td></tr>';
         });
+        // строка «Итого» — чтобы таблицу можно было сверить с плитками наверху
+        var T=j.totals;
+        if(T){ var tb=td+'font-weight:700;border-top:2px solid var(--line);';
+          h+='<tr><td style="'+tb+'">Итого</td><td style="'+tb+r+'">'+T.orders+'</td><td style="'+tb+r+'">'+money(T.sum)+' ₸</td><td style="'+tb+r+'">'+T.deals+'</td><td style="'+tb+r+'color:var(--green)">'+money(T.paid)+' ₸</td>'+
+            '<td style="'+tb+r+'">'+money(T.dealsMat)+' ₸</td><td style="'+tb+r+'">'+money(T.dealsSum-T.dealsMat)+' ₸'+(T.dealsSum>0?' · '+Math.round((T.dealsSum-T.dealsMat)*100/T.dealsSum)+'%':'')+'</td>'+
+            '<td style="'+tb+r+'">'+(T.open?(T.open+' / '+money(T.openSum)+' ₸'):'—')+'</td><td style="'+tb+r+'">'+(T.lost?(T.lost+' / '+money(T.lostSum)+' ₸'):'—')+'</td><td style="'+tb+'"></td></tr>'; }
         h+='</table></div>';
         box.innerHTML=sect('По клиентам',h);
         [].forEach.call(box.querySelectorAll('[data-cl]'), function(tr){ tr.onclick=function(){
