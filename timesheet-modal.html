@@ -63,6 +63,8 @@
     // «Продаж», Табель — внутри панели руководителя). Своего подключения к Trello у вложенного
     // окна нет, поэтому берём его у родительского окна; свою нижнюю панель прячем.
     var EMBED = /[?&]embed=1/.test(location.search) && window.parent !== window;
+    // открыт в разделе «HR» панели руководителя: кнопка «HR кабинет» стоит слева в панели, здесь её не показываем (решение Асхата, 26.11.2026)
+    var NAV = EMBED && /[?&]nav=1/.test(location.search);
     var t = (EMBED && window.parent.__MS_T) || window.TrelloPowerUp.iframe();
     if (EMBED) { var _st=document.createElement('style'); _st.textContent='.bar{display:none!important}body{padding-bottom:0!important}'; document.head.appendChild(_st); }
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
@@ -139,7 +141,7 @@
          '<span class="chip'+(CAN_EDIT?' edit':'')+(manual?' man':'')+'" id="normChip" title="'+esc(chipTip)+'">'+
            'Рабочих дней: <b>'+nrm.effective+'</b>'+(CAN_EDIT?' <span style="opacity:.6">✎</span>':'')+'</span>'+
          (manual?'<span class="normNote">изменено вручную'+(CAN_EDIT?'<a id="normReset">вернуть по календарю ('+nrm.calendar+')</a>':'')+'</span>':'')+
-         (CAN_HR?'<button class="btn" id="hrBtn" type="button" style="margin-left:auto;background:#2b4a7d;border-color:#4f7cff;color:#fff;font-weight:600" title="Личные дела сотрудников: данные, документы, статистика">👤 HR кабинет</button>':'')+'</div>';
+         (CAN_HR&&!NAV?'<button class="btn" id="hrBtn" type="button" style="margin-left:auto;background:#2b4a7d;border-color:#4f7cff;color:#fff;font-weight:600" title="Личные дела сотрудников: данные, документы, статистика">👤 HR кабинет</button>':'')+'</div>';
       h+='<div class="legend">'+
          '<span><span class="sw" style="background:#1c3329"></span>Я — явка</span>'+
          '<span><span class="sw" style="background:#3a2226"></span>Н — не явился</span>'+
@@ -466,7 +468,7 @@
         document.getElementById('boot').textContent='Табель доступен руководителю, бухгалтеру и начальнику цеха (право «табель» включается в «Зарплата / Работники»).';
         return;
       }
-      CAN_EDIT=a.edit; CAN_HR=!!a.hr;
+      CAN_EDIT=a.edit; CAN_HR=!!a.hr; if(NAV){ try{ window.parent.postMessage({ms:'hrcan',v:CAN_HR?1:0},'*'); }catch(e){} }
       load();
     }).catch(function(e){
       document.getElementById('boot').textContent='Ошибка: '+(e&&e.message||e);
