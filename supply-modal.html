@@ -1280,10 +1280,47 @@
       };
     }
 
+    function loadMetal(){
+      var box=document.getElementById('metalBox'); if(!box) return;
+      var tk=''; try{ tk=localStorage.getItem('ms_board_token')||''; }catch(e){}
+      fetch(WORKER+'/material-need',{ credentials:'include', headers:{'X-MS-Token':tk} }).then(function(r){ return r.json(); }).then(function(j){
+        box=document.getElementById('metalBox'); if(!box) return;
+        if(!j||j.error){ box.textContent=(j&&j.error)||'Не удалось загрузить'; return; }
+        box.className='';
+        var h='<h3 style="margin:0 0 4px">Металл по заказам</h3>'+
+          '<div style="border:1px solid #8a6d1f;background:rgba(232,192,125,.14);border-radius:8px;padding:8px 12px;margin:6px 0 10px;font-size:13px;line-height:1.45"><b>Это потребность, а не список покупок.</b> Сначала проверьте, что лежит в цехе, и впишите в столбец «Есть в цехе». Покупать нужно только то, что в столбце «Докупить».</div>'+
+          '<div class="muted" style="margin-bottom:10px;line-height:1.45">Заказы, которые ещё не порезаны: карточки из «Расчет сделан», «Согласования», «Ждем оплату» и «В производстве» без метки «Порезано» — '+j.cards+' заказ. '+
+          'Листы — оценка: площадь из расчёта + запас на отходы '+j.waste+'%, точный раскрой делает резчик. «Уже оплачено» — заказы в производстве, их закрывают в первую очередь; остальные клиент ещё может не оплатить.</div>';
+        if(!(j.items||[]).length){ box.innerHTML=h+'<div class="muted">Сейчас заказов с материалом в расчёте нет.</div>'; return; }
+        var th='padding:6px 8px', un=function(x){ return x.sheet?' л.':(x.unit?' '+esc(x.unit):''); }, nf=function(v){ return String(v).replace('.',','); };
+        h+='<table style="width:100%;border-collapse:collapse;font-size:13.5px"><thead><tr style="text-align:left;color:var(--muted);font-size:12px"><th style="'+th+'">Материал</th><th style="'+th+';text-align:right">Понадобится по заказам</th><th style="'+th+';text-align:right">Из них уже оплачено</th><th style="'+th+';text-align:right">Есть в цехе</th><th style="'+th+';text-align:right">Докупить</th><th style="'+th+'">Заказы</th></tr></thead><tbody>';
+        j.items.forEach(function(x,i){
+          var need=x.sheet?x.sheets:x.qty, paidN=x.sheet?x.sheetsPaid:x.qtyPaid;
+          var all='<b>'+nf(need)+un(x)+'</b>'+(x.sheet?' <span class="muted">'+esc(x.size)+'</span>':'');
+          var paid=paidN?('<b>'+nf(paidN)+un(x)+'</b>'):'—';
+          var buy = x.have==null ? '<span class="muted">проверьте цех</span>' : (need-x.have>0 ? '<b style="color:var(--red)">'+nf(Math.round((need-x.have)*100)/100)+un(x)+'</b>' : '<b style="color:var(--green)">хватает</b>');
+          var hv='<input data-hv="'+i+'" value="'+(x.have==null?'':nf(x.have))+'" inputmode="decimal" placeholder="—" style="width:64px;text-align:right;padding:5px 6px" title="Сколько лежит в цехе'+(x.sheet?', листов':'')+'">'+
+            (x.haveAt?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(String(x.haveAt).slice(8,10)+'.'+String(x.haveAt).slice(5,7))+(x.haveBy?' · '+esc(String(x.haveBy).split(' ')[0]):'')+'</div>':'');
+          var cs=x.cards.slice().sort(function(a,b){ return (b.paid-a.paid)||(b.v-a.v); });
+          h+='<tr style="border-top:1px solid var(--line);vertical-align:top"><td style="padding:7px 8px">'+esc(x.title)+'</td><td style="padding:7px 8px;text-align:right;white-space:nowrap">'+all+'</td><td style="padding:7px 8px;text-align:right;white-space:nowrap">'+paid+'</td>'+
+            '<td style="padding:7px 8px;text-align:right;white-space:nowrap">'+hv+'</td><td style="padding:7px 8px;text-align:right;white-space:nowrap">'+buy+'</td>'+
+            '<td style="padding:7px 8px"><a href="#" data-mx="'+i+'" style="text-decoration:none">'+cs.length+' заказ. ▾</a><div id="mx'+i+'" style="display:none;margin-top:4px;font-size:12.5px;line-height:1.5">'+
+            cs.map(function(c){ return (c.paid?'<span style="color:var(--red)">●</span> ':'<span class="muted">○</span> ')+(c.number?'№'+esc(c.number)+' ':'')+esc(c.name)+' — '+nf(c.v)+un(x); }).join('<br>')+'</div></td></tr>';
+        });
+        h+='</tbody></table><div class="muted" style="margin-top:8px">● — заказ оплачен и стоит в производстве, ○ — ждёт оплату.</div>';
+        box.innerHTML=h;
+        [].forEach.call(box.querySelectorAll('[data-mx]'),function(a){ a.onclick=function(e){ e.preventDefault(); var d=document.getElementById('mx'+a.getAttribute('data-mx')); d.style.display=d.style.display==='none'?'':'none'; }; });
+        [].forEach.call(box.querySelectorAll('[data-hv]'),function(inp){ inp.onchange=function(){ var x=j.items[+inp.getAttribute('data-hv')];
+          fetch(WORKER+'/material-have',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json','X-MS-Token':tk}, body:JSON.stringify({ key:x.key, n:inp.value }) })
+            .then(function(r){ return r.json(); }).then(function(o){ if(!o||o.error){ alert((o&&o.error)||'Не сохранилось'); return; } loadMetal(); }).catch(function(e){ alert('Нет связи: '+(e&&e.message||e)); }); }; });
+      }).catch(function(e){ var b=document.getElementById('metalBox'); if(b) b.textContent='Нет связи: '+(e&&e.message||e); });
+    }
     function render(){
       var app=document.getElementById('app');
       var h='';
       var tabs=[['req','Заявки'+(OPEN?'<span class="cnt">'+OPEN+'</span>':'')]];
+      // «Металл по заказам» (решение Асхата, 26.11.2026): сколько листов понадобится по заказам, которые ещё не порезаны
+      tabs.push(['metal','Металл по заказам']);
       if(CAN_SUPPLY||IS_ADMIN){
         tabs.push(['tools','Инструмент и сервис'+(DUE?'<span class="cnt">'+DUE+'</span>':'')]);
         tabs.push(['cash','Наличные расходы']);
@@ -1293,9 +1330,10 @@
         h+='<div class="tab'+(TAB===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
       });
       document.getElementById('barTabs').innerHTML=h; h='';
-      h+= TAB==='req' ? renderReq() : TAB==='tools' ? renderTools() : TAB==='prices' ? renderPrices() : renderCash();
+      h+= TAB==='metal' ? '<div id="metalBox" class="muted" style="padding:6px 2px">Загрузка…</div>' : TAB==='req' ? renderReq() : TAB==='tools' ? renderTools() : TAB==='prices' ? renderPrices() : renderCash();
       app.innerHTML=h;
       [].forEach.call(document.querySelectorAll('.tab[data-tab]'), function(el){ el.onclick=function(){ TAB=this.getAttribute('data-tab'); TOOL_EDIT=null; render(); }; });
+      if(TAB==='metal'){ loadMetal(); return; }
       if(TAB==='prices'){ wirePricesTab(); return; }
 
       if(TAB==='req'){ wireReqBoard(); return; }

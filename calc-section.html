@@ -139,6 +139,21 @@
         btn.textContent = 'Открыть калькулятор';   // одно название всегда (19.11.2026): раньше при сохранённом расчёте кнопка звалась «Открыть расчёт» — путало
         btn.addEventListener('click', openCalc);
         row.appendChild(left); row.appendChild(btn); el.appendChild(row);
+        // ПОТРЕБНОСТЬ В МЕТАЛЛЕ (решение Асхата, 26.11.2026): одна строка под суммой — сколько листов понадобится по расчёту
+        if (d && d.total!=null && CARD.id) {
+          var _tk=''; try{ _tk=localStorage.getItem('ms_board_token')||''; }catch(e){}
+          fetch(WORKER+'/material-need?cardId='+encodeURIComponent(CARD.id),{ credentials:'include', headers:{'X-MS-Token':_tk} }).then(function(r){ return r.json(); }).then(function(m){
+            if (myGen !== renderGen || !m || !m.ok || !(m.lines||[]).length) return;
+            var e2=function(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); };
+            var txt=m.lines.map(function(x){ return x.sheet ? e2(x.title)+' — <b>'+x.sheets+' лист'+(x.sheets===1?'':(x.sheets<5?'а':'ов'))+'</b> '+e2(x.size) : e2(x.title)+' — <b>'+String(x.qty).replace('.',',')+(x.unit?' '+e2(x.unit):'')+'</b>'; }).join(' · ');
+            var nd=document.createElement('div'); nd.className='muted'; nd.style.cssText='margin-top:6px;line-height:1.45';
+            nd.title='Оценка потребности, а не список покупок: площадь материала из расчёта + запас на отходы '+m.waste+'%. Сколько докупать — после проверки цеха (Снабжение → Металл по заказам). Точный раскрой делает резчик.';
+            nd.innerHTML='Понадобится металла: '+txt;
+            left.appendChild(nd);
+            try{ t.sizeTo && t.sizeTo('#wrap'); }catch(e){}
+            try{ window.dispatchEvent(new Event('resize')); }catch(e){}
+          }).catch(function(){});
+        }
         // director: earnings; director OR allowed worker: invoice
         // ОБРАЗЕЦ ↔ ПАРТИЯ (решение Асхата, 09.2026): кнопка создаёт вторую карточку
         // и связывает её с образцом — ничего не нужно таскать по колонкам и выбирать руками
