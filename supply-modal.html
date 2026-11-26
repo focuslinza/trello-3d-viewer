@@ -1299,7 +1299,7 @@
           'Листы — оценка: площадь из расчёта + запас на отходы '+j.waste+'%, точный раскрой делает резчик. «Уже оплачено» — заказы в производстве, их закрывают в первую очередь; остальные клиент ещё может не оплатить.</div>';
         if(!(j.items||[]).length){ box.innerHTML=h+'<div class="muted">Сейчас заказов с материалом в расчёте нет.</div>'; return; }
         var th='padding:6px 8px', un=function(x){ return x.sheet?' л.':(x.unit?' '+esc(x.unit):''); }, nf=function(v){ return String(v).replace('.',','); };
-        h+='<table style="width:100%;border-collapse:collapse;font-size:13.5px"><thead><tr style="text-align:left;color:var(--muted);font-size:12px"><th style="'+th+'">Материал</th><th style="'+th+';text-align:right">Понадобится по заказам</th><th style="'+th+';text-align:right">Из них уже оплачено</th><th style="'+th+';text-align:right">Есть в цехе</th><th style="'+th+';text-align:right">Докупить</th><th style="'+th+'">Заказы</th></tr></thead><tbody>';
+        h+='<table style="width:100%;border-collapse:collapse;font-size:13.5px"><thead><tr style="text-align:left;color:var(--muted);font-size:12px"><th style="'+th+'">По заказам</th><th style="'+th+'">Материал</th><th style="'+th+';text-align:right">Понадобится</th><th style="'+th+';text-align:right">Из них уже оплачено</th><th style="'+th+';text-align:right">Есть в цехе</th><th style="'+th+';text-align:right">Докупить</th></tr></thead><tbody>';
         j.items.forEach(function(x,i){
           var need=x.sheet?x.sheets:x.qty, paidN=x.sheet?x.sheetsPaid:x.qtyPaid;
           var all='<b>'+nf(need)+un(x)+'</b>'+(x.sheet?' <span class="muted">'+esc(x.size)+'</span>':'');
@@ -1308,14 +1308,14 @@
           var hv='<input data-hv="'+i+'" value="'+(x.have==null?'':nf(x.have))+'" inputmode="decimal" placeholder="—" style="width:64px;text-align:right;padding:5px 6px" title="Сколько лежит в цехе'+(x.sheet?', листов':'')+'">'+
             (x.haveAt?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc(String(x.haveAt).slice(8,10)+'.'+String(x.haveAt).slice(5,7))+(x.haveBy?' · '+esc(String(x.haveBy).split(' ')[0]):'')+'</div>':'');
           var cs=x.cards.slice().sort(function(a,b){ return (b.paid-a.paid)||(b.v-a.v); });
-          h+='<tr style="border-top:1px solid var(--line);vertical-align:top"><td style="padding:7px 8px">'+esc(x.title)+'</td><td style="padding:7px 8px;text-align:right;white-space:nowrap">'+all+'</td><td style="padding:7px 8px;text-align:right;white-space:nowrap">'+paid+'</td>'+
-            '<td style="padding:7px 8px;text-align:right;white-space:nowrap">'+hv+'</td><td style="padding:7px 8px;text-align:right;white-space:nowrap">'+buy+'</td>'+
-            '<td style="padding:7px 8px"><a href="#" data-mx="'+i+'" style="text-decoration:none">'+cs.length+' заказ. ▾</a><div id="mx'+i+'" style="display:none;margin-top:4px;font-size:12.5px;line-height:1.5">'+
-            cs.map(function(c){ return (c.paid?'<span style="color:var(--red)">●</span> ':'<span class="muted">○</span> ')+(c.number?'№'+esc(c.number)+' ':'')+esc(c.name)+' — '+nf(c.v)+un(x); }).join('<br>')+'</div></td></tr>';
+          // «По заказам» — номера сразу на виду; нажатие открывает карточку поверх окна (решение Асхата, 26.11.2026)
+          var nums=cs.map(function(c){ return '<a href="#" data-oc="'+esc(c.id)+'" title="'+esc(c.name)+' — '+nf(c.v)+un(x)+(c.paid?' · оплачен, в производстве':' · ждёт оплату')+'" style="display:inline-block;margin:0 6px 3px 0;padding:1px 7px;border-radius:7px;text-decoration:none;font-weight:600;white-space:nowrap;border:1px solid '+(c.paid?'var(--red)':'var(--line)')+';color:'+(c.paid?'var(--red)':'inherit')+'">'+(c.number?'№'+esc(c.number):'без №')+'</a>'; }).join('');
+          h+='<tr style="border-top:1px solid var(--line);vertical-align:top"><td style="padding:7px 8px;max-width:260px">'+nums+'</td><td style="padding:7px 8px">'+esc(x.title)+'</td><td style="padding:7px 8px;text-align:right;white-space:nowrap">'+all+'</td><td style="padding:7px 8px;text-align:right;white-space:nowrap">'+paid+'</td>'+
+            '<td style="padding:7px 8px;text-align:right;white-space:nowrap">'+hv+'</td><td style="padding:7px 8px;text-align:right;white-space:nowrap">'+buy+'</td></tr>';
         });
-        h+='</tbody></table><div class="muted" style="margin-top:8px">● — заказ оплачен и стоит в производстве, ○ — ждёт оплату.</div>';
+        h+='</tbody></table><div class="muted" style="margin-top:8px">Номер в красной рамке — заказ оплачен и стоит в производстве, в обычной — ждёт оплату. Нажмите на номер, чтобы открыть карточку.</div>';
         box.innerHTML=h;
-        [].forEach.call(box.querySelectorAll('[data-mx]'),function(a){ a.onclick=function(e){ e.preventDefault(); var d=document.getElementById('mx'+a.getAttribute('data-mx')); d.style.display=d.style.display==='none'?'':'none'; }; });
+        [].forEach.call(box.querySelectorAll('[data-oc]'),function(a){ a.onclick=function(e){ e.preventDefault(); try{ window.top.postMessage({ ms:'card', id:a.getAttribute('data-oc') },'*'); }catch(err){} }; });
         [].forEach.call(box.querySelectorAll('[data-hv]'),function(inp){ inp.onchange=function(){ var x=j.items[+inp.getAttribute('data-hv')];
           fetch(WORKER+'/material-have',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json','X-MS-Token':tk}, body:JSON.stringify({ key:x.key, n:inp.value }) })
             .then(function(r){ return r.json(); }).then(function(o){ if(!o||o.error){ alert((o&&o.error)||'Не сохранилось'); return; } loadMetal(); }).catch(function(e){ alert('Нет связи: '+(e&&e.message||e)); }); }; });
