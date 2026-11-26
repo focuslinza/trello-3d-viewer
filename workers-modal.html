@@ -183,11 +183,17 @@
     <div class="sec">
       <h3>Работники</h3>
       <div style="margin:-4px 0 10px"><button class="btn" id="printCards" type="button" style="border-color:#2e5c44;color:#9ee6bd" title="Листок каждому сотруднику: личный QR для входа и 3–4 шага по его работе. Для дня перехода на новую систему.">🖨 Памятки и QR для перехода</button></div>
+      <!-- СОТРУДНИКИ — ВЫПАДАЮЩИМ СПИСКОМ (решение Асхата, 26.11.2026): на странице один выбранный работник; «+» — новый -->
+      <div style="display:flex;gap:8px;align-items:center;margin:0 0 12px">
+        <select id="wSel" style="flex:1;max-width:460px;padding:9px 10px;border-radius:9px;font:inherit;font-weight:600"></select>
+        <button class="btn" id="wAdd" type="button" title="Добавить работника" style="font-size:20px;line-height:1;padding:6px 14px;font-weight:700">+</button>
+      </div>
+      <div id="wPick" class="hint" style="display:none;padding:4px 0 10px">Выберите работника из списка — покажу его должности, оклад и вход в систему. Новый работник — кнопка «+».</div>
       <div id="rows"></div>
       <div class="empty" id="emptyHint" style="display:none">Пока нет работников. Добавьте первого.</div>
-      <div style="margin-top:12px"><button class="btn add" id="addBtn" type="button">+ добавить работника</button></div>
+      <div style="margin-top:12px;display:none"><button class="btn add" id="addBtn" type="button">+ добавить работника</button></div>
       <label class="hint" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer"><input type="checkbox" id="showDeleted" style="width:auto"> показать удалённых работников</label>
-      <div class="savebar">
+      <div class="savebar" style="display:none">
         <button class="btn" id="saveAll" type="button" style="background:#1f3a5f;border-color:#2e5c8f;color:#cfe1ff;font-weight:700;padding:10px 22px">💾 Сохранить всё</button>
         <span id="saveAllMsg" style="font-size:13px"></span>
       </div>
@@ -206,6 +212,24 @@
     };
     var WORKER = (window.WORKER_URL || '').replace(/\/+$/,'');
     var rowsEl = document.getElementById('rows');
+    // какой работник показан: id сохранённого или сама новая карточка
+    var W_SEL='', W_NEW=null;
+    function wCards(){ return [].slice.call(rowsEl.querySelectorAll('.wcard')); }
+    function wPaintSel(){
+      var sel=document.getElementById('wSel'); if(!sel) return;
+      var cards=wCards(); if(W_NEW && cards.indexOf(W_NEW)<0) W_NEW=null;
+      var saved=cards.filter(function(c){ return (c.getAttribute('data-id')||'')!==''; });
+      if(W_SEL && !saved.some(function(c){ return c.getAttribute('data-id')===W_SEL; })) W_SEL='';
+      var opts=saved.map(function(c){ var nm=(c.querySelector('.nm')||{}).value||'без имени'; return { id:c.getAttribute('data-id'), nm:nm, off:c.classList.contains('inactive') }; })
+        .sort(function(a,b){ return a.nm.localeCompare(b.nm,'ru'); });
+      sel.innerHTML='<option value="">'+(W_NEW?'— новый работник —':(opts.length?'— выберите работника —':'— работников пока нет —'))+'</option>'+
+        opts.map(function(o){ return '<option value="'+esc(o.id)+'">'+esc(o.nm)+(o.off?' · удалён':'')+'</option>'; }).join('');
+      sel.value=W_NEW?'':W_SEL;
+      cards.forEach(function(c){ var show = W_NEW ? c===W_NEW : (W_SEL && c.getAttribute('data-id')===W_SEL); c.style.display = show ? '' : 'none'; });
+      var pk=document.getElementById('wPick'); if(pk) pk.style.display=(!W_NEW && !W_SEL && opts.length)?'block':'none';
+    }
+    document.getElementById('wSel').addEventListener('change',function(){ if(W_NEW){ W_NEW.remove(); W_NEW=null; } W_SEL=this.value; wPaintSel(); });
+    document.getElementById('wAdd').addEventListener('click',function(){ if(W_NEW){ W_NEW.querySelector('.nm').focus(); return; } document.getElementById('addBtn').click(); });
     var msgEl = document.getElementById('msg');
     var BOARD_MEMBERS = [];
     // ДОЛЖНОСТИ (11.2026): права, этапы и оклад — из должностей человека
@@ -758,7 +782,11 @@
           rowsEl.innerHTML='';
           var ws=(d&&d.workers)||[];
           window.WORKERS=ws;
+          var _newName = W_NEW ? String((W_NEW.querySelector('.nm')||{}).value||'').trim() : '';
           ws.forEach(function(w){ rowsEl.appendChild(makeRow(w)); });
+          // только что добавленный работник после сохранения остаётся выбранным
+          if(_newName){ var _hit=ws.filter(function(w){ return String(w.name||'').trim()===_newName; })[0]; if(_hit) W_SEL=_hit.id; }
+          W_NEW=null; wPaintSel();
           // выпадашка «кому» в мотивации начальника — теперь есть кем наполнить
           var bsel2=document.getElementById('bossWorkerId');
           if(bsel2){ var cur=window.__BOSS_ID||bsel2.value||''; bsel2.innerHTML='<option value="">— выключено —</option>'+ws.filter(function(w){return w.active!=0;}).map(function(w){return '<option value="'+w.id+'"'+(cur===w.id?' selected':'')+'>'+esc(w.name)+'</option>';}).join(''); }
@@ -819,6 +847,7 @@
         .then(function(d){
           if(d&&d.ok){
             tr.setAttribute('data-id', d.id);
+            if(W_NEW===tr){ W_NEW=null; W_SEL=String(d.id); } wPaintSel();
             setMsg('Сохранено: '+name);
             // явное подтверждение: кнопка зеленеет с галочкой, карточка мигает зелёной рамкой
             btn.textContent='✓ Сохранено';
@@ -854,7 +883,7 @@
     function delRow(tr){
       var id=tr.getAttribute('data-id')||'';
       var name=tr.querySelector('.nm').value.trim()||'работника';
-      if(!id){ tr.remove(); updateCount(); return; } // unsaved row — just drop
+      if(!id){ tr.remove(); W_NEW=null; wPaintSel(); updateCount(); return; } // unsaved row — just drop
       if(!confirm('Удалить '+name+'? (записи в заказах сохранятся)')) return;
       setMsg('Удаление…');
       fetch(WORKER+'/workers-delete', {
@@ -862,7 +891,7 @@
         body: JSON.stringify({ id:id })
       }).then(function(r){ return r.json(); })
         .then(function(d){
-          if(d&&d.ok){ tr.remove(); setMsg('Удалён: '+name); updateCount(); if(!rowsEl.children.length) document.getElementById('emptyHint').style.display='block'; }
+          if(d&&d.ok){ tr.remove(); W_SEL=''; wPaintSel(); setMsg('Удалён: '+name); updateCount(); if(!rowsEl.children.length) document.getElementById('emptyHint').style.display='block'; }
           else setMsg('Не удалось удалить: '+(d&&d.error||'?'));
         }).catch(function(e){ setMsg('Ошибка: '+(e&&e.message||e)); });
     }
@@ -984,6 +1013,7 @@
     });
     document.getElementById('addBtn').addEventListener('click', function(){
       var card=makeRow(); rowsEl.appendChild(card); document.getElementById('emptyHint').style.display='none';
+      W_NEW=card; wPaintSel();
       card.querySelector('.nm').focus();
     });
 
