@@ -103,6 +103,7 @@
     @keyframes supGlowY { 0%,100% { box-shadow:0 0 0 1px rgba(226,178,3,.3), 0 0 0 rgba(226,178,3,0); }
                           50% { box-shadow:0 0 0 2px #e2b203, 0 0 22px 6px rgba(226,178,3,.8); } }
     .kcard.glowY { animation:supGlowY 2s ease-in-out infinite; border-color:#e2b203 !important; }
+    .tab.glowY { animation:supGlowY 2s ease-in-out infinite; border-color:#e2b203 !important; }
     .kcard.glow { animation:supGlow 2s ease-in-out infinite; border-color:#ff4d4d !important; }
     @media (prefers-reduced-motion: reduce) { .kcard.glow { animation-duration:2s; } }
     /* быстрая заявка: только форма, без доски снабжения */
@@ -1280,6 +1281,10 @@
       };
     }
 
+    var METAL_ATTN=0;
+    // сколько строк требуют внимания — для сияния вкладки; спрашиваем один раз при открытии «Снабжения»
+    (function(){ var tk=''; try{ tk=localStorage.getItem('ms_board_token')||''; }catch(e){}
+      fetch(WORKER+'/material-need',{ credentials:'include', headers:{'X-MS-Token':tk} }).then(function(r){ return r.json(); }).then(function(j){ if(j&&j.ok&&(+j.attn||0)!==METAL_ATTN){ METAL_ATTN=+j.attn||0; try{ render(); }catch(e){} } }).catch(function(){}); })();
     function loadMetal(){
       var box=document.getElementById('metalBox'); if(!box) return;
       var tk=''; try{ tk=localStorage.getItem('ms_board_token')||''; }catch(e){}
@@ -1287,7 +1292,8 @@
         box=document.getElementById('metalBox'); if(!box) return;
         if(!j||j.error){ box.textContent=(j&&j.error)||'Не удалось загрузить'; return; }
         box.className='';
-        var h='<h3 style="margin:0 0 4px">Металл по заказам</h3>'+
+        if((+j.attn||0)!==METAL_ATTN){ METAL_ATTN=+j.attn||0; render(); return; }
+        var h='<h3 style="margin:0 0 4px">Потенциальная потребность по металлу</h3>'+
           '<div style="border:1px solid #8a6d1f;background:rgba(232,192,125,.14);border-radius:8px;padding:8px 12px;margin:6px 0 10px;font-size:13px;line-height:1.45"><b>Это потребность, а не список покупок.</b> Сначала проверьте, что лежит в цехе, и впишите в столбец «Есть в цехе». Покупать нужно только то, что в столбце «Докупить».</div>'+
           '<div class="muted" style="margin-bottom:10px;line-height:1.45">Заказы, которые ещё не порезаны: карточки из «Расчет сделан», «Согласования», «Ждем оплату» и «В производстве» без метки «Порезано» — '+j.cards+' заказ. '+
           'Листы — оценка: площадь из расчёта + запас на отходы '+j.waste+'%, точный раскрой делает резчик. «Уже оплачено» — заказы в производстве, их закрывают в первую очередь; остальные клиент ещё может не оплатить.</div>';
@@ -1320,14 +1326,14 @@
       var h='';
       var tabs=[['req','Заявки'+(OPEN?'<span class="cnt">'+OPEN+'</span>':'')]];
       // «Металл по заказам» (решение Асхата, 26.11.2026): сколько листов понадобится по заказам, которые ещё не порезаны
-      tabs.push(['metal','Металл по заказам']);
+      tabs.push(['metal','Потенциальная потребность по металлу'+(METAL_ATTN?'<span class="cnt" style="background:#4a3a10;color:#f5cd47">'+METAL_ATTN+'</span>':'')]);
       if(CAN_SUPPLY||IS_ADMIN){
         tabs.push(['tools','Инструмент и сервис'+(DUE?'<span class="cnt">'+DUE+'</span>':'')]);
         tabs.push(['cash','Наличные расходы']);
         tabs.push(['prices','💲 Цены материалов']);
       }
       tabs.forEach(function(x){
-        h+='<div class="tab'+(TAB===x[0]?' active':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
+        h+='<div class="tab'+(TAB===x[0]?' active':'')+(x[0]==='metal'&&METAL_ATTN?' glowY':'')+'" data-tab="'+x[0]+'">'+x[1]+'</div>';
       });
       document.getElementById('barTabs').innerHTML=h; h='';
       h+= TAB==='metal' ? '<div id="metalBox" class="muted" style="padding:6px 2px">Загрузка…</div>' : TAB==='req' ? renderReq() : TAB==='tools' ? renderTools() : TAB==='prices' ? renderPrices() : renderCash();

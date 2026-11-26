@@ -147,7 +147,7 @@
             var e2=function(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); };
             var txt=m.lines.map(function(x){ return x.sheet ? e2(x.title)+' — <b>'+x.sheets+' лист'+(x.sheets===1?'':(x.sheets<5?'а':'ов'))+'</b> '+e2(x.size) : e2(x.title)+' — <b>'+String(x.qty).replace('.',',')+(x.unit?' '+e2(x.unit):'')+'</b>'; }).join(' · ');
             var nd=document.createElement('div'); nd.className='muted'; nd.style.cssText='margin-top:6px;line-height:1.45';
-            nd.title='Оценка потребности, а не список покупок: площадь материала из расчёта + запас на отходы '+m.waste+'%. Сколько докупать — после проверки цеха (Снабжение → Металл по заказам). Точный раскрой делает резчик.';
+            nd.title='Оценка потребности, а не список покупок: площадь материала из расчёта + запас на отходы '+m.waste+'%. Сколько докупать — после проверки цеха (Снабжение → Потенциальная потребность по металлу). Точный раскрой делает резчик.';
             nd.innerHTML='Понадобится металла: '+txt;
             left.appendChild(nd);
             try{ t.sizeTo && t.sizeTo('#wrap'); }catch(e){}
