@@ -47,7 +47,7 @@ const EXPECT = {
   'buh-modal.html': 'Бухгалтерия', 'timesheet-modal.html': 'Табель', 'supply-modal.html': 'Заявки',
   'calc-section.html': 'Открыть калькулятор',   // кнопка «Счёт на оплату» с 20.11.2026 живёт в статусе «Счёт выслан», в разделе её больше нет
   'invoice-modal.html': 'Поставщик', 'route-section.html': 'операции',
-  'kp-pre-modal.html': 'Предварительное КП', 'repair-board-modal.html': 'Ремонт', 'sales-board-modal.html': 'Продажи', 'my-earnings-modal.html': 'заработок'
+  'kp-pre-modal.html': 'Предварительное КП', 'analytics-modal.html': 'Аналитика производства', 'repair-board-modal.html': 'Ремонт', 'sales-board-modal.html': 'Продажи', 'my-earnings-modal.html': 'заработок'
 };
 for (const [f, want] of Object.entries(EXPECT)) {
   if (!fs.existsSync(R + f)) { fail('нет файла ' + f); continue; }

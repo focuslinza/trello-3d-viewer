@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Аналитика</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./trello-shim.js"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --bg3:#282e33; --line:#3a414a; --txt:#c7d1db; --muted:#9fadbc; --blue:#4f7cff; --green:#4bce97; --red:#f28b82; --amber:#e8c07d; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+    #app{padding:14px 14px 30px;max-width:1100px;margin:0 auto}
+    h3{margin:0;font-size:17px} h4{margin:22px 0 4px;font-size:14px}
+    .muted{color:var(--muted);font-size:12.5px;line-height:1.45}
+    input[type=date]{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:13.5px}
+    .btn{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 13px;font-size:13px;cursor:pointer}
+    .btn:hover{border-color:var(--blue)} .btn.primary{background:#274469;border-color:var(--blue);color:#cfe1ff;font-weight:600}
+    .tiles{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .tile{border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:var(--bg2);min-width:120px}
+    .tile b{display:block;font-size:19px;font-weight:800} .tile span{font-size:12px;color:var(--muted)}
+    .tile.bad b{color:var(--red)} .tile.ok b{color:var(--green)}
+    table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13px}
+    th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+    td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top} .num{text-align:right;white-space:nowrap}
+    .barw{height:4px;border-radius:3px;background:var(--blue);margin-top:4px;opacity:.75}
+    .red{color:var(--red)} .green{color:var(--green)} .amber{color:var(--amber)}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// АНАЛИТИКА ПРОИЗВОДСТВА И СНАБЖЕНИЯ (решение Асхата, 26.11.2026). Панель руководителя → «Аналитика». Только чтение.
+(function(){
+  var WORKER=(window.CONFIG&&window.CONFIG.WORKER_URL)||window.WORKER_URL||'';
+  var KIND=/[?&]kind=supply/.test(location.search)?'supply':'prod';
+  var app=document.getElementById('app');
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+  function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
+  function d1(v){ return v==null?'—':String(v).replace('.',','); }
+  function dm(s){ s=String(s||''); return s.length>=10?s.slice(8,10)+'.'+s.slice(5,7):s; }
+  function bTok(){ try{ return localStorage.getItem('ms_board_token')||''; }catch(e){ return ''; } }
+  // отчётный период: с 10-го числа по 9-е следующего месяца; по умолчанию — с 10-го по сегодня
+  function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function periodOf(d,shift){ var y=d.getFullYear(), m=d.getMonth(); if(d.getDate()<10) m--; m+=(shift||0); return [ymd(new Date(y,m,10)), ymd(new Date(y,m+1,9))]; }
+  function cap(pr){ var t=ymd(new Date()); return [pr[0], pr[1]>t?t:pr[1]]; }
+  function shift(dir){ var f=document.getElementById('aFrom').value, p=f.split('-'), base=new Date(+p[0],+p[1]-1,+p[2]||10); var pr=cap(periodOf(base,dir)); if(pr[0]>ymd(new Date())) return; document.getElementById('aFrom').value=pr[0]; document.getElementById('aTo').value=pr[1]; load(); }
+  function tile(v,l,cls){ return '<div class="tile '+(cls||'')+'"><b>'+v+'</b><span>'+l+'</span></div>'; }
+  var TITLE=KIND==='supply'?'📦 Аналитика снабжения':'🏭 Аналитика производства';
+  var pr0=cap(periodOf(new Date(),0));
+  app.innerHTML='<h3>'+TITLE+'</h3>'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">'+
+    '<input type="date" id="aFrom" value="'+pr0[0]+'"> — <input type="date" id="aTo" value="'+pr0[1]+'">'+
+    '<button class="btn primary" id="aGo" type="button">Показать</button>'+
+    '<button class="btn" id="aPrev" type="button" title="Предыдущий отчётный период (с 10-го по 9-е)">← период</button><button class="btn" id="aNext" type="button" title="Следующий отчётный период">период →</button>'+
+    '<span class="muted">отчётный период: с 10-го по 9-е число</span></div>'+
+    '<div id="aBody" class="muted" style="margin-top:12px">Загрузка…</div>';
+  document.getElementById('aGo').onclick=load;
+  document.getElementById('aPrev').onclick=function(){ shift(-1); };
+  document.getElementById('aNext').onclick=function(){ shift(1); };
+  function load(){
+    var f=document.getElementById('aFrom').value, t=document.getElementById('aTo').value, body=document.getElementById('aBody');
+    if(!f||!t){ return; }
+    body.className='muted'; body.textContent='Загрузка…';
+    fetch(WORKER+(KIND==='supply'?'/supply-analytics':'/prod-analytics')+'?from='+f+'&to='+t,{ credentials:'include', headers:{'X-MS-Token':bTok()} })
+      .then(function(r){ return r.json(); }).then(function(j){
+        if(!j||j.error){ body.textContent=(j&&j.error)||'Не удалось загрузить'; return; }
+        body.className=''; body.innerHTML=(KIND==='supply'?supply(j):prod(j));
+      }).catch(function(e){ body.textContent='Нет связи: '+(e&&e.message||e); });
+  }
+  var FAULT={ worker:'цех', client:'клиент', mixed:'цех + клиент' };
+  function prod(j){
+    var h='<div class="tiles">'+
+      tile(j.launched,'запущено в производство')+tile(j.done,'сдано (готово)')+tile(j.nowWork,'сейчас в работе')+
+      tile(d1(j.payToDone)+(j.payToDone!=null?' дн.':''),'от первой оплаты до сдачи')+
+      tile(d1(j.prodToDone)+(j.prodToDone!=null?' дн.':''),'от запуска до сдачи')+
+      tile(j.late,'сдано с опозданием',j.late?'bad':'ok')+
+      tile(j.reworks.n,'переделок',j.reworks.n?'bad':'ok')+'</div>'+
+      '<div class="muted" style="margin-top:8px">«Запущено» — карточка впервые попала в «В производстве» в периоде. «Сдано» — впервые попала в «Готово», «Сдано» или «АВР» в периоде. '+
+      'Опоздание — от первой оплаты до сдачи прошло больше '+j.norm+' дн. (срок задаётся в «Сотрудники → мотивация начальника цеха»). Средний срок посчитан по '+j.payN+' заказ.'+(j.noPay?' У '+j.noPay+' сданных заказов оплаты нет — в срок не вошли.':'')+' Детали для ремонта не учитываются.</div>';
+    if(j.lateList.length){ h+='<h4>Сданы с опозданием</h4><table><thead><tr><th>№</th><th>Заказ</th><th class="num">Дней от оплаты</th><th class="num">Сверх срока</th></tr></thead><tbody>'+
+      j.lateList.map(function(r){ return '<tr><td>'+esc(r.number||'')+'</td><td>'+esc(r.name)+'</td><td class="num">'+r.days+'</td><td class="num red">+'+r.over+'</td></tr>'; }).join('')+'</tbody></table>'; }
+    h+='<h4>Сейчас в работе</h4><div class="muted">В производстве '+j.nowWork+' заказ., в среднем стоят '+d1(j.nowAvgDays)+' дн. с запуска.'+(j.nowOld.length?' Дольше срока ('+j.norm+' дн.) — '+j.nowOld.length+':':'')+'</div>';
+    if(j.nowOld.length){ h+='<table><thead><tr><th>№</th><th>Заказ</th><th class="num">Дней в производстве</th></tr></thead><tbody>'+
+      j.nowOld.map(function(r){ return '<tr><td>'+esc(r.number||'')+'</td><td>'+esc(r.name)+'</td><td class="num red">'+r.days+'</td></tr>'; }).join('')+'</tbody></table>'; }
+    var mx=0; j.dwell.forEach(function(r){ if(r.avg>mx) mx=r.avg; });
+    h+='<h4>Где застревают карточки</h4><div class="muted">Сколько дней карточка стояла в колонке, прежде чем уйти из неё в этом периоде, и сколько стоят сейчас.</div>'+
+      '<table><thead><tr><th>Колонка</th><th class="num">Ушло из колонки</th><th class="num">В среднем, дн.</th><th class="num">Самая долгая, дн.</th><th class="num">Стоят сейчас</th><th class="num">Сейчас в среднем, дн.</th></tr></thead><tbody>'+
+      j.dwell.map(function(r){ return '<tr><td>'+esc(r.list)+(r.avg&&mx?'<div class="barw" style="width:'+Math.max(3,Math.round(r.avg/mx*100))+'%"></div>':'')+'</td><td class="num">'+r.passed+'</td><td class="num">'+d1(r.avg)+'</td><td class="num">'+(r.passed?d1(r.max):'—')+'</td><td class="num">'+r.now+'</td><td class="num">'+d1(r.nowAvg)+'</td></tr>'; }).join('')+'</tbody></table>';
+    var S=j.stages, tot=S.cut+S.bend+S.weld+S.shleif, st=[['Резка',S.cut],['Гибка',S.bend],['Сварка',S.weld],['Шлейфовка',S.shleif]];
+    h+='<h4>Загрузка по участкам</h4><div class="muted">Стоимость работ по расчётам заказов, запущенных в периоде ('+S.orders+' шт. с расчётом), без материала. Сборка отдельной строкой в расчётах не ведётся.</div>'+
+      '<table><thead><tr><th>Участок</th><th class="num">Работ на сумму</th><th class="num">Доля</th></tr></thead><tbody>'+
+      st.map(function(x){ var p=tot?Math.round(x[1]/tot*1000)/10:0; return '<tr><td>'+x[0]+'<div class="barw" style="width:'+Math.max(tot&&x[1]?3:0,Math.round(p))+'%"></div></td><td class="num">'+money(x[1])+' ₸</td><td class="num">'+String(p).replace('.',',')+'%</td></tr>'; }).join('')+
+      '<tr><td><b>Итого</b></td><td class="num"><b>'+money(tot)+' ₸</b></td><td></td></tr></tbody></table>';
+    var R=j.reworks;
+    h+='<h4>Брак и переделки</h4><div class="muted">Переделок за период: '+R.n+'. Потери: материал '+money(R.mat)+' ₸, работа '+money(R.work)+' ₸, всего '+money(R.mat+R.work)+' ₸.'+
+      Object.keys(R.byFault).map(function(k){ return ' По вине «'+(FAULT[k]||k)+'» — '+R.byFault[k].n+' на '+money(R.byFault[k].sum)+' ₸.'; }).join('')+'</div>';
+    if(R.rows.length){ h+='<table><thead><tr><th>Дата</th><th>№</th><th>Заказ</th><th>Причина</th><th>Вина</th><th>Кто</th><th class="num">Потери</th></tr></thead><tbody>'+
+      R.rows.map(function(r){ return '<tr><td>'+dm(r.date)+'</td><td>'+esc(r.number)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.reason)+'</td><td>'+esc(FAULT[r.fault]||r.fault)+'</td><td>'+esc(r.who)+'</td><td class="num">'+money(r.cost)+' ₸</td></tr>'; }).join('')+'</tbody></table>'; }
+    return h;
+  }
+  function supply(j){
+    var h='<div class="tiles">'+
+      tile(j.created,'заявок создано'+(j.createdUrgent?' (срочных '+j.createdUrgent+')':''))+tile(j.closed,'закрыто (куплено, выдано)')+
+      tile(d1(j.avgCloseDays)+(j.avgCloseDays!=null?' дн.':''),'средний срок закрытия')+tile(j.openTotal,'открыто сейчас')+
+      tile(j.lateTotal,'висят дольше срока',j.lateTotal?'bad':'ok')+
+      tile(money(j.spent)+' ₸','потрачено наличными ('+j.spentN+')')+tile(money(j.issued)+' ₸','выдано наличными ('+j.issuedN+')')+
+      tile(money(j.balance)+' ₸','остаток у снабженца',j.balance<0?'bad':'')+'</div>'+
+      '<div class="muted" style="margin-top:8px">Срок закрытия — от создания заявки до статуса «Куплено» или «Выдано».'+(j.rejected?' Отклонено за период: '+j.rejected+'.':'')+' Просрочка: срочная заявка открыта дольше '+j.lateUrgentDays+' дн., обычная — дольше '+j.lateNormalDays+' дн. '+
+      'Остаток у снабженца = остаток на начало периода ('+money(j.carryIn)+' ₸) + выдано − потрачено.</div>';
+    if(j.open.length){ h+='<h4>Открытые заявки</h4><table><thead><tr><th>Статус</th><th class="num">Заявок</th></tr></thead><tbody>'+j.open.map(function(r){ return '<tr><td>'+esc(r.status)+'</td><td class="num">'+r.n+'</td></tr>'; }).join('')+'</tbody></table>'; }
+    h+='<h4>Висят дольше срока</h4>';
+    if(!j.late.length) h+='<div class="muted">Таких заявок нет.</div>';
+    else h+='<table><thead><tr><th>Заявка</th><th>Кол-во</th><th>Статус</th><th>Кто просил</th><th>Заказ</th><th class="num">Дней</th></tr></thead><tbody>'+
+      j.late.map(function(r){ return '<tr><td>'+(r.urgent?'<span class="red">срочно</span> ':'')+esc(r.name)+'</td><td>'+esc(r.qty)+'</td><td>'+esc(r.status)+'</td><td>'+esc(r.by)+'</td><td>'+esc(r.order?'№'+r.order:'')+'</td><td class="num red">'+d1(r.days)+'</td></tr>'; }).join('')+'</tbody></table>'+
+      (j.lateTotal>j.late.length?'<div class="muted">Показаны первые '+j.late.length+' из '+j.lateTotal+'.</div>':'');
+    if(j.byWho.length){ h+='<h4>Кто создаёт заявки</h4><table><thead><tr><th>Сотрудник</th><th class="num">Заявок за период</th></tr></thead><tbody>'+j.byWho.map(function(r){ return '<tr><td>'+esc(r.name)+'</td><td class="num">'+r.n+'</td></tr>'; }).join('')+'</tbody></table>'; }
+    var mx=j.top.length?j.top[0].sum:0;
+    h+='<h4>На что потрачено</h4><div class="muted">Наличные расходы снабжения за период по записи «что купили». Поставщики в системе не записываются, поэтому разбивки по поставщикам нет; закупки по безналу сюда не входят.</div>';
+    if(!j.top.length) h+='<div class="muted" style="margin-top:6px">Расходов за период нет.</div>';
+    else h+='<table><thead><tr><th>Что купили</th><th class="num">Раз</th><th class="num">Сумма</th></tr></thead><tbody>'+
+      j.top.map(function(r){ return '<tr><td>'+esc(r.what)+(mx?'<div class="barw" style="width:'+Math.max(3,Math.round(r.sum/mx*100))+'%"></div>':'')+'</td><td class="num">'+r.n+'</td><td class="num">'+money(r.sum)+' ₸</td></tr>'; }).join('')+
+      '<tr><td><b>Итого</b></td><td></td><td class="num"><b>'+money(j.spent)+' ₸</b></td></tr></tbody></table>'+(j.topMore?'<div class="muted">И ещё '+j.topMore+' статей с меньшими суммами (в итог входят).</div>':'');
+    return h;
+  }
+  load();
+})();
+</script>
+</body>
+</html>
