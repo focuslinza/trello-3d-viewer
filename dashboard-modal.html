@@ -120,7 +120,11 @@
   function pad(n){ return n<10?'0'+n:''+n; }
   function fmtDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
   function startOfWeek(d){ var x=new Date(d); var wd=(x.getDay()+6)%7; x.setDate(x.getDate()-wd); return x; } // неделя с понедельника
-  var RANGE = { from: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: fmtDate(now), presetKey:'month' };
+  // ОТЧЁТНЫЙ ПЕРИОД (решение Асхата, 26.11.2026): с 10-го числа по 9-е число следующего месяца — по умолчанию панель
+  // открывается за текущий такой период целиком
+  function repPeriod(d,shift){ var y=d.getFullYear(), m=d.getMonth(); if(d.getDate()<10) m--; m+=(shift||0); return [new Date(y,m,10), new Date(y,m+1,9)]; }
+  var _rp0=repPeriod(now,0);
+  var RANGE = { from: fmtDate(_rp0[0]), to: fmtDate(_rp0[1]), presetKey:'month' };
   var EXCL_WEEKENDS = false;
   var tab='people';
   var DATA=null;
@@ -214,6 +218,7 @@
        // «‹ Месяц ›» убран (решение Асхата, 18.11.2026): период — только календари «от» и «до»
        '<input type="date" id="fromD" value="'+RANGE.from+'"><span class="muted">—</span>'+
        '<input type="date" id="toD" value="'+RANGE.to+'">'+
+       '<button type="button" id="perPrev" class="btn" title="Предыдущий отчётный период (с 10-го по 9-е)">← период</button><button type="button" id="perNext" class="btn" title="Следующий отчётный период">период →</button>'+
        '<span style="flex:1"></span>'+
        '<label class="small muted" style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="exclWeekends"'+(EXCL_WEEKENDS?' checked':'')+'> без выходных (для средних)</label>'+
        '<button type="button" id="applyRange" class="btn green">Применить</button>'+
@@ -639,6 +644,9 @@
       if(mp) mp.onclick=function(){ shiftMonth(-1); };
       if(mn) mn.onclick=function(){ shiftMonth(1); };
       if(ml) ml.onclick=function(){ applyMonth(); };
+      [['perPrev',-1],['perNext',1]].forEach(function(x){ var bt=document.getElementById(x[0]); if(bt) bt.onclick=function(){
+        var pr=repPeriod(new Date((RANGE.from||fmtDate(new Date()))+'T12:00:00'),x[1]); if(pr[0]>new Date()) return;
+        RANGE.from=fmtDate(pr[0]); RANGE.to=fmtDate(pr[1]); RANGE.presetKey='custom'; ACTLOG=null; ACTLOG_KEY=''; load(); }; });
       var ar=document.getElementById('applyRange'); if(ar) ar.onclick=function(){
         var f=document.getElementById('fromD').value, t2=document.getElementById('toD').value;
         if(!f||!t2) return;
