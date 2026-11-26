@@ -204,7 +204,7 @@
     function loadClients(f,tt){
       var box=document.getElementById('anClients'); if(!box) return;
       box.innerHTML=sect('По клиентам','<span class="muted">Загрузка…</span>');
-      fetch(WORKER+'/sales-clients?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(tt)+'&mgr='+encodeURIComponent(AN_MGR)).then(function(r){return r.json();}).then(function(j){
+      fetch(WORKER+'/sales-clients?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(tt)+'&mgr='+encodeURIComponent(AN_MGR)+(ONLY_AN?'&scope=panel':'')).then(function(r){return r.json();}).then(function(j){
         if(j.error){ box.innerHTML=sect('По клиентам',esc(j.error)); return; }
         CL=j.clients||[];
         if(!CL.length){ box.innerHTML=sect('По клиентам','<span class="muted">За период заказов нет.</span>'); return; }
@@ -245,14 +245,14 @@
     function loadAnalytics(){
       var f=document.getElementById('anFrom').value, tt=document.getElementById('anTo').value;
       document.getElementById('anMsg').textContent='Загрузка…';
-      fetch(WORKER+'/sales-analytics?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(tt)+'&mgr='+encodeURIComponent(AN_MGR))
+      fetch(WORKER+'/sales-analytics?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(tt)+'&mgr='+encodeURIComponent(AN_MGR)+(ONLY_AN?'&scope=panel':''))
       .then(function(r){return r.json();}).then(function(j){
         document.getElementById('anMsg').textContent='';
         if(j.error){ document.getElementById('anBody').textContent=j.error; return; }
         // АНАЛИТИКА ПО МЕНЕДЖЕРАМ (26.11.2026): руководитель выбирает менеджера, менеджер видит только своё
         var mb=document.getElementById('anMgrBox'), M=j.mgr||{};
         if(mb){
-          if(M.canAll&&(M.list||[]).length){ mb.innerHTML='<select id="anMgr" title="Чьи продажи показывать"><option value="">Все менеджеры</option>'+M.list.map(function(x){ return '<option value="'+esc(x.id)+'"'+(x.id===M.cur?' selected':'')+'>'+esc(x.name)+'</option>'; }).join('')+'</select>';
+          if(M.pick&&(M.list||[]).length){ mb.innerHTML='<select id="anMgr" title="Чьи продажи показывать"><option value="">Все менеджеры</option>'+M.list.map(function(x){ return '<option value="'+esc(x.id)+'"'+(x.id===M.cur?' selected':'')+'>'+esc(x.name)+'</option>'; }).join('')+'</select>';
             document.getElementById('anMgr').onchange=function(){ AN_MGR=this.value; loadAnalytics(); }; }
           else if(!M.canAll){ mb.innerHTML='<b style="font-size:13px">Ваши продажи'+(M.curName?': '+esc(M.curName):'')+'</b>'; }
           else mb.innerHTML='';
