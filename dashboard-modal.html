@@ -87,7 +87,9 @@
   <div class="wrap" id="app"><div class="muted" id="boot">Загрузка…</div></div>
   <div class="bar">
     <!-- разделы — внизу вкладками, как в Бухгалтерии; открытый раздел подсвечен -->
-    <div class="tabs" id="barTabs">
+    <!-- старые вкладки «Должности», «Сотрудники», «Табель» спрятаны сразу (они под «HR»), а вся полоса показывается, когда расклад готов — без мигания старого вида (26.11.2026) -->
+    <style>#positionsBtn,#workers,#tabelBtn{display:none!important}#barTabs.wait{visibility:hidden}</style>
+    <div class="tabs wait" id="barTabs">
       <div class="tab" id="financeBtn" data-sec="1" data-per="1" title="Расходы, налоги, чистая прибыль">Финансы</div>
       <!-- «Уступки» убраны (решение Асхата, 11.2026): механизм цены и скидок продумаем заново -->
       <div class="tab" id="discBtn" data-sec="1" style="display:none">Уступки</div>
@@ -1281,8 +1283,10 @@
     document.body.appendChild(ov);
     anGo(ov,'sales');
   }
+  setTimeout(function(){ var bt=document.getElementById('barTabs'); if(bt) bt.classList.remove('wait'); },4000);
   function initTabs(){
     // три прежние вкладки спрятаны под «HR»; помним, какие из них этому человеку были доступны
+    document.getElementById('barTabs').classList.remove('wait');
     [['tabel','tabelBtn'],['positions','positionsBtn'],['staff','workers']].forEach(function(p){ var e=document.getElementById(p[1]); if(!e) return; HR_OK[p[0]]=(e.style.display!=='none' && !e.__msDenied); e.style.display='none'; });
     // «Аналитику» видит тот, кому открыты «Финансы»
     var anT=document.getElementById('anTab'), _fb=document.getElementById('financeBtn'); anT.onclick=openAnSec; if(_fb && (_fb.style.display==='none' || _fb.__msDenied)) anT.style.display='none';
