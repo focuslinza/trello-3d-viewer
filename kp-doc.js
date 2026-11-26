@@ -52,11 +52,11 @@
     return {
       pageSize:'A4', pageMargins:[48,40,48,50],
       defaultStyle:{ font:'DejaVu', fontSize:10, lineHeight:1.15 },
-      footer:function(){ return { text: (sup.cash?'':sn+'  •  ')+'Коммерческое предложение', alignment:'center', fontSize:7, color:'#555', margin:[0,18,0,0] }; },
+      footer:function(){ return { text: (sup.cash?'':sn+'  •  ')+(d.pre?'Предварительное коммерческое предложение':'Коммерческое предложение'), alignment:'center', fontSize:7, color:'#555', margin:[0,18,0,0] }; },
       content:[
         { stack:head },
         { canvas:[{ type:'line', x1:0, y1:4, x2:499, y2:4, lineWidth:1, lineColor:'#333' }], margin:[0,4,0,10] },
-        { text:'КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ', bold:true, alignment:'center', fontSize:11 },
+        { text:(d.pre?'ПРЕДВАРИТЕЛЬНОЕ ':'')+'КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ', bold:true, alignment:'center', fontSize:11 },
         { columns:[{ text:'№ '+(d.number||''), alignment:'center' }, { text:'от '+(d.date||''), alignment:'center' }], margin:[0,4,0,2] },
         d.validUntil ? { text:[{text:'Действительно до: '},{text:d.validUntil,bold:true}], alignment:'center', margin:[0,0,0,6] } : { text:'', margin:[0,0,0,4] },
         who ? { text:[{text:'Кому: '}, {text:who}] } : '',
@@ -65,7 +65,8 @@
         { text: (sup.cash ? 'Наша компания' : sn)+' предлагает рассмотреть коммерческое предложение на изготовление изделий.', margin:[0,4,0,0] },
         { text:'1. Состав и стоимость предложения', bold:true, margin:[0,4,0,4] },
         { table:{ headerRows:1, widths:[18,'*',38,40,62,62], body:body }, layout:{ hLineColor:LINE, vLineColor:LINE, paddingTop:function(){return 3;}, paddingBottom:function(){return 3;} } },
-        { text:vatLine, margin:[0,3,0,8] },
+        { text:vatLine, margin:[0,3,0,d.pre?3:8] },
+        d.pre ? { text:'Цена предварительная. Окончательная стоимость определяется после расчёта по чертежам и техническому заданию.', bold:true, margin:[0,0,0,8] } : '',
         { text:'2. Коммерческие условия', bold:true, margin:[0,0,0,4] },
         { table:{ headerRows:1, widths:[200,'*'], body:cond }, layout:{ hLineColor:LINE, vLineColor:LINE } },
         { text:'Окончательный объем, комплектация, стоимость и сроки согласовываются сторонами до заключения договора. Изменения технического задания могут повлечь пересмотр стоимости и сроков.', margin:[0,4,0,8] },

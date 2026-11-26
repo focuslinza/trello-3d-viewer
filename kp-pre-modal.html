@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Предварительное КП</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script src="./config.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.72/pdfmake.min.js"></script>
+  <script src="./dejavu-vfs.js"></script>
+  <script src="./kp-doc.js?v=3"></script>
+  <style>
+    :root{ --bg:#1d2125; --bg2:#22272b; --line:#3c444c; --txt:#e6edf3; --muted:#9fadbc; }
+    html,body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px}
+    #app{padding:16px 20px 18px}
+    .muted{color:var(--muted)} .small{font-size:12px}
+    .note{background:#3d321c;border:1px solid #8a6d1f;color:#e8c07d;border-radius:8px;padding:9px 12px;font-size:12.5px;margin-bottom:12px;line-height:1.45}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+    @media(max-width:620px){ .grid{grid-template-columns:1fr} }
+    label.f{display:block} label.f span{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
+    input,select{width:100%;box-sizing:border-box;padding:7px 8px;background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:8px;font:inherit}
+    table{width:100%;border-collapse:collapse;margin-top:6px} th{font-size:11.5px;color:var(--muted);font-weight:600;text-align:left;padding:4px 4px}
+    td{padding:3px 4px;vertical-align:top} td.s{white-space:nowrap;text-align:right;padding-top:10px;min-width:92px}
+    .btn{padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);color:var(--txt);font:inherit;cursor:pointer}
+    .btn.green{background:#1f845a;border-color:#1f845a;color:#fff;font-weight:700} .btn[disabled]{opacity:.5;cursor:default}
+    .x{background:none;border:0;color:#f87168;font-size:16px;cursor:pointer;padding:6px}
+    .bar{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap} .tot{font-size:17px;font-weight:800;margin-right:auto}
+    .old{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px;background:var(--bg2);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    h3{margin:16px 0 4px;font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.03em}
+  </style>
+</head>
+<body>
+<div id="app"><div class="muted">Загрузка…</div></div>
+<script>
+// ПРЕДВАРИТЕЛЬНОЕ КП (решение Асхата, 26.11.2026): пока инженер не сделал расчёт, менеджер сам вписывает строки и цены
+// (например «материал × 3») и отдаёт клиенту КП с пометкой «цена предварительная». Расчётом эта сумма не считается.
+(function(){
+  var t = window.TrelloPowerUp.iframe();
+  var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
+  var cardId = t.arg('cardId'), cardTitle = String(t.arg('title')||'');
+  var SUPPLIERS = {
+    ip: { key:'ip', label:'ИП «MetalShop»',
+      name:'Индивидуальный предприниматель "MetalShop"', bin:'820620350761',
+      addr:'Республика Казахстан, 010000, г.Астана, район Сарыарка, улица Карталы, д1/1',
+      bank:'АО "Банк ЦентрКредит"', iban:'KZ828562204151669993', bik:'KCJBKZKX', kbe:'19', paycode:'859',
+      executor:'Жанбосинов А.Ж.' },
+    too:{ key:'too', label:'ТОО «TTMS»',
+      name:'Товарищество с ограниченной ответственностью "TTMS"', bin:'230940037731',
+      addr:'Республика Казахстан, г. Астана, ул. Конаева 14',
+      bank:'АО "Банк ЦентрКредит"', iban:'KZ318562203133118240', bik:'KCJBKZKX', kbe:'17', paycode:'859',
+      executor:'Жанбосинов А.Ж.', seal:'ttms' }, // печать ТОО «TTMS» ставится автоматически на счёт
+    // СЧЁТ ПРИ НАЛИЧНЫХ (решение Асхата, 09.11.2026): документ-подтверждение для клиента —
+    // без банковских реквизитов и налога, со способом оплаты (купюры / Kaspi)
+    cash:{ key:'cash', label:'Наличные (без налога)', cash:true,
+      name:'MetalShop · TTMS', bin:'', addr:'г. Астана, ул. Карталы, 1/1', executor:'Жанбосинов А.Ж.' },
+    firdaus:{ key:'firdaus', label:'ИП «FIRDAUS»',
+      name:'Индивидуальный предприниматель "FIRDAUS"', bin:'590502401351',
+      addr:'Республика Казахстан, г. Астана, улица Ахмет Байтұрсынұлы, дом 23/2, кв/офис 145',
+      bank:'АО "Kaspi Bank"', iban:'KZ57722S000005896028', bik:'CASPKZKA', kbe:'19', paycode:'859',
+      executor:'Акпарова Ж.' } // +3% упрощёнки закладывается в РАСЧЁТ заказа (выбор компании в калькуляторе), счёт цен не меняет
+  };
+  delete SUPPLIERS.cash;
+  var MONTHS=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  function ruDate(d){ return d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear()+' г.'; }
+  function isoDate(d){ var m=(d.getMonth()+1),day=d.getDate(); return d.getFullYear()+'-'+(m<10?'0'+m:m)+'-'+(day<10?'0'+day:day); }
+  function fromIso(s){ var p=(s||'').split('-'); return p.length===3? new Date(+p[0],+p[1]-1,+p[2]) : new Date(); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+  function money(v){ return Math.round(+v||0).toLocaleString('ru-RU'); }
+  function num(v){ return parseFloat(String(v||'').replace(/\s/g,'').replace(',','.'))||0; }
+  var app=document.getElementById('app'), co=null, people=[], rows=[{name:'',unit:'шт',qty:1,price:''}], active=[];
+  function fit(){ try{ window.parent.postMessage({ms:'fit',w:760,h:Math.ceil(app.getBoundingClientRect().height)+4},'*'); }catch(e){} }
+  function setupFonts(){ if(!window.pdfMake) return false; pdfMake.vfs=window.DEJAVU_VFS; pdfMake.fonts={ DejaVu:{ normal:'DejaVuSans.ttf', bold:'DejaVuSans-Bold.ttf', italics:'DejaVuSans.ttf', bolditalics:'DejaVuSans-Bold.ttf' } }; return true; }
+  function download(data){ if(!setupFonts()){ alert('Не удалось загрузить генератор PDF. Проверьте интернет.'); return; }
+    var fn='КП_предв_'+data.number+'_'+((data.buyer&&data.buyer.name)?String(data.buyer.name).replace(/[^0-9A-Za-zА-Яа-яЁё]+/g,'_').slice(0,30):'клиент')+'.pdf';
+    pdfMake.createPdf(window.KP.buildKpDoc(data)).download(fn); }
+  function total(){ return rows.reduce(function(s,r){ return s+Math.round(num(r.price))*(num(r.qty)||1); },0); }
+  function baseName(){ var n=cardTitle, i=n.indexOf(' · '); return (i>0?n.slice(0,i):n).trim(); }
+
+  function paint(){
+    var d=new Date(); d.setDate(d.getDate()+1);
+    var h='<div class="note"><b>Предварительное КП.</b> Расчёта в карточке ещё нет — цены вы вписываете сами. В документе будет написано, что цена предварительная. '+
+      'Расчётом эта сумма не считается: в «Расчет сделан» карточка перейдёт только после расчёта в калькуляторе.</div>';
+    active.forEach(function(k){ h+='<div class="old"><div style="flex:1"><b>'+(k.pre?'Предварительное КП':'КП')+' № '+esc(k.number)+'</b> <span class="muted">от '+esc(String(k.dateIso||'').split('-').reverse().join('.'))+' · '+money(k.total)+' ₸'+(k.createdBy?' · '+esc(k.createdBy):'')+'</span></div>'+
+      (k.data?'<button class="btn" type="button" data-dl="'+k.id+'">⬇ PDF</button>':'')+'<span class="small muted">новое КП заменит это</span></div>'; });
+    if(!co) h+='<div class="note" style="background:#3a1f1f;border-color:#8a2f2f;color:#f3b3ad">В карточке не указана компания. Заполните «Компания и контакты» в карточке и откройте окно снова.</div>';
+    h+='<div class="grid">'+
+      '<label class="f"><span>От какой нашей компании</span><select id="sup">'+Object.keys(SUPPLIERS).map(function(k){ return '<option value="'+k+'">'+esc(SUPPLIERS[k].label)+'</option>'; }).join('')+'</select></label>'+
+      '<label class="f"><span>Клиент</span><input value="'+esc(co?co.name:'—')+'" disabled></label>'+
+      '<label class="f"><span>Кому (контактное лицо)</span><select id="who"><option value="">— не указывать —</option>'+people.map(function(c){ return '<option value="'+esc(c.name)+'">'+esc(c.name+(c.role?' · '+c.role:''))+'</option>'; }).join('')+'</select></label>'+
+      '<label class="f"><span>Действительно до</span><input type="date" id="valid" value="'+isoDate(d)+'"></label>'+
+      '</div>'+
+      '<h3>Состав и цены</h3><div class="small muted">Цена — за единицу, уже со всеми налогами: так её увидит клиент.</div>'+
+      '<table><thead><tr><th>Наименование</th><th style="width:70px">Ед.</th><th style="width:80px">Кол-во</th><th style="width:120px">Цена, ₸</th><th style="text-align:right">Сумма</th><th></th></tr></thead><tbody id="rows"></tbody></table>'+
+      '<button class="btn" id="add" type="button" style="margin-top:6px">+ строка</button>'+
+      '<h3>Условия</h3><div class="grid">'+
+      '<label class="f"><span>Срок изготовления / поставки</span><input id="term" value="1 неделя"></label>'+
+      '<label class="f"><span>Место и условия доставки</span><input id="del" value="Самовывоз"></label>'+
+      '<label class="f"><span>Условия оплаты</span><input id="pay" value="100%"></label>'+
+      '<label class="f"><span>Гарантийный срок</span><input id="war" value="1 год (12 мес)"></label>'+
+      '</div>'+
+      '<div class="bar"><div class="tot" id="tot"></div><button class="btn" id="no" type="button">Отмена</button><button class="btn green" id="ok" type="button">📄 Создать предварительное КП</button></div>';
+    app.innerHTML=h;
+    if(people.length===1) document.getElementById('who').value=people[0].name;
+    if(!rows[0].name) rows[0].name=baseName();
+    paintRows();
+    document.getElementById('add').onclick=function(){ rows.push({name:'',unit:'шт',qty:1,price:''}); paintRows(); };
+    document.getElementById('no').onclick=function(){ t.closeModal(); };
+    document.getElementById('ok').onclick=save;
+    [].forEach.call(app.querySelectorAll('[data-dl]'),function(b){ b.onclick=function(){ var k=active.filter(function(x){ return String(x.id)===b.getAttribute('data-dl'); })[0]; if(k&&k.data){ var dd=k.data; dd.number=k.number; download(dd); } }; });
+    fit();
+  }
+  function paintRows(){
+    var tb=document.getElementById('rows');
+    tb.innerHTML=rows.map(function(r,i){ return '<tr data-i="'+i+'"><td><input data-f="name" value="'+esc(r.name)+'" placeholder="Что изготавливаем"></td><td><input data-f="unit" value="'+esc(r.unit)+'"></td>'+
+      '<td><input data-f="qty" inputmode="decimal" value="'+esc(r.qty)+'"></td><td><input data-f="price" inputmode="decimal" value="'+esc(r.price)+'" placeholder="0"></td>'+
+      '<td class="s" data-s></td><td>'+(rows.length>1?'<button class="x" type="button" data-rm title="Убрать строку">✕</button>':'')+'</td></tr>'; }).join('');
+    [].forEach.call(tb.querySelectorAll('input'),function(inp){ inp.oninput=function(){ var i=+inp.closest('tr').getAttribute('data-i'); rows[i][inp.getAttribute('data-f')]=inp.value; sums(); }; });
+    [].forEach.call(tb.querySelectorAll('[data-rm]'),function(b){ b.onclick=function(){ rows.splice(+b.closest('tr').getAttribute('data-i'),1); paintRows(); }; });
+    sums(); fit();
+  }
+  function sums(){
+    [].forEach.call(document.querySelectorAll('#rows tr'),function(tr){ var r=rows[+tr.getAttribute('data-i')]; tr.querySelector('[data-s]').textContent=money(Math.round(num(r.price))*(num(r.qty)||1))+' ₸'; });
+    document.getElementById('tot').textContent='Итого: '+money(total())+' ₸';
+  }
+  function save(){
+    var btn=document.getElementById('ok');
+    if(!co){ alert('В карточке не указана компания — заполните «Компания и контакты».'); return; }
+    var items=rows.filter(function(r){ return String(r.name).trim() && num(r.price)>0; }).map(function(r){ return { name:String(r.name).trim(), unit:String(r.unit||'шт').trim()||'шт', qty:num(r.qty)||1, price:Math.round(num(r.price)), cardId:cardId }; });
+    if(!items.length){ alert('Впишите хотя бы одну строку: наименование и цену.'); return; }
+    var v=document.getElementById('valid').value; if(!v){ document.getElementById('valid').focus(); return; }
+    var key=document.getElementById('sup').value, today=new Date();
+    var data={ pre:true, supplier:SUPPLIERS[key], buyer:{ name:co.name||'', bin:co.bin||'', addr:co.addr||'', phone:co.phone||'', contact:document.getElementById('who').value||'' },
+      items:items, date:ruDate(today), validUntil:ruDate(fromIso(v)),
+      terms:{ term:document.getElementById('term').value.trim(), delivery:document.getElementById('del').value.trim(), payment:document.getElementById('pay').value.trim(), warranty:document.getElementById('war').value.trim() } };
+    var sum=items.reduce(function(s,it){ return s+it.price*it.qty; },0);
+    var body={ pre:1, cardIds:[cardId], supplierKey:key, dateIso:isoDate(today), total:sum, data:data, replaceIds:active.map(function(k){ return k.id; }) };
+    if(active.length && !confirm('По карточке уже есть КП №'+active.map(function(k){ return k.number; }).join(', №')+'.\n\nНовое КП заменит его (старое останется в истории). Продолжить?')) return;
+    btn.disabled=true; btn.textContent='Сохраняю…';
+    fetch(WORKER+'/kp-save',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(body) }).then(function(r){ return r.json(); }).then(function(j){
+      if(!j||j.error){ btn.disabled=false; btn.textContent='📄 Создать предварительное КП'; alert((j&&j.error)||'Не удалось сохранить'); return; }
+      data.number=j.number; download(data);
+      app.innerHTML='<div style="padding:30px 10px;text-align:center"><div style="font-size:17px;font-weight:800">Предварительное КП № '+esc(j.number)+' создано</div><div class="muted" style="margin-top:8px">PDF скачан — отправьте его клиенту.</div><button class="btn" id="cl" type="button" style="margin-top:16px">Закрыть</button></div>';
+      document.getElementById('cl').onclick=function(){ t.closeModal(); }; fit();
+      try{ window.parent.postMessage({ms:'changed',path:'/kp-save'},'*'); }catch(e){}
+    }).catch(function(e){ btn.disabled=false; btn.textContent='📄 Создать предварительное КП'; alert('Нет связи: '+(e&&e.message||e)); });
+  }
+
+  if(!cardId){ app.innerHTML='<div class="muted">Окно открыто не из карточки.</div>'; return; }
+  Promise.all([
+    fetch(WORKER+'/plugindata?cardId='+encodeURIComponent(cardId),{credentials:'include'}).then(function(r){ return r.json(); }).catch(function(){ return {}; }),
+    fetch(WORKER+'/companies-list',{credentials:'include'}).then(function(r){ return r.json(); }).catch(function(){ return {}; }),
+    fetch(WORKER+'/kp-list?cardIds='+encodeURIComponent(cardId),{credentials:'include'}).then(function(r){ return r.json(); }).catch(function(){ return {}; })
+  ]).then(function(res){
+    var cd=(res[0]&&res[0].cardData)||{}, list=(res[1]&&res[1].companies)||[];
+    co=list.filter(function(c){ return c.id===cd.companyId; })[0]||null;
+    people=co?(co.contacts||[]).filter(function(c){ return c&&c.name; }):[];
+    active=((res[2]&&res[2].items)||[]).filter(function(k){ return !k.deletedAt; });
+    paint();
+  });
+})();
+</script>
+</body>
+</html>
