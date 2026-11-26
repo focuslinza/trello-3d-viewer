@@ -179,6 +179,7 @@
         '<input type="date" id="anFrom" value="'+mr[0]+'"> — <input type="date" id="anTo" value="'+mr[1]+'">'+
         '<button class="btn primary" id="anGo" type="button">Показать</button>'+
         '<button class="btn" id="anPrev" type="button" title="Предыдущий отчётный период (с 10-го по 9-е)">← период</button><button class="btn" id="anNext" type="button" title="Следующий отчётный период">период →</button>'+
+        '<span id="anMgrBox"></span>'+
         '<span class="muted" style="font-size:12.5px">отчётный период: с 10-го по 9-е число</span>'+
         '<span class="msg" id="anMsg"></span></div>'+
         '<div id="anBody" class="muted" style="margin-top:12px">Выберите период и нажмите «Показать».</div>'+
@@ -199,7 +200,7 @@
     function loadClients(f,tt){
       var box=document.getElementById('anClients'); if(!box) return;
       box.innerHTML=sect('По клиентам','<span class="muted">Загрузка…</span>');
-      fetch(WORKER+'/sales-clients?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(tt)).then(function(r){return r.json();}).then(function(j){
+      fetch(WORKER+'/sales-clients?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(tt)+'&mgr='+encodeURIComponent(AN_MGR)).then(function(r){return r.json();}).then(function(j){
         if(j.error){ box.innerHTML=sect('По клиентам',esc(j.error)); return; }
         CL=j.clients||[];
         if(!CL.length){ box.innerHTML=sect('По клиентам','<span class="muted">За период заказов нет.</span>'); return; }
@@ -236,13 +237,22 @@
         }; });
       }).catch(function(e){ box.innerHTML=sect('По клиентам','Ошибка: '+esc(e.message)); });
     }
+    var AN_MGR='';
     function loadAnalytics(){
       var f=document.getElementById('anFrom').value, tt=document.getElementById('anTo').value;
       document.getElementById('anMsg').textContent='Загрузка…';
-      fetch(WORKER+'/sales-analytics?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(tt))
+      fetch(WORKER+'/sales-analytics?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(tt)+'&mgr='+encodeURIComponent(AN_MGR))
       .then(function(r){return r.json();}).then(function(j){
         document.getElementById('anMsg').textContent='';
         if(j.error){ document.getElementById('anBody').textContent=j.error; return; }
+        // АНАЛИТИКА ПО МЕНЕДЖЕРАМ (26.11.2026): руководитель выбирает менеджера, менеджер видит только своё
+        var mb=document.getElementById('anMgrBox'), M=j.mgr||{};
+        if(mb){
+          if(M.canAll&&(M.list||[]).length){ mb.innerHTML='<select id="anMgr" title="Чьи продажи показывать"><option value="">Все менеджеры</option>'+M.list.map(function(x){ return '<option value="'+esc(x.id)+'"'+(x.id===M.cur?' selected':'')+'>'+esc(x.name)+'</option>'; }).join('')+'</select>';
+            document.getElementById('anMgr').onchange=function(){ AN_MGR=this.value; loadAnalytics(); }; }
+          else if(!M.canAll){ mb.innerHTML='<b style="font-size:13px">Ваши продажи'+(M.curName?': '+esc(M.curName):'')+'</b>'; }
+          else mb.innerHTML='';
+        }
         var u=j.uni, h='<div style="display:flex;gap:10px;flex-wrap:wrap">';
         if(u){
           h+=kpi(u.requests,'обращений за период')+kpi(u.deals,'сделок (первая оплата)')+kpi(u.conversion+'%','конверсия: сделки из сделок и отказов')+
@@ -290,17 +300,20 @@
           .map(function(k){ return [esc(k), j.byCode[k]]; });
         if(codeRows.length) h+=sect('Коды рекламы (лиды)', tbl(codeRows));
         var clickRows=(j.clicks||[]).map(function(c){ return [esc(c.code)+' <span class="muted">('+(c.kind==='tel'?'звонок':'WhatsApp')+')</span>', c.n]; });
-        h+=sect('Клики по рекламным ссылкам', clickRows.length?tbl(clickRows):
+        if(!M.cur) h+=sect('Клики по рекламным ссылкам', clickRows.length?tbl(clickRows):
           '<span class="muted">Кликов нет. Делайте для каждого ролика свою ссылку:<br>'+
           'WhatsApp: <code>'+esc(WORKER)+'/go?c=video17&t=wa&p=7701XXXXXXX</code><br>'+
           'Звонок: <code>'+esc(WORKER)+'/go?c=video17&t=tel&p=7701XXXXXXX</code><br>'+
           'Клик посчитается, человек попадёт в WhatsApp с кодом ролика — вносите этот код в поле «Код рекламы» лида.</span>');
-        var mgrRows=Object.keys(j.byManager).map(function(m){
-          var x=j.byManager[m]; return [esc(m), x.leads+' лидов · '+x.won+' сделок · '+money(x.wonSum)+' ₸']; });
-        if(mgrRows.length>1||(mgrRows.length===1&&Object.keys(j.byManager)[0]!=='—')) h+=sect('По менеджерам', tbl(mgrRows));
+        // сводка по менеджерам — только у руководителя в общем виде; строка открывает показатели этого менеджера
+        if(u&&u.byMgr&&u.byMgr.length){
+          h+=sect('По менеджерам', '<div class="muted" style="margin-bottom:6px">Сделки периода по ответственным менеджерам. Нажмите на строку, чтобы открыть показатели менеджера.</div>'+
+            tbl(u.byMgr.map(function(x){ return ['<a href="#" data-mgr="'+esc(x.id)+'" style="text-decoration:none;font-weight:600">'+esc(x.name)+'</a>', x.deals+' сделок · оплачено '+money(x.paid)+' ₸']; })));
+        }
         var tagRows=Object.keys(j.site.byTag||{}).map(function(k){ return [esc(k), j.site.byTag[k]]; });
         if(j.site.count>0) h+=sect('Заказы с сайта по меткам', tbl(tagRows));
         document.getElementById('anBody').innerHTML=h;
+        [].forEach.call(document.querySelectorAll('#anBody [data-mgr]'),function(x){ x.onclick=function(e){ e.preventDefault(); var id=this.getAttribute('data-mgr'); if(!id) return; AN_MGR=id; loadAnalytics(); }; });
         loadClients(f,tt);
       }).catch(function(e){ document.getElementById('anMsg').textContent='Ошибка: '+e.message; });
     }
