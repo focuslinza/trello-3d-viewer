@@ -56,7 +56,8 @@
 <body>
 
   <div id="app"><div class="empty" id="boot">Загрузка…</div></div>
-  <div class="bar"><button class="btn" id="close" type="button">Закрыть</button></div>
+  <!-- кнопки «Закрыть» внизу нет (решение Асхата, 26.11.2026): окно закрывается крестиком сверху справа; сама кнопка оставлена скрытой, чтобы не ломать скрипт -->
+  <div class="bar" style="display:none"><button class="btn" id="close" type="button">Закрыть</button></div>
   <script>
     // ВСТРОЕННЫЙ РЕЖИМ (?embed=1): окно открыто внутри другого окна системы (Клиенты — внутри
     // «Продаж», Табель — внутри панели руководителя). Своего подключения к Trello у вложенного
