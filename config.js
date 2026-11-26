@@ -72,6 +72,16 @@
       offTimer = setTimeout(function () { offBar(false); }, 20000);
     } catch (e) {}
   }
+  // ОКНО ЗАКРЫВАЮТ (26.11.2026, одобрено Асхатом): если окно закрыли или перешли к другой
+  // карточке во время загрузки, браузер сам обрывает запросы («Failed to fetch»). Это не сбой
+  // связи — не пишем его в журнал и не показываем полоску. Настоящие обрывы (окно открыто) — как раньше.
+  var closingAt = 0;
+  function markClosing() { closingAt = Date.now(); }
+  function isClosing() { return closingAt > 0; }
+  window.addEventListener('pagehide', markClosing);
+  window.addEventListener('beforeunload', markClosing);
+  window.addEventListener('unload', markClosing);
+  window.addEventListener('pageshow', function () { closingAt = 0; });
   window.addEventListener('offline', function () { offBar(true); });
   window.addEventListener('online', function () { offBar(false); });
 
@@ -127,7 +137,7 @@
       if (!ours || u.indexOf('/client-error') >= 0) return p;
       var path = u.replace(window.WORKER_URL, '').split('?')[0];
       return p.then(function (r) { if (r) offBar(false); if (r && r.status >= 500) report('http', path + ' → HTTP ' + r.status); return r; },
-        function (e) { if (!(e && e.name === 'AbortError') || navigator.onLine === false) offBar(true); report('http', path + ' → нет связи: ' + (e && e.message || e)); throw e; });
+        function (e) { if (isClosing()) throw e; if (!(e && e.name === 'AbortError') || navigator.onLine === false) offBar(true); report('http', path + ' → нет связи: ' + (e && e.message || e)); throw e; });
     };
   }
 
