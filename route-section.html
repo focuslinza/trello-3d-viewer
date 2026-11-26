@@ -311,6 +311,12 @@
         }
         ROUTE=(res[0]&&res[0].ok&&res[0].route)||ROUTE;
         WORKERS=(res[1]&&res[1].ok&&res[1].workers)||WORKERS||[];
+        // первый щелчок по разделу не должен пропадать (26.11.2026): фоновое обновление перерисовывает маршрут,
+        // только если данные изменились, и не под нажатой кнопкой мыши
+        var sg=''; try{ sg=JSON.stringify([ROUTE,WORKERS,HAS_CALC]); }catch(e){ sg=String(Math.random()); }
+        if(sg===window.__rtSig && document.getElementById('wrap').children.length) return;
+        if(window.__rtDown){ window.__rtPending=true; return; }
+        window.__rtSig=sg;
         renderRoute();
       }).catch(function(e){
         document.getElementById('wrap').innerHTML='<div class="muted">Ошибка: '+esc(e&&e.message||e)+'</div>';
@@ -318,6 +324,8 @@
       }).then(function(){ loading=false; }, function(){ loading=false; });
     }
 
+    ['mousedown','touchstart'].forEach(function(ev){ document.addEventListener(ev,function(){ window.__rtDown=true; },true); });
+    ['mouseup','touchend','touchcancel','mouseleave'].forEach(function(ev){ document.addEventListener(ev,function(){ window.__rtDown=false; if(window.__rtPending){ window.__rtPending=false; setTimeout(loadAll,150); } },true); });
     t.render(loadAll);
     setInterval(loadAll, 15000);
     window.addEventListener('focus', loadAll);

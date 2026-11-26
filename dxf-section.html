@@ -293,10 +293,13 @@
         if (cu) row.classList.add('cutdone');
         cc.addEventListener('change', function(){
           var on=cc.checked; cc.disabled=true;
-          fetch(WORKER+'/file-cut', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cardId: CARD_ID, attachmentId: att.id, cut: on?1:0 }) })
+          // keepalive — отметка дойдёт до сервера, даже если карточку закрыли сразу после щелчка;
+          // CUT_VER/CUT_BUSY — фоновое обновление не затрёт только что поставленную отметку старыми данными
+          CUT_BUSY++; CUT_VER++;
+          fetch(WORKER+'/file-cut', { method:'POST', keepalive:true, headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cardId: CARD_ID, attachmentId: att.id, cut: on?1:0 }) })
             .then(function(r){ return r.json(); })
-            .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||'не сохранено'); CUT=j.cut||{}; draw(); })
-            .catch(function(e){ cc.disabled=false; cc.checked=!on; setMsg('Не удалось отметить: '+(e&&e.message||'')); });
+            .then(function(j){ CUT_BUSY--; CUT_VER++; if(!j||!j.ok) throw new Error((j&&j.error)||'не сохранено'); CUT=j.cut||{}; draw(); })
+            .catch(function(e){ if(CUT_BUSY>0) CUT_BUSY--; cc.disabled=false; cc.checked=!on; setMsg('Не удалось отметить: '+(e&&e.message||'')); });
         });
         row.appendChild(lb);
       }
@@ -475,8 +478,22 @@
       return saveItems().then(function(){ setMsg('Файлы разложены по изделиям автоматически'); });
     }
 
-    var rendering=false, FOCUS_ITEM=null, UPLOADING=0, CUT={};
-    function loadCut(cardId){ return fetch(WORKER+'/file-cut?cardId='+encodeURIComponent(cardId)).then(function(r){ return r.json(); }).then(function(j){ CUT=(j&&j.cut)||{}; }).catch(function(){}); }
+    var rendering=false, FOCUS_ITEM=null, UPLOADING=0, CUT={}, CUT_BUSY=0, CUT_VER=0;
+    function loadCut(cardId){ var v=CUT_VER; return fetch(WORKER+'/file-cut?cardId='+encodeURIComponent(cardId)).then(function(r){ return r.json(); }).then(function(j){ if(CUT_BUSY||v!==CUT_VER) return; CUT=(j&&j.cut)||{}; }).catch(function(){}); }
+    // ПЕРВЫЙ ЩЕЛЧОК НЕ ДОЛЖЕН ПРОПАДАТЬ (жалоба 26.11.2026): раздел обновлялся в момент, когда в него щёлкали
+    // (первое нажатие даёт ему фокус → обновление → список перерисовывался прямо под курсором, и щелчок по «порезать»
+    // уходил в пустоту). Теперь фоновое обновление перерисовывает список, только если данные изменились, и никогда —
+    // пока кнопка мыши (или палец) нажата.
+    var LAST_SIG='', PDOWN=false, PENDING=false;
+    function dataSig(){ try{ return JSON.stringify([FILES.map(function(a){ return [a.id,a.name]; }), METRICS, CUT, ITEMS, CARD_NAME]); }catch(e){ return String(Math.random()); } }
+    function drawBg(){
+      var sg=dataSig(); if(sg===LAST_SIG && document.getElementById('list').children.length) return;
+      if(PDOWN){ PENDING=true; return; }
+      LAST_SIG=sg; return draw();
+    }
+    function pUp(){ PDOWN=false; if(PENDING){ PENDING=false; setTimeout(function(){ if(!PDOWN) drawBg(); },120); } }
+    ['mousedown','touchstart'].forEach(function(ev){ document.addEventListener(ev,function(){ PDOWN=true; },true); });
+    ['mouseup','touchend','touchcancel','mouseleave'].forEach(function(ev){ document.addEventListener(ev,pUp,true); });
     function render(){
       // пока идёт загрузка, Trello уже видит новый файл, а изделие на сервере ещё не обновлено —
       // не перерисовываем, иначе файл на мгновение окажется «без изделия» (и может туда записаться)
@@ -485,7 +502,7 @@
       return t.card('id','attachments','name','idShort').then(function(card){
         CARD_NUM=(card.idShort!=null?String(card.idShort):'');
         CARD_ID=card.id; FILES=(card.attachments||[]); CARD_NAME=card.name||'';
-        return Promise.all([loadMetrics(card.id), loadCut(card.id)]).then(function(r){ METRICS=r[0]; return autoPlace(); }).then(draw);
+        return Promise.all([loadMetrics(card.id), loadCut(card.id)]).then(function(r){ METRICS=r[0]; return autoPlace(); }).then(drawBg);
       }).catch(function(err){
         document.getElementById('list').innerHTML='<div class="empty">Ошибка: '+esc(err&&err.message?err.message:'неизвестно')+'</div>';
         return t.sizeTo('#list');
