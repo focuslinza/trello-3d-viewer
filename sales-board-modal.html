@@ -197,7 +197,7 @@
         var td='padding:6px 8px;border-bottom:1px solid var(--line);', r='text-align:right;white-space:nowrap;';
         var h='<div class="muted" style="margin-bottom:6px">Заказы, заведённые за период. Сделка — по заказу есть оплата. Нажмите на клиента, чтобы увидеть его заказы.</div>'+
           '<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:820px"><tr class="muted">'+
-          '<td style="'+td+'">Клиент</td><td style="'+td+r+'">Заказов</td><td style="'+td+r+'">Заказано на сумму</td><td style="'+td+r+'">Сделок</td><td style="'+td+r+'">Оплачено</td><td style="'+td+r+'" title="Расход на материал по расчётам сделок">Материал</td><td style="'+td+r+'" title="Цена сделок клиенту минус материал. Работа и НДС не вычтены">Доход без работы</td><td style="'+td+r+'">В работе</td><td style="'+td+r+'">Отказались</td><td style="'+td+r+'">Последний</td></tr>';
+          '<td style="'+td+'">Клиент</td><td style="'+td+r+'">Заказов</td><td style="'+td+r+'">Заказано на сумму</td><td style="'+td+r+'">Сделок</td><td style="'+td+r+'">Оплачено</td><td style="'+td+r+'" title="Расход на материал по расчётам сделок">Материал</td><td style="'+td+r+'" title="Цена сделок клиенту минус материал. Работа, расходники, аренда, коммунальные услуги и НДС не вычтены">Доход (цена − материал)</td><td style="'+td+r+'">В работе</td><td style="'+td+r+'">Отказались</td><td style="'+td+r+'">Последний</td></tr>';
         CL.forEach(function(c,i){
           h+='<tr data-cl="'+i+'" style="cursor:pointer"><td style="'+td+'font-weight:600">'+esc(c.name)+'</td><td style="'+td+r+'">'+c.orders+'</td><td style="'+td+r+'">'+money(c.sum)+' ₸</td>'+
             '<td style="'+td+r+'">'+c.deals+'</td><td style="'+td+r+'color:var(--green);font-weight:700">'+money(c.paid)+' ₸</td>'+
@@ -215,7 +215,7 @@
             var st = o.st==='deal' ? '<span style="color:var(--green)">сделка'+(o.payDate?(' · первая оплата '+dmy(o.payDate)):'')+' · оплачено '+money(o.paid)+' ₸</span>'
               : o.st==='lost' ? '<span style="color:var(--red)">отказ'+(o.lostAt?(' '+dmy(o.lostAt)):'')+(o.reason?(' · '+esc(o.reason)):'')+'</span>'
               : '<span class="muted">в работе, оплаты нет</span>';
-            return '<div style="padding:3px 0">'+dmy(o.date)+' · '+(o.number?('<b>#'+esc(o.number)+'</b> '):'')+esc(String(o.name||'').slice(0,70))+' · <b>'+money(o.total)+' ₸</b>'+(o.mat>0?' · материал '+money(o.mat)+' ₸ · доход без работы <b>'+money(o.total-o.mat)+' ₸</b>':'')+' · '+st+'</div>';
+            return '<div style="padding:3px 0">'+dmy(o.date)+' · '+(o.number?('<b>#'+esc(o.number)+'</b> '):'')+esc(String(o.name||'').slice(0,70))+' · <b>'+money(o.total)+' ₸</b>'+(o.mat>0?' · материал '+money(o.mat)+' ₸ · цена − материал <b>'+money(o.total-o.mat)+' ₸</b>':'')+' · '+st+'</div>';
           }).join('');
           x.style.display='';
         }; });
@@ -234,7 +234,7 @@
             kpi(money(u.dealsSum)+' ₸','сумма сделок')+kpi(money(u.paidSum)+' ₸','по ним уже оплачено')+kpi(u.lost,'отказов');
           // цена клиенту − материал = доход без вычета работы и НДС (26.11.2026)
           if(u.margin&&u.margin.n) h+=kpi(money(u.margin.price)+' ₸','цена заказов клиентам (по счетам)')+kpi(money(u.margin.mat)+' ₸','расход на материал')+
-            kpi(money(u.margin.profit)+' ₸ · '+u.margin.pct+'%','доход без вычета работы и НДС');
+            kpi(money(u.margin.profit)+' ₸ · '+u.margin.pct+'%','доход без вычета работы, расходников, арендной платы, ком. услуг и НДС');
         } else {
           h+=kpi(j.leadsTotal,'лидов создано')+kpi(j.won,'сделок')+kpi(j.conversion+'%','конверсия в сделку')+kpi(money(j.wonSum)+' ₸','сумма сделок');
         }
@@ -243,7 +243,7 @@
         h+='</div>';
         if(u){
           h+='<div class="muted" style="margin-top:6px">Обращение — лид или заказ, заведённый за период. Сделка — заказ, по которому в периоде поступила первая оплата.'+
-            (u.margin&&u.margin.n?' Доход без вычета работы и НДС = цена заказа клиенту − расход на материал по расчёту, по сделкам периода'+(u.margin.noMat?' (у '+u.margin.noMat+' из '+u.margin.n+' сделок материал в расчёте не указан — они посчитаны с нулевым материалом)':'')+'.':'')+'</div>';
+            (u.margin&&u.margin.n?' Доход здесь = цена заказа клиенту − расход на материал по расчёту, по сделкам периода; работа, расходники, аренда, коммунальные услуги и НДС не вычтены'+(u.margin.noMat?' (у '+u.margin.noMat+' из '+u.margin.n+' сделок материал в расчёте не указан — они посчитаны с нулевым материалом)':'')+'.':'')+'</div>';
           // ВОРОНКА ПО ЭТАПАМ (26.11.2026): заказы и лиды, заведённые за период, — сколько дошло до каждого этапа и сколько прошло дальше
           if(u.steps&&u.steps.total){
             var S=u.steps, mxW=Math.max.apply(null,S.rows.map(function(r){ return r.was; }))||1;
