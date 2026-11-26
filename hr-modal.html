@@ -96,7 +96,7 @@
 
   function render(){
     var rows = TAB==='current' ? DATA.current : DATA.former;
-    var h = '<h2>HR кабинет</h2><div class="muted">Личные дела сотрудников: кадровые данные, документы, статистика по табелю.</div>';
+    var h = '<h2>Картотека</h2><div class="muted">Личные дела сотрудников: кадровые данные, документы, статистика по табелю.</div>';
     h += '<div class="tabs">'+
       '<div class="tab'+(TAB==='current'?' active':'')+'" data-tab="current">Сотрудники <span class="badge">'+DATA.countCurrent+'</span></div>'+
       '<div class="tab'+(TAB==='former'?' active':'')+'" data-tab="former">Бывшие <span class="badge">'+DATA.countFormer+'</span></div></div>';
