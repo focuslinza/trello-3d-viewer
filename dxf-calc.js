@@ -219,6 +219,10 @@ window.DXFCALC = (function () {
 
   function compute(dxf){
     var insunits = dxf.header && dxf.header['$INSUNITS'];
+    // В шапке стоят дюймы/футы, но сам чертёж метрический ($MEASUREMENT=1) — это ошибка экспорта (так сохраняет
+    // AutoCAD с шаблоном acad.dwt): размеры в файле на самом деле в миллиметрах. Иначе резка и площадь завышаются в 25,4 и 645 раз.
+    var meas = dxf.header && dxf.header['$MEASUREMENT'];
+    if ((insunits === 1 || insunits === 2) && meas === 1) insunits = 4;
     var u = unitToMeters(insunits);
     var cutLen=0, bendCount=0, closedAreas=[], openEdges=[], arcsForBend=[];
     var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
