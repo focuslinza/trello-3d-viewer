@@ -143,7 +143,10 @@
   <div id="ovlHost"></div>
 
   <script>
-    var t = window.TrelloPowerUp.iframe();
+    // встроено в «Панель руководителя → Аналитика» (решение Асхата, 26.11.2026): только аналитика, без нижних вкладок
+    var EMBED = /[?&]embed=1/.test(location.search), ONLY_AN = /[?&]only=an/.test(location.search);
+    var t = (EMBED && window.parent.__MS_T) || window.TrelloPowerUp.iframe();
+    if (ONLY_AN) { var _oa=document.createElement('style'); _oa.textContent='.bar{display:none!important}#anView{padding-bottom:20px!important}'; document.head.appendChild(_oa); }
     var WORKER = (window.CONFIG && window.CONFIG.WORKER_URL) || window.WORKER_URL || '';
     document.getElementById('close').onclick=function(){ t.closeModal(); };
     // кнопка сверху справа: существующий CRM-раздел (позже — коммерческие CRM)
