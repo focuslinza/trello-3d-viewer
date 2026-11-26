@@ -239,6 +239,21 @@
         h+='</div>';
         if(u){
           h+='<div class="muted" style="margin-top:6px">Обращение — лид или заказ, заведённый за период. Сделка — заказ, по которому в периоде поступила первая оплата.</div>';
+          // ВОРОНКА ПО ЭТАПАМ (26.11.2026): заказы и лиды, заведённые за период, — сколько дошло до каждого этапа и сколько прошло дальше
+          if(u.steps&&u.steps.total){
+            var S=u.steps, mxW=Math.max.apply(null,S.rows.map(function(r){ return r.was; }))||1;
+            var th='<table style="width:100%;border-collapse:collapse;font-size:13.5px"><tr style="text-align:right;color:var(--muted)"><th style="text-align:left;font-weight:600;padding:5px 6px">Этап</th><th style="font-weight:600;padding:5px 6px">Были на этапе</th><th style="font-weight:600;padding:5px 6px">Прошли дальше</th><th style="font-weight:600;padding:5px 6px">Конверсия этапа</th><th style="font-weight:600;padding:5px 6px">Отказ</th><th style="font-weight:600;padding:5px 6px">Стоят сейчас</th></tr>';
+            S.rows.forEach(function(r){
+              var pc=(r.next!=null&&r.was)?Math.round(r.next*1000/r.was)/10:null;
+              th+='<tr style="border-top:1px solid var(--line);text-align:right"><td style="text-align:left;padding:6px"><div>'+esc(r.label)+'</div><div style="height:5px;border-radius:3px;background:#3b82f6;opacity:.75;margin-top:4px;width:'+Math.max(2,Math.round(r.was*100/mxW))+'%"></div></td>'+
+                '<td style="padding:6px;font-weight:600">'+r.was+'</td><td style="padding:6px">'+(r.next!=null?r.next:'—')+'</td>'+
+                '<td style="padding:6px;font-weight:700;color:'+(pc==null?'inherit':pc>=70?'#1f845a':pc>=40?'#a15c00':'#c9372c')+'">'+(pc!=null?pc+'%':'—')+'</td>'+
+                '<td style="padding:6px;color:'+(r.lost?'#c9372c':'inherit')+'">'+(r.lost||'—')+'</td><td style="padding:6px">'+(r.here||'—')+'</td></tr>';
+            });
+            th+='</table>';
+            h+=sect('Воронка по этапам', '<div class="muted" style="margin-bottom:6px">Заказы и лиды, заведённые за период: '+S.total+'. До оплаты дошли '+S.paid+' — это '+(Math.round(S.paid*1000/S.total)/10)+'% от всех заведённых. Свежие заказы ещё в пути, поэтому за текущий месяц цифра ниже итоговой.</div>'+th+
+              '<div class="muted" style="margin-top:6px">«Были на этапе» — карточка стояла в этой колонке (по истории переносов). Заказы, заведённые сразу в «Заявках», в «Лиды» и «Переговоры» не входят.</div>');
+          }
           h+=sect('Сейчас в воронке', tbl([['Лиды','new'],['Переговоры','talk'],['На расчёте','calc'],['Расчёт сделан','ready'],['Согласование (КП у клиента)','kp'],['Ждём оплату','pay']].map(function(x){
             return [x[0], u.now[x[1]]+(u.nowSum[x[1]]>0?(' / '+money(u.nowSum[x[1]])+' ₸'):'')]; })));
         } else {
