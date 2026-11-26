@@ -65,6 +65,7 @@
   .chip.ro{cursor:default;opacity:.7}
   .chip.busy{opacity:.5;pointer-events:none}
   .hist{font-size:11px;color:#e8c07d}
+      .kponly #gen,.kponly #pdfList,.kponly #pdfList+span{display:none!important}
   </style>
 </head>
 <body>
@@ -297,6 +298,8 @@
 
   function loadContext(){
     ctx.cardId = t.arg('cardId') || null;
+    // открыто из карточки в «Лидах», «Переговорах» или «Заявках»: там создаётся только КП, счёт — с «Расчет сделан»
+    try{ if(t.arg('kp')) document.body.classList.add('kponly'); }catch(e){}
     (function(){
       var pb=document.getElementById('pdfList');
       if(!pb) return;
