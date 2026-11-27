@@ -555,13 +555,19 @@
       r('Степень изобретения', res.engineering);
       r('Подытог', res.subtotal);
       r('Налог '+Math.round(res.taxRate*100)+'%', res.taxAmount);
-      document.getElementById('totalBig').innerHTML = fmt(res.total)+' <span>₸ итого</span>';
+      // КРУПНОЕ ЧИСЛО — СУММА КЛИЕНТУ (решение Асхата, 27.11.2026): если выбрана компания, через которую идёт оплата,
+      // внизу крупно стоит конечная сумма с её налогом — та самая, под которую подгоняли. Сумма без налога — мелко рядом.
+      (function(){ var selB=(document.getElementById('fitSup')||{}).value||'', NM={'1.16':'ТОО «TTMS», налог 16%','1.10':'ИП «MetalShop», налог 10%','1.03':'ИП «FIRDAUS», налог 3%','1':'наличные, без налога'};
+        var big=document.getElementById('totalBig');
+        if(NM[selB]) big.innerHTML = fmt(selB==='1'?res.total:Math.ceil(res.total*(+selB)))+' <span>₸ клиенту · '+NM[selB]+'</span>';
+        else big.innerHTML = fmt(res.total)+' <span>₸ без налога — выберите компанию оплаты</span>';
+      })();
       // СУММА В СЧЁТЕ С НАЛОГОМ (решение Асхата, 10.11.2026): сразу видно, сколько выйдет в счёте
       // через каждую компанию — не нужно заглядывать в «Счёт на оплату» и считать вручную
       (function(){ var el=document.getElementById('totalTax'); if(!el) return;
         var sel=(document.getElementById('fitSup')||{}).value||'';
         var V=[['1.16','ТОО «TTMS» +16%'],['1.10','ИП «MetalShop» +10%'],['1.03','ИП «FIRDAUS» +3%']];
-        el.innerHTML='в счёте: '+V.map(function(v){ var on=(sel===v[0]); return '<span style="white-space:nowrap'+(on?';color:#e8c07d;font-weight:700':'')+'">'+v[1]+' — '+fmt(Math.ceil(res.total*(+v[0])))+' ₸</span>'; }).join(' · ')+(sel==='1'?' · <span style="color:#e8c07d;font-weight:700">наличные — '+fmt(res.total)+' ₸</span>':'');
+        el.innerHTML=(sel&&sel!=='1'?'<span style="white-space:nowrap">без налога — '+fmt(res.total)+' ₸</span> · ':'')+'в счёте: '+V.map(function(v){ var on=(sel===v[0]); return '<span style="white-space:nowrap'+(on?';color:#e8c07d;font-weight:700':'')+'">'+v[1]+' — '+fmt(Math.ceil(res.total*(+v[0])))+' ₸</span>'; }).join(' · ')+(sel==='1'?' · <span style="color:#e8c07d;font-weight:700">наличные — '+fmt(res.total)+' ₸</span>':'');
       })();
     }
     function paintLineTotals(res){
