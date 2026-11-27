@@ -1095,10 +1095,25 @@
         var inner=target/mult;
         var r=fitToTarget(inner, 'ops'); // меняем только цены работ — материалы по факту закупки
         if(!r.ok){ msg.textContent=r.err; msg.style.color='var(--blk)'; recompute(); return; }
+        // ТЕНГЕ В ТЕНГЕ (решение Асхата, 27.11.2026): после подбора множителя сумма клиенту могла выйти на 1 ₸ больше
+        // (округление). Доводим цену одной строки работ по 0,01 ₸, пока в счёте не станет ровно введённая сумма.
+        (function(){
+          var G=function(){ var tt=CALC.compute(gather()).total; return mult===1?Math.round(tt):Math.ceil(tt*mult); };
+          var g=G(); if(g===target) return;
+          var rows=[].slice.call(opLines.children).filter(function(row){ var d=row._read(); return row._sp && +row._sp.value>0 && d.qty>0; })
+            .sort(function(a,b){ return a._read().qty-b._read().qty; });   // сначала строка с самым малым количеством — самый мелкий шаг
+          for(var ri=0; ri<rows.length && g!==target; ri++){
+            var sp=rows[ri]._sp, start=+sp.value, dir=g<target?1:-1, v=start, okv=null;
+            for(var st=0; st<4000; st++){ v=Math.round((v+dir*0.01)*100)/100; if(!(v>0)) break; sp.value=v; var g2=G();
+              if(g2===target){ okv=v; break; } if((dir>0&&g2>target)||(dir<0&&g2<target)) break; }
+            if(okv!=null){ g=target; } else { sp.value=start; g=G(); }
+          }
+          r.total=CALC.compute(gather()).total;
+        })();
         recompute();
         var diff=r.was-r.total;
         msg.style.color='';
-        msg.textContent='Подогнано: цены ×'+r.k.toFixed(3)+' · в счёте '+fmt(Math.round(r.total*mult))+' ₸'+(mult>1?(' (в расчёте '+fmt(Math.round(r.total))+' ₸ + '+Math.round((mult-1)*100)+'%)'):'')+
+        msg.textContent='Подогнано: цены ×'+r.k.toFixed(3)+' · в счёте '+fmt(mult===1?Math.round(r.total):Math.ceil(r.total*mult))+' ₸'+(mult>1?(' (в расчёте '+fmt(Math.round(r.total))+' ₸ + '+Math.round((mult-1)*100)+'%)'):'')+
           ' · по тарифу было '+fmt(Math.round(r.was*mult))+' ₸, '+(diff>=0?('уступка '+fmt(Math.round(diff*mult))+' ₸ = '+Math.round(diff/r.was*100)+'%'):('выше тарифа на '+fmt(Math.round(-diff*mult))+' ₸ (+'+Math.round(-diff/r.was*100)+'%)'));
         if(r.warn){ msg.innerHTML=escHtml(msg.textContent)+'<div style="color:#e8c07d;margin-top:4px">'+escHtml(r.warn)+'</div>'; }
         var rl=document.getElementById('fitRates');
