@@ -13,7 +13,9 @@
   <style>
     html body .pdl-ov{position:static;background:none;padding:0;display:block;overflow:visible}
     html body .pdl{max-width:none;width:auto;border:0;border-radius:0;box-shadow:none;background:transparent;padding:16px 20px 20px}
-    html body .pdl .x:not([data-one]){display:none}
+    /* прячем только крестик закрытия самого окна; «отменить оплату» (data-void) должен быть виден — 27.11.2026 он пропадал вместе с крестиком */
+    html body .pdl .x:not([data-one]):not([data-void]){display:none}
+    html body .pdl .x[data-void]{color:#c9372c;font-size:15px;font-weight:700;padding:4px 8px;border:1px solid #e9b4ae;border-radius:6px;background:transparent}
   </style>
 </head>
 <body>
