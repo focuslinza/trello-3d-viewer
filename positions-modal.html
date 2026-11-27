@@ -114,6 +114,7 @@
       {t:'pm',k:'can_kp',label:'Создаёт КП',hint:'коммерческие предложения в окне «Счёт на оплату»'},
       {t:'pm',k:'can_sales_cols',label:'Видит колонки продаж на доске',hint:'«Новые», «Переговоры» и «Отказ» на главной доске; без этого права их видит только учредитель'}]},
     {t:'pm',k:'can_supply',label:'Снабжение (полностью)',hint:'закупки, склад, цены материалов, наличные'},
+    {t:'pm',k:'is_observer',label:'Наблюдатель (внешний человек)',hint:'видит только отдельную страницу: отмеченные ниже колонки и заказы указанных компаний, изменить ничего не может; все остальные права у него не действуют'},
     {t:'grp',label:'Цех — участки работ',kids:[
       {t:'st',k:'cut',label:'Резка'},{t:'st',k:'bend',label:'Гибка'},{t:'st',k:'weld',label:'Сварка'},
       {t:'st',k:'assembly',label:'Сборка / шлейф'},{t:'st',k:'montazh',label:'Монтаж'}]},
@@ -204,6 +205,12 @@
           '<div class="muted" style="font-size:11.5px;margin-top:4px">Ничего не отмечено — видит все колонки. У человека с двумя должностями колонки складываются.</div>'
         : '<div class="muted" style="font-size:12px">'+(LISTS_ERR||'Список колонок загружается…')+'</div>'+
           '<div class="lcs-keep" data-keep="'+esc(JSON.stringify(curL))+'" style="display:none"></div>');
+    // НАБЛЮДАТЕЛЬ (решение Асхата, 27.11.2026): заказы каких компаний он видит
+    var curC=(p.perms&&p.perms._obs_companies)||[];
+    h+='<div class="obsbox" style="'+((p.perms&&p.perms.is_observer)?'':'display:none')+'"><div class="lbl">Наблюдатель: заказы каких компаний видит</div>'+
+      '<div class="chips obsc">'+curC.map(function(id){ return obsChip(id); }).join('')+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:6px"><input class="obsin" list="obsDl" placeholder="Начните вводить название компании" style="flex:1;max-width:380px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);color:var(--txt);font:inherit"><button class="btn sm obsadd" type="button">Добавить</button></div>'+
+      '<div class="muted" style="font-size:11.5px;margin-top:4px">Наблюдатель видит только колонки, отмеченные выше, и только заказы этих компаний. Ничего не отмечено — не видит ничего. Его страница: mes.ttms.kz/watch (после входа откроется сама).</div></div>';
     h+='<div class="lbl">Сетка окладов — разряды по росту</div>'+
       '<table class="gr"><thead><tr><th>Разряд</th><th>Оклад</th><th>Стаж от, мес</th><th class="hm">Нужные навыки</th><th></th></tr></thead><tbody>'+
       (p.grades||[]).map(gradeRow).join('')+'</tbody></table>'+
@@ -223,7 +230,29 @@
     }
     all.forEach(function(x){ x.parentNode.classList.toggle('on', x.checked); });
   }
+  var COMPS=[], COMP_NAME={};
+  function obsChip(id){ return '<label class="chipcb on" data-cid="'+esc(id)+'">'+esc(COMP_NAME[id]||('компания '+id))+' <a href="#" class="obsrm" style="margin-left:6px;text-decoration:none;color:#c9372c">✕</a></label>'; }
+  function loadComps(){ fetch(WORKER+'/companies-list',{credentials:'include'}).then(function(r){return r.json();}).then(function(j){
+      COMPS=(j&&j.companies)||[]; COMPS.forEach(function(c){ COMP_NAME[c.id]=c.name; });
+      var dl=document.getElementById('obsDl'); if(!dl){ dl=document.createElement('datalist'); dl.id='obsDl'; document.body.appendChild(dl); }
+      dl.innerHTML=COMPS.map(function(c){ return '<option value="'+esc(c.name)+'">'; }).join('');
+      [].forEach.call(document.querySelectorAll('.obsc [data-cid]'),function(ch){ var id=ch.getAttribute('data-cid'); if(COMP_NAME[id]) ch.firstChild.nodeValue=COMP_NAME[id]+' '; });
+    }).catch(function(){}); }
+  loadComps();
+  function wireObs(el){
+    var box=el.querySelector('.obsbox'); if(!box) return;
+    var cb=el.querySelector('.tree input.pm[value="is_observer"]'); if(cb) cb.addEventListener('change',function(){ box.style.display=cb.checked?'':'none'; });
+    box.addEventListener('click',function(e){ if(e.target.classList.contains('obsrm')){ e.preventDefault(); e.target.closest('[data-cid]').remove(); DIRTY=true; } });
+    function add(){ var inp=box.querySelector('.obsin'), v=inp.value.trim().toLowerCase(); if(!v) return;
+      var c=COMPS.filter(function(x){ return String(x.name||'').trim().toLowerCase()===v; })[0]||COMPS.filter(function(x){ return String(x.name||'').toLowerCase().indexOf(v)>=0; })[0];
+      if(!c){ alert('Такой компании нет в списке. Выберите из подсказки.'); return; }
+      if(box.querySelector('[data-cid="'+c.id+'"]')){ inp.value=''; return; }
+      box.querySelector('.obsc').insertAdjacentHTML('beforeend',obsChip(c.id)); inp.value=''; DIRTY=true; }
+    box.querySelector('.obsadd').onclick=add;
+    box.querySelector('.obsin').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); add(); } });
+  }
   function wire(el){
+    wireObs(el);
     [].forEach.call(el.querySelectorAll('.chipcb input'),function(cb){ cb.onchange=function(){ this.parentNode.classList.toggle('on',this.checked); }; });
     [].forEach.call(el.querySelectorAll('.tree input'),function(cb){ cb.onchange=function(){ treeSync(el, this); }; });
     var tpl=el.querySelector('.tpl');
@@ -269,6 +298,7 @@
         var ls=keep ? (function(){ try{ return JSON.parse(keep.getAttribute('data-keep'))||[]; }catch(e){ return []; } })()
                     : [].map.call(el.querySelectorAll('.lc:checked'),function(c){return c.value;});
         if(ls.length) o._lists=ls;
+        if(o.is_observer) o._obs_companies=[].map.call(el.querySelectorAll('.obsc [data-cid]'),function(x){ return x.getAttribute('data-cid'); });
         return o; })(),
       grades: [].map.call(el.querySelectorAll('tbody tr'),function(tr){
         return { name: tr.querySelector('.gn').value.trim(), salary: +tr.querySelector('.gs').value||0,
