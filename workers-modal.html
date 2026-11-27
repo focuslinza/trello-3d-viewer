@@ -581,6 +581,7 @@
       w = w || { id:'', name:'', salary:'', stages:[] };
       var inactive = (w.active===0 || w.active==='0');
       var card=document.createElement('div');
+      card.__w=w;   // после первого сохранения сюда записывается номер работника — чтобы «вход», «токен» и права работали без перезагрузки
       card.className='wcard'+(inactive?' inactive':'');
       card.setAttribute('data-id', w.id||'');
       card.setAttribute('data-active', inactive?'0':'1');
@@ -724,7 +725,11 @@
       });
       // ВХОД НА mes.ttms.kz ЗАДАЁТ РУКОВОДИТЕЛЬ (16.11.2026): клик по «нет аккаунта» / «✔ аккаунт»
       var acc=card.querySelector('.acct');
-      if(acc){ acc.style.cursor='pointer'; acc.title='Нажмите: задать или сменить телефон и пароль'; acc.addEventListener('click', function(){ loginForm(w, acc); }); }
+      if(acc){ acc.style.cursor='pointer'; acc.title='Нажмите: задать или сменить телефон и пароль'; acc.addEventListener('click', function(){
+        // у только что добавленного работника номер появляется после «Сохранить» — берём его с карточки (27.11.2026: было «workerId required»)
+        var _id=card.getAttribute('data-id')||''; if(!_id){ alert('Сначала нажмите «Сохранить» у этого работника, потом выдавайте вход.'); return; }
+        if(!w.id) w.id=_id; if(!w.name) w.name=(card.querySelector('.nm')||{}).value||'';
+        loginForm(w, acc); }); }
       var mrgBtn=card.querySelector('.mrg');
       if(mrgBtn) mrgBtn.addEventListener('click', function(){ mergeForm(w); });
       var delBtn=card.querySelector('.del');
@@ -847,6 +852,7 @@
         .then(function(d){
           if(d&&d.ok){
             tr.setAttribute('data-id', d.id);
+            if(tr.__w){ tr.__w.id=d.id; if(!tr.__w.name) tr.__w.name=name; }
             if(W_NEW===tr){ W_NEW=null; W_SEL=String(d.id); } wPaintSel();
             setMsg('Сохранено: '+name);
             // явное подтверждение: кнопка зеленеет с галочкой, карточка мигает зелёной рамкой
