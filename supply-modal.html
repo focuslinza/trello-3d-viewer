@@ -1295,7 +1295,7 @@
         if((+j.attn||0)!==METAL_ATTN){ METAL_ATTN=+j.attn||0; render(); return; }
         var h='<h3 style="margin:0 0 4px">Потенциальная потребность по металлу</h3>'+
           '<div style="border:1px solid #8a6d1f;background:rgba(232,192,125,.14);border-radius:8px;padding:8px 12px;margin:6px 0 10px;font-size:13px;line-height:1.45"><b>Это потребность, а не список покупок.</b> Сначала проверьте, что лежит в цехе, и впишите в столбец «Есть в цехе». Покупать нужно только то, что в столбце «Докупить».</div>'+
-          '<div class="muted" style="margin-bottom:10px;line-height:1.45">Заказы, которые ещё не порезаны: карточки из «Расчет сделан», «Согласования», «Ждем оплату» и «В производстве» без метки «Порезано» — '+j.cards+' заказ. '+
+          '<div class="muted" style="margin-bottom:10px;line-height:1.45">Заказы, которые ещё не порезаны: карточки из «Расчет сделан», «Согласования», «Ждем оплату» и «В производстве», у которых порезаны не все чертежи, — '+j.cards+' заказ. '+
           'Листы — оценка: площадь из расчёта + запас на отходы '+j.waste+'%, точный раскрой делает резчик. «Уже оплачено» — заказы в производстве, их закрывают в первую очередь; остальные клиент ещё может не оплатить.</div>';
         if(!(j.items||[]).length){ box.innerHTML=h+'<div class="muted">Сейчас заказов с материалом в расчёте нет.</div>'; return; }
         var th='padding:6px 8px', un=function(x){ return x.sheet?' л.':(x.unit?' '+esc(x.unit):''); }, nf=function(v){ return String(v).replace('.',','); };
