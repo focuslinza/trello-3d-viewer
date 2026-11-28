@@ -41,12 +41,12 @@
   }
   window.__msAskFounderLink = askFounderLink;
   var sent = 0, origFetch = window.fetch ? window.fetch.bind(window) : null;
-  function report(kind, msg) {
+  function report(kind, msg, detail) {
     try {
-      if (window.__msReport) { window.__msReport(kind, msg); return; }   // своя доска: у прослойки свой отчёт
+      if (window.__msReport) { window.__msReport(kind, msg, detail); return; }   // своя доска: у прослойки свой отчёт
       if (!origFetch || sent >= 5) return; sent++;
       origFetch(window.WORKER_URL + '/client-error', { method: 'POST', headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ module: MODULE, kind: kind, msg: String(msg || '').slice(0, 300), memberId: MEMBER }) }).catch(function () {});
+        body: JSON.stringify({ module: MODULE, kind: kind, msg: String(msg || '').slice(0, 300), detail: String(detail || '').slice(0, 200), memberId: MEMBER }) }).catch(function () {});
     } catch (e) {}
   }
   window.__msCfgReport = report;
@@ -134,10 +134,23 @@
         return wf(input, init).then(function (r) { if (r && r.status >= 500 && n > 0) throw new Error('HTTP ' + r.status); return r; })
           .catch(function (e) { if (n > 0) return new Promise(function (ok) { setTimeout(ok, 1500); }).then(function () { return attempt(n - 1); }); throw e; });
       })(2) : wf(input, init);
+      var t0 = Date.now();
       if (!ours || u.indexOf('/client-error') >= 0) return p;
       var path = u.replace(window.WORKER_URL, '').split('?')[0];
-      return p.then(function (r) { if (r) offBar(false); if (r && r.status >= 500) report('http', path + ' → HTTP ' + r.status); return r; },
-        function (e) { if (isClosing()) throw e; if (!(e && e.name === 'AbortError') || navigator.onLine === false) offBar(true); report('http', path + ' → нет связи: ' + (e && e.message || e)); throw e; });
+      // ПОДРОБНОСТИ СБОЯ (28.11.2026, одобрено Асхатом, №7): к записи в журнал добавляется
+      // текст ошибки сервера, а при «нет связи» — был ли интернет, видно ли окно, через сколько секунд.
+      return p.then(function (r) {
+          if (r) offBar(false);
+          if (r && r.status >= 500) {
+            var st = r.status;
+            try { r.clone().text().then(function (t) { var m = t; try { var j = JSON.parse(t); if (j && j.error) m = j.error; } catch (x) {} report('http', path + ' → HTTP ' + st, 'сервер: ' + String(m || '').replace(/\s+/g, ' ').slice(0, 180)); }, function () { report('http', path + ' → HTTP ' + st); }); }
+            catch (x) { report('http', path + ' → HTTP ' + st); }
+          }
+          return r;
+        },
+        function (e) { if (isClosing()) throw e; if (!(e && e.name === 'AbortError') || navigator.onLine === false) offBar(true);
+          report('http', path + ' → нет связи: ' + (e && e.message || e), 'интернет: ' + (navigator.onLine === false ? 'нет' : 'есть') + ' · окно: ' + (document.visibilityState === 'visible' ? 'на экране' : 'свёрнуто/скрыто') + ' · оборвалось через ' + Math.round((Date.now() - t0) / 1000) + ' с');
+          throw e; });
     };
   }
 
