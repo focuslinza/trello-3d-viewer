@@ -1023,6 +1023,15 @@
     function round3(x){ return Math.round(x*1000)/1000; }
 
     // ---- restore saved inputs ----
+    // СЧЁТ УЖЕ ВЫСТАВЛЕН — компания в подгонке та же, что в счёте, и не меняется (решение Асхата, 28.11.2026; заказ №3753:
+    // сумму счёта вписали «без процента», расчёт вырос на 16%, система потребовала доп. счёт)
+    function lockFitSup(){
+      try{ var v=window.__INV_VIA, fs=document.getElementById('fitSup'); if(!v||!fs||!fs.querySelector('option[value="'+v+'"]')) return;
+        fs.value=v; fs.disabled=true; fs.title='По заказу уже выставлен счёт №'+(window.__INV_NUM||'')+' — компания та же, что в счёте';
+        if(!document.getElementById('fitInvNote')){ var n=document.createElement('div'); n.id='fitInvNote'; n.className='hint'; n.style.cssText='margin-top:6px;color:#e8c07d';
+          n.textContent='По заказу уже выставлен счёт №'+(window.__INV_NUM||'')+' — компания взята из счёта. Вводите сумму как в счёте.'; var m=document.getElementById('fitMsg'); if(m&&m.parentNode) m.parentNode.insertBefore(n,m); }
+      }catch(e){}
+    }
     function restore(){
       var src = MODE_REPAIR
         ? fetch(WORKER+'/repair-calc-get?id='+REPAIR_ID).then(function(r){return r.json();}).then(function(j){ return (j&&j.ok&&j.calc)||null; })
@@ -1032,6 +1041,7 @@
         : fetch(WORKER+'/calc-get?id='+encodeURIComponent(ctx.cardId||'')).then(function(r){return r.json();})
             .then(function(j){
               var row=j&&j.ok&&j.row; var inp=row&&row.inputs;
+              if(row&&row.invVia){ window.__INV_VIA=String(row.invVia); window.__INV_NUM=String(row.invNumber||''); lockFitSup(); }
               if(typeof inp==='string'){ try{ inp=JSON.parse(inp); }catch(e){ inp=null; } }
               if(inp && (inp.operations||inp.materials||inp.components)) return { inputs: inp };
               return t.get('card','shared','calcData',null);
@@ -1073,6 +1083,7 @@
         // выключено только там, где галочку сняли сами
         document.getElementById('engDesign').checked = (i.engDesign !== false);
         try{ var fsR=document.getElementById('fitSup'); if(i.supVia && fsR.querySelector('option[value="'+i.supVia+'"]')) fsR.value=i.supVia; }catch(e){}
+        lockFitSup();
 
       }).catch(function(){});
     }
